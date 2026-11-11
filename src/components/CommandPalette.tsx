@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, X, Wrench, Laptop, Package, CheckSquare, KeyRound, ArrowRight } from 'lucide-react';
+import { Search, X, Wrench, Laptop, Package, CheckSquare, KeyRound, ArrowRight, TrendingUp } from 'lucide-react';
 import { CahierSuiviData } from '../types/it-tracker';
 
 interface CommandPaletteProps {
@@ -81,11 +81,23 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       ).slice(0, 3)
     : [];
 
+  // Recherche dans les projets ROI
+  const matchingRoiProjects = q
+    ? (data.bilanAnnuel.projetsRoi || []).filter(
+        (r) =>
+          r.nomProjet.toLowerCase().includes(q) ||
+          r.description.toLowerCase().includes(q) ||
+          r.categorie.toLowerCase().includes(q) ||
+          'roi retour sur investissement rentabilité amortissement gain économie'.includes(q)
+      ).slice(0, 3)
+    : [];
+
   const hasResults =
     matchingTasks.length > 0 ||
     matchingInterventions.length > 0 ||
     matchingParc.length > 0 ||
-    matchingConsommables.length > 0;
+    matchingConsommables.length > 0 ||
+    matchingRoiProjects.length > 0;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-20 px-4">
@@ -255,6 +267,39 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                           </div>
                         </div>
                         <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {matchingRoiProjects.length > 0 && (
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
+                    Projets & Retour sur Investissement ({matchingRoiProjects.length})
+                  </span>
+                  <div className="space-y-1">
+                    {matchingRoiProjects.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => {
+                          onNavigate('bilans');
+                          onClose();
+                        }}
+                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <div className="truncate">
+                            <span className="font-bold text-slate-900 dark:text-white mr-2">
+                              {r.nomProjet}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300">
+                              [{r.categorie}] · Éco: +{r.economiesFinancieresAnnuellesEuros}€ · Gain: {r.gainTempsEstimeHeuresParAn}h
+                            </span>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
                       </button>
                     ))}
                   </div>

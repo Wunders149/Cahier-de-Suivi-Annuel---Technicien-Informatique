@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       group: 'Reporting & Clôture',
       items: [
         { id: 'rapports', label: '11. Rapports Mensuels (12 Mois)', icon: CalendarRange },
-        { id: 'bilans', label: '12. Bilans T1-T4 & Annuel', icon: Award },
+        { id: 'bilans', label: '12. Bilans T1-T4, Annuel & ROI', icon: Award },
       ],
     },
     {

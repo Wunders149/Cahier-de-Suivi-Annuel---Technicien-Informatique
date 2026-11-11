@@ -268,6 +268,20 @@ export interface BilanTrimestriel {
   tauxDisponibiliteInfrastructure: number; // %
 }
 
+export interface ProjetRoiIT {
+  id: string;
+  nomProjet: string;
+  description: string;
+  categorie: 'Infrastructure' | 'Sécurité & Sauvegarde' | 'Automatisation' | 'Bureautique & Postes' | 'Cloud & SaaS' | 'Réseau & Télécoms';
+  coutInvestissementEuros: number; // Coût matériel, logiciels, prestation initiale (€)
+  economiesFinancieresAnnuellesEuros: number; // Économies financières directes récurrentes (€ / an)
+  gainTempsEstimeHeuresParAn: number; // Heures de travail économisées par an (équipe IT ou utilisateurs)
+  tauxHoraireMoyenValorise: number; // Taux horaire de valorisation du temps (€ / h, ex: 35 €/h)
+  impactQualitatif: string; // Ex: Fiabilité accrue, satisfaction utilisateurs, conformité ISO/RGPD
+  dateMiseEnService: string;
+  statut: 'En production' | 'En cours' | 'Clôturé avec succès';
+}
+
 export interface BilanAnnuel {
   annee: number;
   syntheseGenerale: string;
@@ -283,6 +297,7 @@ export interface BilanAnnuel {
   signatureTechnicienDate: string;
   signatureRsiDate: string;
   appreciationRsi: string;
+  projetsRoi?: ProjetRoiIT[];
 }
 
 export interface CahierSuiviData {

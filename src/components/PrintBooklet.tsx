@@ -458,6 +458,50 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
               <p className="whitespace-pre-line font-medium text-blue-900">{bilanAnnuel.investissementsInformatiquesPreconises}</p>
             </div>
 
+            {bilanAnnuel.projetsRoi && bilanAnnuel.projetsRoi.length > 0 && (
+              <div className="border border-slate-300 rounded overflow-hidden">
+                <div className="bg-slate-900 text-white font-bold p-2 text-[11px] uppercase tracking-wider">
+                  Retour sur Investissement (ROI) des Projets Réalisés
+                </div>
+                <table className="w-full text-left text-[10px] border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-800 border-b border-slate-300 font-semibold">
+                      <th className="p-2">Projet IT & Catégorie</th>
+                      <th className="p-2 text-right">Investissement</th>
+                      <th className="p-2 text-right">Économies directes</th>
+                      <th className="p-2 text-right">Temps gagné</th>
+                      <th className="p-2 text-right">ROI An 1 / Payback</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {bilanAnnuel.projetsRoi.map((p) => {
+                      const invest = p.coutInvestissementEuros || 0;
+                      const eco = p.economiesFinancieresAnnuellesEuros || 0;
+                      const heures = p.gainTempsEstimeHeuresParAn || 0;
+                      const val = eco + heures * (p.tauxHoraireMoyenValorise || 35);
+                      const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
+                      const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
+
+                      return (
+                        <tr key={p.id}>
+                          <td className="p-2">
+                            <strong>{p.nomProjet}</strong>
+                            <span className="block text-slate-500 text-[9px]">{p.categorie}</span>
+                          </td>
+                          <td className="p-2 text-right font-mono">{invest.toLocaleString('fr-FR')} €</td>
+                          <td className="p-2 text-right font-mono text-emerald-800 font-semibold">+{eco.toLocaleString('fr-FR')} €/an</td>
+                          <td className="p-2 text-right font-mono text-blue-800">{heures} h/an</td>
+                          <td className="p-2 text-right font-mono font-bold text-slate-900">
+                            {roi > 0 ? `+${roi}%` : `${roi}%`} ({payback} m)
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <div className="p-3 bg-slate-50 border border-slate-300 rounded">
               <strong className="block text-slate-900 font-bold mb-1">Appréciation officielle du Responsable SI (RSI) :</strong>
               <p className="italic text-slate-700">« {bilanAnnuel.appreciationRsi} »</p>

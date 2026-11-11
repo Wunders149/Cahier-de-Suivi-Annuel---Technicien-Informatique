@@ -1051,6 +1051,45 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
             ],
           }),
 
+          ...(bilanAnnuel.projetsRoi && bilanAnnuel.projetsRoi.length > 0
+            ? [
+                new Paragraph({ text: '', spacing: { before: 200 } }),
+                createSubHeading(`12.3. Retour sur Investissement (ROI) des Projets Informatiques Déployés`),
+                new Table({
+                  width: { size: 100, type: WidthType.PERCENTAGE },
+                  rows: [
+                    new TableRow({
+                      children: [
+                        createHeaderCell('Projet IT & Catégorie', 30),
+                        createHeaderCell('Investissement Initial', 18),
+                        createHeaderCell('Économies Directes', 18),
+                        createHeaderCell('Temps Gagné (h/an)', 18),
+                        createHeaderCell('ROI An 1 & Payback', 16),
+                      ],
+                    }),
+                    ...bilanAnnuel.projetsRoi.map((p) => {
+                      const invest = p.coutInvestissementEuros || 0;
+                      const eco = p.economiesFinancieresAnnuellesEuros || 0;
+                      const heures = p.gainTempsEstimeHeuresParAn || 0;
+                      const val = eco + heures * (p.tauxHoraireMoyenValorise || 35);
+                      const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
+                      const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
+
+                      return new TableRow({
+                        children: [
+                          createTextCell(`${p.nomProjet}\n[${p.categorie}] - ${p.statut}`, { bold: true }),
+                          createTextCell(`${invest.toLocaleString('fr-FR')} €`),
+                          createTextCell(`+${eco.toLocaleString('fr-FR')} € / an`, { bold: true }),
+                          createTextCell(`${heures} h / an\n(+${(heures * 35).toLocaleString('fr-FR')} € valorisés)`),
+                          createTextCell(`${roi > 0 ? `+${roi}%` : `${roi}%`}\n(Amorti en ${payback} mois)`, { bold: true }),
+                        ],
+                      });
+                    }),
+                  ],
+                }),
+              ]
+            : []),
+
           new Paragraph({ text: '', spacing: { before: 400 } }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
