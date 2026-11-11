@@ -446,15 +446,13 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                 {consommables.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50 transition">
                     <td className="p-3 align-top">
-                      <strong className="text-blue-900 font-bold block">{c.reference}</strong>
-                      <span className="text-slate-900 font-medium">{c.designation}</span>
+                      <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">{c.reference}</strong>
+                      <span className="text-slate-900 font-medium text-xs">{c.designation}</span>
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px]">
-                        {c.categorie}
-                      </span>
+                    <td className="p-3 align-top whitespace-nowrap text-xs text-slate-600 font-medium">
+                      {c.categorie}
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap">
+                    <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums">
                       <span
                         className={`text-base font-extrabold ${
                           c.stockActuel <= c.stockMinimumAlerte ? 'text-red-600' : 'text-slate-900'
@@ -462,24 +460,24 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                       >
                         {c.stockActuel}
                       </span>{' '}
-                      <span className="text-slate-500 text-[11px]">{c.unite}</span>
+                      <span className="text-slate-500 text-[11px] font-sans">{c.unite}</span>
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap text-[11px]">
-                      <span className="text-slate-600 block">Min : {c.stockMinimumAlerte} {c.unite}</span>
+                    <td className="p-3 align-top whitespace-nowrap text-xs font-mono tabular-nums">
+                      <span className="text-slate-600 block text-[11px]">Min : {c.stockMinimumAlerte} {c.unite}</span>
                       <span className="text-blue-700 font-semibold">À cder : {c.quantiteRecommandeeAchat}</span>
                     </td>
-                    <td className="p-3 align-top text-[11px]">
+                    <td className="p-3 align-top text-xs">
                       <span className="text-slate-800 font-medium block">{c.emplacementStock}</span>
-                      <span className="text-slate-400">{c.fournisseur}</span>
+                      <span className="text-slate-400 text-[11px]">{c.fournisseur}</span>
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap">
+                    <td className="p-3 align-top whitespace-nowrap text-xs">
                       <span
-                        className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
+                        className={`font-semibold ${
                           c.statut === 'En stock'
-                            ? 'bg-emerald-100 text-emerald-800'
+                            ? 'text-emerald-700'
                             : c.statut === 'Stock bas'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-red-100 text-red-800'
+                            ? 'text-amber-700'
+                            : 'text-red-700'
                         }`}
                       >
                         {c.statut}

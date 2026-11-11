@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { EquipementParc } from '../../types/it-tracker';
-import { Laptop, Plus, Search, Filter, ShieldCheck, Tag, Calendar, User, MapPin } from 'lucide-react';
+import { Laptop, Plus, Search, Filter, ShieldCheck, Tag, Calendar, User, MapPin, X } from 'lucide-react';
+import { InventoryDataViz, categorizeEquipment } from '../inventory/InventoryDataViz';
 
 interface InventorySectionProps {
   parc: EquipementParc[];
@@ -10,6 +11,7 @@ interface InventorySectionProps {
 export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpdateParc }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('Tous');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newItem, setNewItem] = useState<Partial<EquipementParc>>({
@@ -66,47 +68,69 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
       p.localisation.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchType = typeFilter === 'Tous' || p.type === typeFilter;
-    return matchSearch && matchType;
+    const matchCategory = !selectedCategory || categorizeEquipment(p) === selectedCategory;
+
+    return matchSearch && matchType && matchCategory;
   });
 
-  const typesList = ['Tous', 'PC Portable', 'PC Fixe', 'Serveur', 'Imprimante', 'Écran', 'Switch/Réseau'];
+  const typesList = ['Tous', 'PC Portable', 'PC Fixe', 'Serveur', 'Imprimante', 'Écran', 'Périphérique', 'Switch/Réseau'];
 
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">7</span>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center justify-center text-sm font-bold">7</span>
             Gestion du Parc Informatique (CMDB & Inventaire Matériel)
           </h2>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Recensement exhaustif des actifs informatiques, numéros de série, caractéristiques, garanties et affectations.
           </p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
         >
           <Plus className="w-4 h-4" />
           <span>Ajouter un Équipement</span>
         </button>
       </div>
 
+      {/* Visualisation Recharts : Répartition du parc par type d'équipement */}
+      <InventoryDataViz
+        parc={parc}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+      />
+
       {/* Filtres et recherche */}
-      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between text-xs">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher par N° inventaire, utilisateur, marque, numéro de série..."
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+      <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between text-xs">
+        <div className="flex-1 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Rechercher par N° inventaire, utilisateur, marque, numéro de série..."
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {selectedCategory && (
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-200 text-xs font-semibold whitespace-nowrap transition"
+              title="Réinitialiser le filtre de famille"
+            >
+              <span>{selectedCategory}</span>
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
           {typesList.map((t) => (
             <button
               key={t}
@@ -114,7 +138,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
               className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition ${
                 typeFilter === t
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                  : 'bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
               }`}
             >
               {t}
@@ -154,8 +178,9 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                     <option value="PC Portable">PC Portable</option>
                     <option value="PC Fixe">PC Fixe</option>
                     <option value="Serveur">Serveur</option>
-                    <option value="Imprimante">Imprimante</option>
                     <option value="Écran">Écran</option>
+                    <option value="Périphérique">Périphérique (Onduleur, Dock, Scanner...)</option>
+                    <option value="Imprimante">Imprimante</option>
                     <option value="Switch/Réseau">Switch/Réseau</option>
                     <option value="Smartphone">Smartphone</option>
                   </select>
@@ -319,41 +344,45 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
               {filtered.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition">
+                <tr key={item.id} className="hover:bg-slate-50 transition border-b border-slate-100">
                   <td className="p-3 align-top whitespace-nowrap">
-                    <strong className="text-blue-900 font-bold block">{item.numeroInventaire}</strong>
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-800">
+                    <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">
+                      {item.numeroInventaire}
+                    </strong>
+                    <span className="text-[11px] text-slate-500 font-medium">
                       {item.type}
                     </span>
                   </td>
                   <td className="p-3 align-top">
-                    <strong className="text-slate-900 block font-semibold">{item.designation}</strong>
+                    <strong className="text-slate-900 block font-bold text-xs">{item.designation}</strong>
                     <span className="text-[11px] text-slate-500">{item.marqueModele}</span>
                   </td>
-                  <td className="p-3 align-top whitespace-nowrap font-mono text-[11px] text-slate-800 font-bold">
+                  <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-xs text-slate-800 font-bold">
                     {item.numeroSerie}
                   </td>
-                  <td className="p-3 align-top text-[11px] max-w-xs text-slate-700">
+                  <td className="p-3 align-top text-xs max-w-xs text-slate-700 leading-snug">
                     {item.configurationTechnique}
                   </td>
-                  <td className="p-3 align-top text-[11px]">
-                    <strong className="text-slate-900 block">{item.utilisateurResponsable}</strong>
-                    <span className="text-slate-500 block">{item.service}</span>
+                  <td className="p-3 align-top text-xs">
+                    <strong className="text-slate-900 block font-bold">{item.utilisateurResponsable}</strong>
+                    <span className="text-slate-500 block text-[11px]">{item.service}</span>
                     <span className="text-slate-400 block text-[10px]">{item.localisation}</span>
                   </td>
-                  <td className="p-3 align-top whitespace-nowrap text-[11px]">
+                  <td className="p-3 align-top whitespace-nowrap text-xs">
                     <span
-                      className={`font-semibold px-1.5 py-0.5 rounded block mb-1 text-center ${
+                      className={`font-semibold block mb-0.5 ${
                         item.etatMateriel.includes('bon') || item.etatMateriel === 'Neuf'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
+                          ? 'text-emerald-700'
+                          : 'text-amber-700'
                       }`}
                     >
                       {item.etatMateriel}
                     </span>
-                    <span className="text-slate-500 text-[10px] block">Garantie : {item.finGarantie}</span>
+                    <span className="text-slate-500 text-[10px] block font-mono tabular-nums">
+                      Garantie : {item.finGarantie}
+                    </span>
                   </td>
-                  <td className="p-3 align-top text-[11px] text-slate-600 max-w-xs italic">
+                  <td className="p-3 align-top text-xs text-slate-600 max-w-xs italic leading-snug">
                     {item.historiqueInterventions || 'N/A'}
                   </td>
                 </tr>

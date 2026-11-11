@@ -274,26 +274,26 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 bg-slate-50 border-b border-slate-200">
           <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-xs">
             <span className="text-xs text-slate-400 block uppercase font-medium">Interventions</span>
-            <strong className="text-2xl font-black text-slate-900">{currentReport.totalInterventions}</strong>
+            <strong className="text-2xl font-black text-slate-900 font-mono tabular-nums">{currentReport.totalInterventions}</strong>
             <span className="text-[11px] text-slate-500 block">tickets traités</span>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-xs">
             <span className="text-xs text-slate-400 block uppercase font-medium">Résolus / En cours</span>
-            <strong className="text-2xl font-black text-emerald-600">
+            <strong className="text-2xl font-black text-emerald-600 font-mono tabular-nums">
               {currentReport.incidentsResolus}
             </strong>
-            <span className="text-[11px] text-slate-500 block">
+            <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
               {currentReport.incidentsEnCours} en cours
             </span>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-xs">
             <span className="text-xs text-slate-400 block uppercase font-medium">Taux 1er Contact</span>
-            <strong className="text-2xl font-black text-blue-600">{currentReport.tauxResolutionFCR}%</strong>
+            <strong className="text-2xl font-black text-blue-600 font-mono tabular-nums">{currentReport.tauxResolutionFCR}%</strong>
             <span className="text-[11px] text-slate-500 block">résolution directe (FCR)</span>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-xs">
             <span className="text-xs text-slate-400 block uppercase font-medium">Délai Moyen (MTTR)</span>
-            <strong className="text-2xl font-black text-indigo-600">
+            <strong className="text-2xl font-black text-indigo-600 font-mono tabular-nums">
               {currentReport.dureeMoyenneResolutionMin}m
             </strong>
             <span className="text-[11px] text-slate-500 block">temps de traitement</span>

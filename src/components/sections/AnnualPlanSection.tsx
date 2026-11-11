@@ -227,50 +227,40 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
             >
               <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-3">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-bold">
+                  <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2 mb-1">
+                    <span className="font-mono tabular-nums font-bold text-slate-900 dark:text-white">
                       {obj.id}
                     </span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        obj.priorite === 'Haute'
-                          ? 'bg-red-100 text-red-800'
-                          : obj.priorite === 'Moyenne'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
+                    <span aria-hidden="true">·</span>
+                    <span className="font-medium text-slate-700">
                       Priorité {obj.priorite}
                     </span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                        obj.statut === 'Atteint'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : obj.statut === 'En cours'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-slate-100 text-slate-700'
-                      }`}
-                    >
+                    <span aria-hidden="true">·</span>
+                    <span className={`font-semibold ${obj.statut === 'Atteint' ? 'text-emerald-700' : 'text-slate-800'}`}>
                       {obj.statut}
                     </span>
+                    <span aria-hidden="true">·</span>
+                    <span className="font-mono tabular-nums text-slate-500">
+                      Échéance {obj.echeance}
+                    </span>
                   </div>
-                  <h4 className="text-base font-bold text-slate-900">{obj.titre}</h4>
-                  <p className="text-xs text-slate-500">{obj.description}</p>
+                  <h4 className="text-base font-bold text-slate-900 tracking-tight">{obj.titre}</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed mt-1">{obj.description}</p>
                 </div>
 
                 {/* Boutons d'avancement rapide */}
-                <div className="flex items-center gap-1.5 self-start shrink-0 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                <div className="flex items-center gap-1.5 self-start shrink-0 bg-slate-100 p-1 rounded-lg border border-slate-200">
                   <button
                     onClick={() => handleUpdateAvancement(obj.id, -10)}
-                    className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center border border-slate-300"
+                    className="w-6 h-6 rounded bg-white hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center border border-slate-300 transition"
                     title="Diminuer 10%"
                   >
                     -
                   </button>
-                  <span className="text-xs font-bold text-slate-800 w-10 text-center">{obj.avancement}%</span>
+                  <span className="text-xs font-mono tabular-nums font-bold text-slate-900 w-12 text-center">{obj.avancement}%</span>
                   <button
                     onClick={() => handleUpdateAvancement(obj.id, 10)}
-                    className="w-6 h-6 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center"
+                    className="w-6 h-6 rounded bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center transition"
                     title="Augmenter 10%"
                   >
                     +
@@ -333,21 +323,11 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
               }`}
             >
               <div>
-                <div className="flex items-center justify-between gap-1 mb-1.5">
-                  <span className="text-xs font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded">
-                    Mois {jalon.mois < 10 ? '0' + jalon.mois : jalon.mois} • {moisNoms[jalon.mois - 1]}
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+                  <span className="font-mono tabular-nums font-bold text-slate-900">
+                    Mois {jalon.mois < 10 ? '0' + jalon.mois : jalon.mois} · {moisNoms[jalon.mois - 1]}
                   </span>
-                  <span
-                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
-                      jalon.categorie === 'Audit'
-                        ? 'bg-purple-100 text-purple-700'
-                        : jalon.categorie === 'Maintenance'
-                        ? 'bg-amber-100 text-amber-700'
-                        : jalon.categorie === 'Projet'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
+                  <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
                     {jalon.categorie}
                   </span>
                 </div>

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { initialCahierData } from './data/initialData';
 import { CahierSuiviData } from './types/it-tracker';
 import { Header } from './components/Header';
-import { Navigation } from './components/Navigation';
+import { Sidebar } from './components/Sidebar';
+import { CommandPalette } from './components/CommandPalette';
 import { GeneralInfoSection } from './components/sections/GeneralInfoSection';
 import { AnnualPlanSection } from './components/sections/AnnualPlanSection';
 import { DailyLogSection } from './components/sections/DailyLogSection';
@@ -18,94 +19,107 @@ import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSec
 import { PrintBooklet } from './components/PrintBooklet';
 import { generateDocx } from './utils/docxGenerator';
 import { generateDirectPdf, triggerPrintToPdf } from './utils/pdfGenerator';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Cloud, X } from 'lucide-react';
+import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v1';
 
-export default function App() {
-  const [data, setData] = useState<CahierSuiviData>(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (e) {
-      console.error('Erreur lecture localStorage', e);
-    }
-    return initialCahierData;
-  });
-
+function CahierContent({
+  data,
+  setData,
+  showToast,
+  isGeneratingDocx,
+  handleDownloadDocx,
+  handleDownloadPdf,
+  handlePrintPreview,
+  handleResetData,
+}: {
+  data: CahierSuiviData;
+  setData: React.Dispatch<React.SetStateAction<CahierSuiviData>>;
+  showToast: (msg: string) => void;
+  isGeneratingDocx: boolean;
+  handleDownloadDocx: () => Promise<void>;
+  handleDownloadPdf: () => void;
+  handlePrintPreview: () => void;
+  handleResetData: () => void;
+}) {
   const [activeTab, setActiveTab] = useState<string>('general');
-  const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  // Synchronisation avec localStorage
+  const {
+    user,
+    isAdmin,
+    errorMessage,
+    dismissError,
+    saveDataToCloud
+  } = useFirebase();
+
+  // Débouncing de la sauvegarde Cloud automatique
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isFirstRender = useRef(true);
+
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      console.error('Erreur sauvegarde localStorage', e);
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
     }
-  }, [data]);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
-  };
+    if (!user) return;
 
-  const handleDownloadDocx = async () => {
-    try {
-      setIsGeneratingDocx(true);
-      showToast('Génération du document Word (.docx) complet en cours...');
-      await generateDocx(data);
-      showToast('Document Word (.docx) téléchargé avec succès !');
-    } catch (error) {
-      console.error('Erreur export DOCX', error);
-      showToast('Erreur lors de la génération du fichier DOCX.');
-    } finally {
-      setIsGeneratingDocx(false);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
-  };
 
-  const handleDownloadPdf = () => {
-    try {
-      showToast('Génération et téléchargement du document PDF (.pdf) en cours...');
-      generateDirectPdf(data);
-      showToast('Fichier PDF téléchargé avec succès !');
-    } catch (error) {
-      console.error('Erreur export PDF', error);
-      showToast('Erreur lors de la génération du PDF.');
-    }
-  };
+    saveTimeoutRef.current = setTimeout(() => {
+      saveDataToCloud(data).catch(() => {
+        // Erreur gérée par le contexte
+      });
+    }, 1500);
 
-  const handlePrintPreview = () => {
-    setActiveTab('livret');
-    setTimeout(() => {
-      triggerPrintToPdf();
-    }, 300);
-  };
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [data, user, saveDataToCloud]);
 
-  const handleResetData = () => {
-    if (window.confirm('Voulez-vous réinitialiser toutes les données aux valeurs d\'exemple par défaut ?')) {
-      setData(initialCahierData);
-      localStorage.removeItem(STORAGE_KEY);
-      showToast('Données réinitialisées avec succès.');
-    }
-  };
+  // Badges calculés
+  const pendingTasks = data.journalTaches.filter((t) => t.statut === 'En cours' || t.statut === 'À faire').length;
+  const activeInterventions = data.interventions.filter((i) => i.resultat !== 'Résolu').length;
+  const lowStock = data.consommables.filter((c) => c.stockActuel <= c.stockMinimumAlerte).length;
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
-      {/* Toast de notification */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 text-xs font-semibold animate-fade-in no-print">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased">
+      {/* Alerte erreur Cloud éventuelle */}
+      {errorMessage && (
+        <div className="bg-red-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-sm z-50 sticky top-0 no-print">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={dismissError}
+            className="p-1 hover:bg-red-700 rounded transition"
+            aria-label="Fermer"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
-      {/* Si l'onglet est le livret complet A4 */}
+      {/* Palette de commande rapide (Cmd+K) */}
+      <CommandPalette
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        data={data}
+        onNavigate={(tab) => {
+          setActiveTab(tab);
+          setSearchOpen(false);
+        }}
+      />
+
+      {/* Vue Livret Complet Imprimable A4 */}
       {activeTab === 'livret' ? (
         <PrintBooklet
           data={data}
@@ -115,25 +129,60 @@ export default function App() {
           onDownloadDocx={handleDownloadDocx}
         />
       ) : (
-        <>
-          {/* En-tête de l'application */}
-          <Header
-            data={data}
+        <div className="flex flex-1">
+          {/* Barre latérale (Sidebar) */}
+          <Sidebar
             activeTab={activeTab}
             onSelectTab={setActiveTab}
-            onDownloadDocx={handleDownloadDocx}
-            onDownloadPdf={handleDownloadPdf}
-            onPrintPreview={handlePrintPreview}
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            generalInfo={data.generalInfo}
+            badgeCounts={{ pendingTasks, activeInterventions, lowStock }}
             onResetData={handleResetData}
-            isGeneratingDocx={isGeneratingDocx}
           />
 
-          {/* Navigation par onglets des 12 modules */}
-          <Navigation activeTab={activeTab} onSelectTab={setActiveTab} />
+          {/* Contenu principal */}
+          <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
+            {/* Barre d'en-tête */}
+            <Header
+              data={data}
+              activeTab={activeTab}
+              onSelectTab={setActiveTab}
+              onOpenSidebar={() => setSidebarOpen(true)}
+              onOpenSearch={() => setSearchOpen(true)}
+              onDownloadDocx={handleDownloadDocx}
+              onDownloadPdf={handleDownloadPdf}
+              onPrintPreview={handlePrintPreview}
+              isGeneratingDocx={isGeneratingDocx}
+            />
 
-          {/* Corps principal */}
-          <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            <div className="transition-all duration-200">
+            {/* Notification persistante discrète si connecté */}
+            {user && (
+              <div className="bg-blue-50/70 dark:bg-slate-900 border-b border-blue-100 dark:border-slate-800 px-4 py-1.5 flex items-center justify-between text-[11px] text-blue-900 dark:text-blue-300 no-print">
+                <div className="flex items-center gap-2">
+                  <Cloud className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  <span>
+                    Synchronisation automatique active sur Firestore Cloud ({user.email})
+                  </span>
+                  {isAdmin && (
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                      · Privilèges Administrateur DSI
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    saveDataToCloud(data).then(() => showToast('Cahier synchronisé avec succès dans Firestore !'));
+                  }}
+                  className="font-medium hover:underline text-blue-700 dark:text-blue-300"
+                >
+                  Forcer la synchronisation
+                </button>
+              </div>
+            )}
+
+            {/* Contenu de la section active */}
+            <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
               {activeTab === 'general' && (
                 <GeneralInfoSection
                   info={data.generalInfo}
@@ -231,45 +280,141 @@ export default function App() {
                   onUpdateBilanAnnuel={(bilanAnnuel) => setData({ ...data, bilanAnnuel })}
                 />
               )}
-            </div>
-          </main>
+            </main>
 
-          {/* Pied de page */}
-          <footer className="bg-slate-900 text-slate-400 text-xs py-5 border-t border-slate-800 no-print">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Pied de page */}
+            <footer className="border-t border-slate-200 bg-white text-slate-500 text-xs py-4 px-6 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 no-print">
               <div>
-                <strong className="text-white">Cahier de Suivi Annuel du Technicien Informatique</strong> • Exercice {data.generalInfo.anneeReference}
+                <strong className="text-slate-800 font-semibold">{data.generalInfo.entreprise}</strong> · Direction des Systèmes d'Information
               </div>
-              <div className="text-slate-400">
-                Direction des Systèmes d'Information • {data.generalInfo.entreprise}
-              </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 text-slate-500 text-[11px]">
                 <button
                   onClick={handleDownloadDocx}
                   disabled={isGeneratingDocx}
-                  className="hover:text-blue-300 underline underline-offset-2"
+                  className="hover:text-blue-600 transition"
                 >
-                  Télécharger .docx
+                  Télécharger Word (.docx)
                 </button>
-                <span>•</span>
+                <span>·</span>
                 <button
                   onClick={handleDownloadPdf}
-                  className="hover:text-emerald-300 underline underline-offset-2"
+                  className="hover:text-emerald-600 transition"
                 >
-                  Télécharger .pdf
+                  Télécharger PDF (.pdf)
                 </button>
-                <span>•</span>
+                <span>·</span>
                 <button
                   onClick={handlePrintPreview}
-                  className="hover:text-white underline underline-offset-2"
+                  className="hover:text-slate-900 transition"
                 >
                   Imprimer A4
                 </button>
               </div>
-            </div>
-          </footer>
-        </>
+            </footer>
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  const [data, setData] = useState<CahierSuiviData>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Erreur lecture localStorage', e);
+    }
+    return initialCahierData;
+  });
+
+  const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Synchronisation continue avec localStorage (mode hors ligne et cache local)
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.error('Erreur sauvegarde localStorage', e);
+    }
+  }, [data]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  const handleCloudDataReceived = useCallback((cloudData: CahierSuiviData) => {
+    setData(cloudData);
+    showToast('Données synchronisées depuis le Cloud Firestore.');
+  }, []);
+
+  const handleDownloadDocx = async () => {
+    try {
+      setIsGeneratingDocx(true);
+      showToast('Génération du document Word (.docx) complet en cours...');
+      await generateDocx(data);
+      showToast('Document Word (.docx) téléchargé avec succès !');
+    } catch (error) {
+      console.error('Erreur export DOCX', error);
+      showToast('Erreur lors de la génération du fichier DOCX.');
+    } finally {
+      setIsGeneratingDocx(false);
+    }
+  };
+
+  const handleDownloadPdf = () => {
+    try {
+      showToast('Génération et téléchargement du document PDF (.pdf) en cours...');
+      generateDirectPdf(data);
+      showToast('Fichier PDF téléchargé avec succès !');
+    } catch (error) {
+      console.error('Erreur export PDF', error);
+      showToast('Erreur lors de la génération du PDF.');
+    }
+  };
+
+  const handlePrintPreview = () => {
+    triggerPrintToPdf();
+  };
+
+  const handleResetData = () => {
+    if (window.confirm('Voulez-vous réinitialiser toutes les données aux valeurs d\'exemple par défaut ?')) {
+      setData(initialCahierData);
+      localStorage.removeItem(STORAGE_KEY);
+      showToast('Données réinitialisées avec succès.');
+    }
+  };
+
+  return (
+    <FirebaseProvider
+      onCloudDataReceived={handleCloudDataReceived}
+      currentLocalData={data}
+    >
+      {/* Toast de notification global */}
+      {toastMessage && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 text-xs font-semibold animate-fade-in no-print">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      <CahierContent
+        data={data}
+        setData={setData}
+        showToast={showToast}
+        isGeneratingDocx={isGeneratingDocx}
+        handleDownloadDocx={handleDownloadDocx}
+        handleDownloadPdf={handleDownloadPdf}
+        handlePrintPreview={handlePrintPreview}
+        handleResetData={handleResetData}
+      />
+    </FirebaseProvider>
   );
 }

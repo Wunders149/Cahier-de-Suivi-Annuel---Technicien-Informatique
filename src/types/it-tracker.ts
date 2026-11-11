@@ -148,7 +148,7 @@ export interface EquipementParc {
   id: string;
   numeroInventaire: string; // Ex: PARC-2026-PC-014
   designation: string;
-  type: 'PC Portable' | 'PC Fixe' | 'Serveur' | 'Imprimante' | 'Écran' | 'Smartphone' | 'Tablette' | 'Switch/Réseau';
+  type: 'PC Portable' | 'PC Fixe' | 'Serveur' | 'Imprimante' | 'Écran' | 'Périphérique' | 'Smartphone' | 'Tablette' | 'Switch/Réseau';
   marqueModele: string;
   numeroSerie: string;
   configurationTechnique: string; // CPU, RAM, Stockage, OS

@@ -347,44 +347,44 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({ taches, onUpda
                 </tr>
               ) : (
                 filteredTaches.map((tache) => (
-                  <tr key={tache.id} className="hover:bg-slate-50/80 transition">
-                    <td className="p-3 whitespace-nowrap align-top">
+                  <tr key={tache.id} className="hover:bg-slate-50 transition border-b border-slate-100">
+                    <td className="p-3 whitespace-nowrap align-top font-mono tabular-nums text-xs">
                       <span className="font-bold text-slate-900 block">{tache.date}</span>
                       <span className="text-[11px] text-slate-500">{tache.heure}</span>
                     </td>
                     <td className="p-3 align-top max-w-xs">
-                      <strong className="text-slate-900 block font-semibold">{tache.tache}</strong>
-                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">{tache.description}</p>
+                      <strong className="text-slate-900 block font-bold text-xs">{tache.tache}</strong>
+                      <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2 leading-relaxed">{tache.description}</p>
                     </td>
                     <td className="p-3 align-top whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium text-[11px] border border-slate-200">
+                      <span className="text-slate-600 font-medium text-xs">
                         {tache.categorie}
                       </span>
                     </td>
                     <td className="p-3 align-top whitespace-nowrap">
                       <span
-                        className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
+                        className={`text-xs font-semibold ${
                           tache.priorite === 'Urgente'
-                            ? 'bg-red-100 text-red-800'
+                            ? 'text-red-700'
                             : tache.priorite === 'Élevée'
-                            ? 'bg-amber-100 text-amber-800'
+                            ? 'text-amber-700'
                             : tache.priorite === 'Normale'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-slate-100 text-slate-600'
+                            ? 'text-blue-700'
+                            : 'text-slate-500'
                         }`}
                       >
                         {tache.priorite}
                       </span>
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="font-semibold text-slate-900">{tache.dureeReelleMin}m</span>
+                    <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-xs">
+                      <span className="font-bold text-slate-900">{tache.dureeReelleMin}m</span>
                       <span className="text-slate-400 text-[11px] block">(est. {tache.dureeEstimeeMin}m)</span>
                     </td>
                     <td className="p-3 align-top whitespace-nowrap">
                       <select
                         value={tache.statut}
                         onChange={(e) => handleStatusChange(tache.id, e.target.value as any)}
-                        className={`text-[11px] font-semibold px-2 py-1 rounded border ${
+                        className={`text-xs font-semibold px-2 py-1 rounded border ${
                           tache.statut === 'Terminé'
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                             : tache.statut === 'En cours'
@@ -401,12 +401,12 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({ taches, onUpda
                         <option value="En attente">En attente</option>
                       </select>
                     </td>
-                    <td className="p-3 align-top text-[11px]">
-                      <div className="font-medium text-emerald-900 bg-emerald-50/60 p-1 rounded border border-emerald-100 mb-1">
+                    <td className="p-3 align-top text-xs">
+                      <div className="font-medium text-emerald-900 bg-emerald-50/60 p-1.5 rounded border border-emerald-200/60 mb-1 leading-snug">
                         {tache.resultat}
                       </div>
                       {tache.observations && (
-                        <div className="text-slate-500 italic">
+                        <div className="text-slate-500 italic text-[11px]">
                           Obs : {tache.observations}
                         </div>
                       )}

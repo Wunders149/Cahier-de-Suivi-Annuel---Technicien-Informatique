@@ -59,10 +59,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
         /* VUE BILAN ANNUEL GLOBAL */
         <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-xl overflow-hidden space-y-6">
           {/* Bannière solennelle */}
-          <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 sm:p-8 border-b-4 border-amber-500">
+          <div className="bg-slate-900 text-white p-6 sm:p-8 border-b-2 border-slate-800">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div>
-                <span className="text-xs uppercase tracking-widest text-amber-400 font-bold block mb-1">
+                <span className="text-xs uppercase tracking-widest text-blue-400 font-bold block mb-1">
                   Clôture Officielle de l'Exercice
                 </span>
                 <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
@@ -73,10 +73,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                 </p>
               </div>
 
-              <div className="bg-white/10 p-4 rounded-xl border border-white/20 text-center shrink-0">
-                <span className="text-[11px] text-blue-200 block uppercase font-medium">Objectifs Annuels</span>
-                <strong className="text-3xl font-black text-amber-300">{bilanAnnuel.objectifsAtteintsTaux}%</strong>
-                <span className="text-[10px] text-slate-300 block">atteints & validés</span>
+              <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-center shrink-0">
+                <span className="text-[11px] text-slate-300 block uppercase font-medium">Objectifs Annuels</span>
+                <strong className="text-3xl font-black text-amber-400 font-mono tabular-nums">{bilanAnnuel.objectifsAtteintsTaux}%</strong>
+                <span className="text-[10px] text-slate-400 block font-medium">atteints & validés</span>
               </div>
             </div>
           </div>

@@ -337,26 +337,26 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   : 'bg-white border-slate-200 hover:border-slate-300'
               }`}
             >
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-bold text-blue-900">{it.numeroReference}</span>
+              <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                <span className="font-mono tabular-nums font-bold text-blue-900">{it.numeroReference}</span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                  className={`font-semibold text-[11px] ${
                     it.priorite === 'Critique'
-                      ? 'bg-red-100 text-red-800'
+                      ? 'text-red-700'
                       : it.priorite === 'Haute'
-                      ? 'bg-amber-100 text-amber-800'
-                      : 'bg-slate-100 text-slate-700'
+                      ? 'text-amber-700'
+                      : 'text-slate-600'
                   }`}
                 >
-                  {it.priorite}
+                  Priorité {it.priorite}
                 </span>
               </div>
-              <div className="font-semibold text-slate-900 truncate">
-                {it.nomDemandeur} ({it.serviceDemandeur})
+              <div className="font-bold text-slate-900 truncate">
+                {it.nomDemandeur} <span className="font-normal text-slate-500">({it.serviceDemandeur})</span>
               </div>
-              <p className="text-slate-500 text-[11px] mt-0.5 truncate">{it.descriptionPanne}</p>
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
-                <span>{it.dateReception} ({it.tempsConsacreMin} min)</span>
+              <p className="text-slate-600 text-[11px] mt-0.5 truncate">{it.descriptionPanne}</p>
+              <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 font-mono tabular-nums">
+                <span>{it.dateReception} · {it.tempsConsacreMin} min</span>
                 <span className={`font-semibold ${it.resultat === 'Résolu' ? 'text-emerald-700' : 'text-amber-700'}`}>
                   {it.resultat}
                 </span>

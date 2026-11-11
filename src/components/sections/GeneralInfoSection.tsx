@@ -187,18 +187,18 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
       {/* Rendu visuel de la Page de Garde officielle */}
       <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-xl overflow-hidden max-w-4xl mx-auto">
         {/* Bande supérieure bleu marine */}
-        <div className="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-8 text-center relative border-b-4 border-blue-500">
-          <div className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold uppercase tracking-widest border border-blue-400/30 mb-3">
+        <div className="bg-slate-900 text-white p-8 sm:p-10 text-center relative border-b-2 border-slate-800">
+          <span className="text-xs font-bold tracking-widest uppercase text-blue-400 block mb-2">
             Système de Management des Services Informatiques (ITSM)
-          </div>
+          </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-1">
             CAHIER DE SUIVI ANNUEL
           </h1>
           <h2 className="text-lg sm:text-xl font-bold text-blue-400 mb-2">
             DU TECHNICIEN INFORMATIQUE
           </h2>
-          <p className="text-sm text-slate-300 font-medium">
-            ANNÉE D'EXERCICE <span className="text-white font-bold text-base underline decoration-blue-400 underline-offset-4">{info.anneeReference}</span>
+          <p className="text-xs font-mono tabular-nums text-slate-300 font-medium">
+            ANNÉE D'EXERCICE <span className="text-white font-bold text-sm underline decoration-blue-400 underline-offset-4">{info.anneeReference}</span>
           </p>
           <p className="text-xs text-slate-400 mt-2 max-w-lg mx-auto italic">
             Registre officiel de traçabilité, pilotage opérationnel, maintenance préventive et reporting hiérarchique
@@ -260,8 +260,8 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
                 </div>
                 <div>
                   <span className="text-slate-500 block">Statut du registre :</span>
-                  <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
-                    <Check className="w-3 h-3" /> Actif & Conforme ISO/IEC 20000
+                  <span className="inline-flex items-center gap-1.5 text-emerald-700 font-semibold text-xs">
+                    <Check className="w-3.5 h-3.5" /> Actif & Conforme ISO/IEC 20000
                   </span>
                 </div>
               </div>

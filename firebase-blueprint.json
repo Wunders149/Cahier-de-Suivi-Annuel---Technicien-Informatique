@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil de l'utilisateur ou du technicien informatique",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "technician", "viewer"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "email", "role"]
+    },
+    "Workbook": {
+      "title": "Workbook",
+      "description": "Cahier de suivi annuel complet du technicien informatique",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string", "format": "email" },
+        "annee": { "type": "number" },
+        "generalInfo": { "type": "object" },
+        "objectifsAnnuels": { "type": "array" },
+        "jalonsCalendrier": { "type": "array" },
+        "journalTaches": { "type": "array" },
+        "interventions": { "type": "array" },
+        "maintenances": { "type": "array" },
+        "reseauEquipements": { "type": "array" },
+        "reseauIncidents": { "type": "array" },
+        "reseauTestsDebit": { "type": "array" },
+        "parcEquipements": { "type": "array" },
+        "logicielsLicences": { "type": "array" },
+        "sauvegardes": { "type": "array" },
+        "incidentsSecurite": { "type": "array" },
+        "consommables": { "type": "array" },
+        "demandesAchat": { "type": "array" },
+        "rapportsMensuels": { "type": "array" },
+        "bilansTrimestriels": { "type": "array" },
+        "bilanAnnuel": { "type": "object" },
+        "updatedAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "entity": "UserProfile",
+      "description": "Données de profil utilisateur"
+    },
+    "workbooks/{workbookId}": {
+      "entity": "Workbook",
+      "description": "Cahiers de suivi annuel informatiques"
+    }
+  }
+}
