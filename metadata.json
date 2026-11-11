@@ -1,0 +1,6 @@
+{
+  "name": "Cahier de Suivi Annuel - Technicien Informatique",
+  "description": "Outil complet de pilotage, journalisation, inventaire et reporting annuel pour technicien informatique avec export Word (.docx) et PDF prêt à imprimer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
