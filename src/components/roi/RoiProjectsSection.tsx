@@ -40,6 +40,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   // Formulaire d'édition / création
   const [formData, setFormData] = useState<Partial<ProjetRoiIT>>({
@@ -170,9 +171,8 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
   };
 
   const handleDeleteProject = (id: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce projet du calcul de ROI ?')) {
-      onUpdateProjets(projets.filter((p) => p.id !== id));
-    }
+    onUpdateProjets(projets.filter((p) => p.id !== id));
+    setConfirmDeleteId(null);
   };
 
   const handleSaveProject = (e: React.FormEvent) => {
@@ -472,20 +472,44 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1 self-end lg:self-center">
-                    <button
-                      onClick={() => handleOpenEditModal(proj)}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
-                      title="Modifier le projet"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProject(proj.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
-                      title="Supprimer le projet"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {confirmDeleteId === proj.id ? (
+                      <div className="inline-flex items-center gap-1 bg-red-50 border border-red-200 rounded-lg px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteProject(proj.id)}
+                          className="text-[11px] font-semibold text-red-700 hover:underline"
+                        >
+                          Supprimer
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-[11px] text-slate-600 hover:underline"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(proj)}
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                          title="Modifier le projet"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(proj.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                          title="Supprimer le projet"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );

@@ -11,6 +11,7 @@ import {
 import { db, handleFirestoreError } from './config';
 import { CahierSuiviData } from '../types/it-tracker';
 import { User } from 'firebase/auth';
+import { normalizeWorkbookData } from '../utils/backupService';
 
 export interface UserProfile {
   userId: string;
@@ -23,6 +24,43 @@ export interface UserProfile {
 }
 
 export const ADMIN_EMAIL = 'razafimahefaphilibert7@gmail.com';
+
+/**
+ * Vérifie si une valeur est un objet littéral simple (et non un FieldValue Firestore, Date, etc.)
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+/**
+ * Supprime récursivement toute propriété valant `undefined` ou nombre non fini
+ * pour garantir la compatibilité stricte avec Firestore setDoc().
+ */
+function sanitizeForFirestore<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeForFirestore(item)) as unknown as T;
+  }
+
+  if (isPlainObject(value)) {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (val !== undefined) {
+        cleaned[key] = sanitizeForFirestore(val);
+      }
+    }
+    return cleaned as T;
+  }
+
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    return 0 as unknown as T;
+  }
+
+  return value;
+}
 
 /**
  * Enregistre ou met à jour le profil de l'utilisateur dans Firestore
@@ -45,19 +83,19 @@ export async function syncUserProfile(user: User): Promise<UserProfile> {
   try {
     const existing = await getDoc(userRef);
     if (!existing.exists()) {
-      await setDoc(userRef, {
+      await setDoc(userRef, sanitizeForFirestore({
         ...userProfile,
         serverCreatedAt: serverTimestamp(),
         serverUpdatedAt: serverTimestamp(),
-      });
+      }));
     } else {
       const data = existing.data() as UserProfile;
       userProfile.role = isAdmin ? 'admin' : (data.role || 'technician');
       userProfile.createdAt = data.createdAt || now;
-      await setDoc(userRef, {
+      await setDoc(userRef, sanitizeForFirestore({
         ...userProfile,
         serverUpdatedAt: serverTimestamp(),
-      }, { merge: true });
+      }), { merge: true });
     }
     return userProfile;
   } catch (error) {
@@ -77,32 +115,32 @@ export async function saveWorkbookToFirestore(
   const docRef = doc(db, 'workbooks', `workbook_${userId}`);
   const now = new Date().toISOString();
 
-  const payload = {
+  const payload = sanitizeForFirestore({
     id: `workbook_${userId}`,
     userId,
-    userEmail,
-    annee: data.generalInfo.anneeReference,
-    generalInfo: data.generalInfo,
-    objectifsAnnuels: data.objectifsAnnuels,
-    jalonsCalendrier: data.jalonsCalendrier,
-    journalTaches: data.journalTaches,
-    interventions: data.interventions,
-    maintenances: data.maintenances,
-    reseauEquipements: data.reseauEquipements,
-    reseauIncidents: data.reseauIncidents,
-    reseauTestsDebit: data.reseauTestsDebit,
-    parcEquipements: data.parcEquipements,
-    logicielsLicences: data.logicielsLicences,
-    sauvegardes: data.sauvegardes,
-    incidentsSecurite: data.incidentsSecurite,
-    consommables: data.consommables,
-    demandesAchat: data.demandesAchat,
-    rapportsMensuels: data.rapportsMensuels,
-    bilansTrimestriels: data.bilansTrimestriels,
-    bilanAnnuel: data.bilanAnnuel,
+    userEmail: userEmail || '',
+    annee: data.generalInfo?.anneeReference || new Date().getFullYear(),
+    generalInfo: data.generalInfo || {},
+    objectifsAnnuels: data.objectifsAnnuels || [],
+    jalonsCalendrier: data.jalonsCalendrier || [],
+    journalTaches: data.journalTaches || [],
+    interventions: data.interventions || [],
+    maintenances: data.maintenances || [],
+    reseauEquipements: data.reseauEquipements || [],
+    reseauIncidents: data.reseauIncidents || [],
+    reseauTestsDebit: data.reseauTestsDebit || [],
+    parcEquipements: data.parcEquipements || [],
+    logicielsLicences: data.logicielsLicences || [],
+    sauvegardes: data.sauvegardes || [],
+    incidentsSecurite: data.incidentsSecurite || [],
+    consommables: data.consommables || [],
+    demandesAchat: data.demandesAchat || [],
+    rapportsMensuels: data.rapportsMensuels || [],
+    bilansTrimestriels: data.bilansTrimestriels || [],
+    bilanAnnuel: data.bilanAnnuel || {},
     updatedAt: now,
     serverUpdatedAt: serverTimestamp(),
-  };
+  });
 
   try {
     await setDoc(docRef, payload, { merge: true });
@@ -178,24 +216,5 @@ export async function fetchAllWorkbooks(): Promise<Array<{ id: string; userEmail
 
 // Extraction sécurisée des champs pour respecter le typage CahierSuiviData
 function extractWorkbookData(raw: Record<string, unknown>): CahierSuiviData {
-  return {
-    generalInfo: raw.generalInfo as CahierSuiviData['generalInfo'],
-    objectifsAnnuels: (raw.objectifsAnnuels || []) as CahierSuiviData['objectifsAnnuels'],
-    jalonsCalendrier: (raw.jalonsCalendrier || []) as CahierSuiviData['jalonsCalendrier'],
-    journalTaches: (raw.journalTaches || []) as CahierSuiviData['journalTaches'],
-    interventions: (raw.interventions || []) as CahierSuiviData['interventions'],
-    maintenances: (raw.maintenances || []) as CahierSuiviData['maintenances'],
-    reseauEquipements: (raw.reseauEquipements || []) as CahierSuiviData['reseauEquipements'],
-    reseauIncidents: (raw.reseauIncidents || []) as CahierSuiviData['reseauIncidents'],
-    reseauTestsDebit: (raw.reseauTestsDebit || []) as CahierSuiviData['reseauTestsDebit'],
-    parcEquipements: (raw.parcEquipements || []) as CahierSuiviData['parcEquipements'],
-    logicielsLicences: (raw.logicielsLicences || []) as CahierSuiviData['logicielsLicences'],
-    sauvegardes: (raw.sauvegardes || []) as CahierSuiviData['sauvegardes'],
-    incidentsSecurite: (raw.incidentsSecurite || []) as CahierSuiviData['incidentsSecurite'],
-    consommables: (raw.consommables || []) as CahierSuiviData['consommables'],
-    demandesAchat: (raw.demandesAchat || []) as CahierSuiviData['demandesAchat'],
-    rapportsMensuels: (raw.rapportsMensuels || []) as CahierSuiviData['rapportsMensuels'],
-    bilansTrimestriels: (raw.bilansTrimestriels || []) as CahierSuiviData['bilansTrimestriels'],
-    bilanAnnuel: raw.bilanAnnuel as CahierSuiviData['bilanAnnuel'],
-  };
+  return normalizeWorkbookData(raw);
 }

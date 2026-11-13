@@ -18,15 +18,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const [query, setQuery] = useState('');
 
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        if (isOpen) onClose();
-        else {
-          // Open handled by parent or toggle
-        }
-      }
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
@@ -99,9 +93,28 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     matchingConsommables.length > 0 ||
     matchingRoiProjects.length > 0;
 
+  const firstMatchedTab =
+    matchingInterventions.length > 0
+      ? 'interventions'
+      : matchingTasks.length > 0
+      ? 'journal'
+      : matchingParc.length > 0
+      ? 'parc'
+      : matchingConsommables.length > 0
+      ? 'consommables'
+      : matchingRoiProjects.length > 0
+      ? 'bilans'
+      : null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-20 px-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-150">
+    <div
+      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-20 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Barre de recherche */}
         <div className="flex items-center px-4 py-3.5 border-b border-slate-200 dark:border-slate-800">
           <Search className="w-5 h-5 text-slate-400 shrink-0 mr-3" />
@@ -110,6 +123,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
             autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && firstMatchedTab) {
+                onNavigate(firstMatchedTab);
+                onClose();
+              }
+            }}
             placeholder="Rechercher une tâche, intervention, machine, ticket, référence..."
             className="w-full bg-transparent text-sm focus:outline-none placeholder:text-slate-400"
           />

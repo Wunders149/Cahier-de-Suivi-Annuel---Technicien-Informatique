@@ -18,10 +18,9 @@ import { MonthlyReportsSection } from './components/sections/MonthlyReportsSecti
 import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSection';
 import { PrintBooklet } from './components/PrintBooklet';
 import { DataManagementModal } from './components/DataManagementModal';
-import { generateDocx } from './utils/docxGenerator';
-import { generateDirectPdf, triggerPrintToPdf } from './utils/pdfGenerator';
-import { CheckCircle2, AlertTriangle, Cloud, X } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Cloud, X, RotateCcw } from 'lucide-react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
+import { normalizeWorkbookData } from './utils/backupService';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
 
@@ -34,6 +33,7 @@ function CahierContent({
   handleDownloadPdf,
   handlePrintPreview,
   handleResetData,
+  lastCloudSnapshotRef,
 }: {
   data: CahierSuiviData;
   setData: React.Dispatch<React.SetStateAction<CahierSuiviData>>;
@@ -43,6 +43,7 @@ function CahierContent({
   handleDownloadPdf: () => void;
   handlePrintPreview: () => void;
   handleResetData: () => void;
+  lastCloudSnapshotRef: React.MutableRefObject<string | null>;
 }) {
   const [activeTab, setActiveTab] = useState<string>('general');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -57,23 +58,42 @@ function CahierContent({
     saveDataToCloud
   } = useFirebase();
 
-  // Débouncing de la sauvegarde Cloud automatique
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isFirstRender = useRef(true);
+  // Raccourci clavier global Cmd+K / Ctrl+K pour ouvrir la palette de recherche
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
+  // Débouncing de la sauvegarde Cloud automatique (sans boucle sur réception Cloud)
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
+    const currentUserId = user?.uid || null;
+    if (prevUserIdRef.current !== currentUserId) {
+      prevUserIdRef.current = currentUserId;
       return;
     }
 
     if (!user) return;
+
+    const serialized = JSON.stringify(data);
+    if (lastCloudSnapshotRef.current === serialized) {
+      return;
+    }
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
     saveTimeoutRef.current = setTimeout(() => {
+      lastCloudSnapshotRef.current = serialized;
       saveDataToCloud(data).catch(() => {
         // Erreur gérée par le contexte
       });
@@ -84,7 +104,7 @@ function CahierContent({
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [data, user, saveDataToCloud]);
+  }, [data, user, saveDataToCloud, lastCloudSnapshotRef]);
 
   // Badges calculés
   const pendingTasks = data.journalTaches.filter((t) => t.statut === 'En cours' || t.statut === 'À faire').length;
@@ -135,7 +155,7 @@ function CahierContent({
         <PrintBooklet
           data={data}
           onBack={() => setActiveTab('general')}
-          onPrint={triggerPrintToPdf}
+          onPrint={handlePrintPreview}
           onDownloadPdf={handleDownloadPdf}
           onDownloadDocx={handleDownloadDocx}
         />
@@ -197,8 +217,10 @@ function CahierContent({
             <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
               {activeTab === 'general' && (
                 <GeneralInfoSection
+                  data={data}
                   info={data.generalInfo}
                   onUpdate={(info) => setData({ ...data, generalInfo: info })}
+                  onNavigateTab={setActiveTab}
                   onDownloadDocx={handleDownloadDocx}
                   onDownloadPdf={handleDownloadPdf}
                 />
@@ -279,8 +301,10 @@ function CahierContent({
 
               {activeTab === 'rapports' && (
                 <MonthlyReportsSection
+                  data={data}
                   rapports={data.rapportsMensuels}
                   onUpdateRapports={(rapportsMensuels) => setData({ ...data, rapportsMensuels })}
+                  onShowToast={showToast}
                 />
               )}
 
@@ -298,7 +322,10 @@ function CahierContent({
             {/* Pied de page */}
             <footer className="border-t border-slate-200 bg-white text-slate-500 text-xs py-4 px-6 sm:px-8 flex flex-col sm:flex-row items-center justify-between gap-2 no-print">
               <div>
-                <strong className="text-slate-800 font-semibold">{data.generalInfo.entreprise}</strong> · Direction des Systèmes d'Information
+                <strong className="text-slate-800 font-semibold">
+                  {data.generalInfo.entreprise || 'Cahier de Suivi IT'}
+                </strong>{' '}
+                · Direction des Systèmes d'Information
               </div>
               <div className="flex items-center gap-3 text-slate-500 text-[11px]">
                 <button
@@ -336,7 +363,7 @@ export default function App() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        return JSON.parse(stored);
+        return normalizeWorkbookData(JSON.parse(stored));
       }
     } catch (e) {
       console.error('Erreur lecture localStorage', e);
@@ -346,6 +373,9 @@ export default function App() {
 
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastCloudSnapshotRef = useRef<string | null>(null);
 
   // Synchronisation continue avec localStorage (mode hors ligne et cache local)
   useEffect(() => {
@@ -356,22 +386,37 @@ export default function App() {
     }
   }, [data]);
 
-  const showToast = (msg: string) => {
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
+      toastTimerRef.current = null;
     }, 4000);
-  };
+  }, []);
 
   const handleCloudDataReceived = useCallback((cloudData: CahierSuiviData) => {
-    setData(cloudData);
+    const normalized = normalizeWorkbookData(cloudData);
+    lastCloudSnapshotRef.current = JSON.stringify(normalized);
+    setData(normalized);
     showToast('Données synchronisées depuis le Cloud Firestore.');
-  }, []);
+  }, [showToast]);
 
   const handleDownloadDocx = async () => {
     try {
       setIsGeneratingDocx(true);
       showToast('Génération du document Word (.docx) complet en cours...');
+      const { generateDocx } = await import('./utils/docxGenerator');
       await generateDocx(data);
       showToast('Document Word (.docx) téléchargé avec succès !');
     } catch (error) {
@@ -382,9 +427,10 @@ export default function App() {
     }
   };
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     try {
       showToast('Génération et téléchargement du document PDF (.pdf) en cours...');
+      const { generateDirectPdf } = await import('./utils/pdfGenerator');
       generateDirectPdf(data);
       showToast('Fichier PDF téléchargé avec succès !');
     } catch (error) {
@@ -394,15 +440,18 @@ export default function App() {
   };
 
   const handlePrintPreview = () => {
-    triggerPrintToPdf();
+    window.print();
   };
 
   const handleResetData = () => {
-    if (window.confirm('Voulez-vous réinitialiser le cahier sur une base vierge de production ?')) {
-      setData(initialCahierData);
-      localStorage.removeItem(STORAGE_KEY);
-      showToast('Cahier réinitialisé sur la base vierge de production.');
-    }
+    setResetConfirmOpen(true);
+  };
+
+  const confirmResetData = () => {
+    setData(initialCahierData);
+    localStorage.removeItem(STORAGE_KEY);
+    setResetConfirmOpen(false);
+    showToast('Cahier réinitialisé sur la base vierge de production.');
   };
 
   return (
@@ -410,6 +459,49 @@ export default function App() {
       onCloudDataReceived={handleCloudDataReceived}
       currentLocalData={data}
     >
+      {/* Modal de confirmation de réinitialisation (sans window.confirm) */}
+      {resetConfirmOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 no-print"
+          onClick={() => setResetConfirmOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 p-6 space-y-4 text-xs"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-red-100 text-red-700 shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Réinitialiser le cahier sur la base vierge ?
+                </h3>
+                <p className="text-slate-600 mt-1 leading-relaxed">
+                  Toutes les saisies locales actuelles seront effacées pour repartir d'un cahier de production vierge. Pensez à exporter une sauvegarde JSON préalable si nécessaire.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setResetConfirmOpen(false)}
+                className="px-3.5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium transition"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmResetData}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+              >
+                Confirmer la réinitialisation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast de notification global */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 text-xs font-semibold animate-fade-in no-print">
@@ -427,6 +519,7 @@ export default function App() {
         handleDownloadPdf={handleDownloadPdf}
         handlePrintPreview={handlePrintPreview}
         handleResetData={handleResetData}
+        lastCloudSnapshotRef={lastCloudSnapshotRef}
       />
     </FirebaseProvider>
   );

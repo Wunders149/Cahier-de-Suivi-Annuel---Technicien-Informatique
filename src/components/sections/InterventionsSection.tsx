@@ -59,7 +59,9 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       tempsConsacreMin: Number(newTicket.tempsConsacreMin) || 30,
       resultat: (newTicket.resultat as any) || 'Résolu',
       validationDemandeur: Boolean(newTicket.validationDemandeur),
-      dateValidation: newTicket.validationDemandeur ? `${newTicket.dateReception} ${newTicket.heureReception}` : undefined,
+      ...(newTicket.validationDemandeur
+        ? { dateValidation: `${newTicket.dateReception} ${newTicket.heureReception}` }
+        : {}),
       commentairesDemandeur: newTicket.commentairesDemandeur || 'Conforme aux attentes.',
     };
 
@@ -73,10 +75,13 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
     const updated = interventions.map((it) => {
       if (it.id === id) {
         const nextVal = !it.validationDemandeur;
+        const { dateValidation: _removed, ...rest } = it;
         return {
-          ...it,
+          ...rest,
           validationDemandeur: nextVal,
-          dateValidation: nextVal ? new Date().toISOString().replace('T', ' ').slice(0, 16) : undefined,
+          ...(nextVal
+            ? { dateValidation: new Date().toISOString().replace('T', ' ').slice(0, 16) }
+            : {}),
         };
       }
       return it;

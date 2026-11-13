@@ -8,7 +8,23 @@ export default defineConfig(() => {
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
+      },
+    },
+    build: {
+      sourcemap: false,
+      chunkSizeWarningLimit: 1000,
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              { name: 'vendor-react', test: /node_modules[\\/](react|react-dom)[\\/]/ },
+              { name: 'vendor-firebase', test: /node_modules[\\/](firebase|@firebase)[\\/]/ },
+              { name: 'vendor-charts', test: /node_modules[\\/](recharts|d3-.*)[\\/]/ },
+              { name: 'vendor-export', test: /node_modules[\\/](docx|jspdf|html2canvas|file-saver|jszip)[\\/]/ },
+            ],
+          },
+        },
       },
     },
     server: {

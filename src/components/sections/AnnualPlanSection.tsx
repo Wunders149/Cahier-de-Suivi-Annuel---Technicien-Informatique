@@ -306,8 +306,7 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
                 </div>
               </div>
             </div>
-          )))
-        }
+          )))}
         </div>
       </div>
 
@@ -336,42 +335,42 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
             </div>
           ) : (
             jalons.map((jalon) => (
-            <div
-              key={jalon.id}
-              onClick={() => handleToggleJalon(jalon.id)}
-              className={`p-3.5 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
-                jalon.estComplete
-                  ? 'bg-emerald-50/70 border-emerald-300 text-slate-800'
-                  : 'bg-white border-slate-200 hover:border-blue-300'
-              }`}
-            >
-              <div>
-                <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
-                  <span className="font-mono tabular-nums font-bold text-slate-900">
-                    Mois {jalon.mois < 10 ? '0' + jalon.mois : jalon.mois} · {moisNoms[jalon.mois - 1]}
-                  </span>
-                  <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                    {jalon.categorie}
+              <div
+                key={jalon.id}
+                onClick={() => handleToggleJalon(jalon.id)}
+                className={`p-3.5 rounded-xl border cursor-pointer transition flex flex-col justify-between ${
+                  jalon.estComplete
+                    ? 'bg-emerald-50/70 border-emerald-300 text-slate-800'
+                    : 'bg-white border-slate-200 hover:border-blue-300'
+                }`}
+              >
+                <div>
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+                    <span className="font-mono tabular-nums font-bold text-slate-900">
+                      Mois {jalon.mois < 10 ? '0' + jalon.mois : jalon.mois} · {moisNoms[jalon.mois - 1]}
+                    </span>
+                    <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                      {jalon.categorie}
+                    </span>
+                  </div>
+                  <h5 className="text-xs font-bold text-slate-900 leading-snug">{jalon.titre}</h5>
+                  <p className="text-[11px] text-slate-500 mt-1">{jalon.description}</p>
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-[11px] text-slate-400">Prio: {jalon.priorite}</span>
+                  <span
+                    className={`inline-flex items-center gap-1 font-semibold text-xs ${
+                      jalon.estComplete ? 'text-emerald-700' : 'text-slate-400'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    {jalon.estComplete ? 'Validé' : 'À planifier'}
                   </span>
                 </div>
-                <h5 className="text-xs font-bold text-slate-900 leading-snug">{jalon.titre}</h5>
-                <p className="text-[11px] text-slate-500 mt-1">{jalon.description}</p>
               </div>
-
-              <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                <span className="text-[11px] text-slate-400">Prio: {jalon.priorite}</span>
-                <span
-                  className={`inline-flex items-center gap-1 font-semibold text-xs ${
-                    jalon.estComplete ? 'text-emerald-700' : 'text-slate-400'
-                  }`}
-                >
-                  <CheckSquare className="w-3.5 h-3.5" />
-                  {jalon.estComplete ? 'Validé' : 'À planifier'}
-                </span>
-              </div>
-            </div>
-          )))
-        }
+            ))
+          )}
         </div>
       </div>
     </div>

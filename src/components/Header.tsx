@@ -31,7 +31,7 @@ interface HeaderProps {
 }
 
 const TAB_TITLES: Record<string, string> = {
-  general: '01. Informations Générales',
+  general: '01. Tableau de Bord & Garde',
   plan: '02. Planification & KPI',
   journal: '03. Journal Quotidien',
   interventions: '04. Interventions IT',
@@ -41,7 +41,7 @@ const TAB_TITLES: Record<string, string> = {
   logiciels: '08. Logiciels & Licences',
   securite: '09. Sauvegardes & PRA',
   consommables: '10. Consommables & Achats',
-  rapports: '11. Rapports Mensuels',
+  rapports: '11. Rapports & Livraison Mensuelle',
   bilans: '12. Bilans & Calculateur ROI',
   livret: '📖 Livret Complet A4',
 };
@@ -104,10 +104,14 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 min-w-0">
-          <span className="font-semibold text-slate-900 dark:text-white hidden sm:inline truncate max-w-[150px]">
-            {generalInfo.entreprise}
-          </span>
-          <span className="hidden sm:inline text-slate-300 dark:text-slate-700" aria-hidden="true">/</span>
+          {generalInfo.entreprise?.trim() && (
+            <>
+              <span className="font-semibold text-slate-900 dark:text-white hidden sm:inline truncate max-w-[150px]">
+                {generalInfo.entreprise}
+              </span>
+              <span className="hidden sm:inline text-slate-300 dark:text-slate-700" aria-hidden="true">/</span>
+            </>
+          )}
           <span className="font-bold text-blue-600 dark:text-blue-400 truncate text-sm">
             {currentTitle}
           </span>

@@ -67,7 +67,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       group: 'Vue d\'ensemble',
       items: [
-        { id: 'general', label: '01. Informations Générales', icon: FileBadge },
+        { id: 'general', label: '01. Tableau de Bord & Garde', icon: FileBadge },
         { id: 'plan', label: '02. Planification & KPI', icon: CalendarDays },
       ],
     },
@@ -312,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                   <div className="truncate">
                     <span className="text-xs font-semibold text-slate-200 block truncate">
-                      {generalInfo.prenomTechnicien} {generalInfo.nomTechnicien}
+                      {`${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim() || 'Technicien IT'}
                     </span>
                     <span className="text-[10px] text-slate-400 truncate block">
                       Mode Local Hors Ligne
@@ -322,7 +322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 <button
                   onClick={onResetData}
-                  title="Réinitialiser les données d'exemple"
+                  title="Réinitialiser sur la base vierge"
                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />

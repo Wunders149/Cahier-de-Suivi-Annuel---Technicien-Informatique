@@ -86,7 +86,7 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
         <div className="min-h-[260mm] flex flex-col justify-between border-4 border-slate-900 p-8 relative print:border-4">
           <div className="text-center space-y-4">
             <div className="text-xs uppercase font-extrabold tracking-widest text-blue-900 border-b-2 border-blue-900 pb-2">
-              {generalInfo.entreprise.toUpperCase()} • DIRECTION DES SYSTÈMES D'INFORMATION
+              {(generalInfo.entreprise || 'CAHIER DE SUIVI IT').toUpperCase()} • DIRECTION DES SYSTÈMES D'INFORMATION
             </div>
             <div className="py-8">
               <span className="text-sm font-bold text-slate-500 uppercase tracking-widest block mb-2">
@@ -109,40 +109,44 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Nom & Prénom du Technicien :</span>
               <span className="col-span-2 font-bold text-slate-950 text-sm">
-                {generalInfo.prenomTechnicien} {generalInfo.nomTechnicien}
+                {`${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim() || '—'}
               </span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Fonction :</span>
-              <span className="col-span-2 text-slate-900 font-semibold">{generalInfo.fonction}</span>
+              <span className="col-span-2 text-slate-900 font-semibold">{generalInfo.fonction || '—'}</span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Département / Service :</span>
-              <span className="col-span-2 text-slate-900">{generalInfo.departement}</span>
+              <span className="col-span-2 text-slate-900">{generalInfo.departement || '—'}</span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Entreprise / Organisation :</span>
-              <span className="col-span-2 font-bold text-slate-900">{generalInfo.entreprise}</span>
+              <span className="col-span-2 font-bold text-slate-900">{generalInfo.entreprise || '—'}</span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Responsable hiérarchique :</span>
               <span className="col-span-2 text-slate-900">
-                {generalInfo.responsableHierarchique} ({generalInfo.titreResponsable})
+                {generalInfo.responsableHierarchique
+                  ? `${generalInfo.responsableHierarchique}${generalInfo.titreResponsable ? ` (${generalInfo.titreResponsable})` : ''}`
+                  : generalInfo.titreResponsable || '—'}
               </span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Date de prise de fonction :</span>
-              <span className="col-span-2 text-slate-900">{generalInfo.datePriseFonction}</span>
+              <span className="col-span-2 text-slate-900">{generalInfo.datePriseFonction || '—'}</span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Coordonnées professionnelles :</span>
               <span className="col-span-2 text-slate-900">
-                Tél : {generalInfo.telephonePro} | Email : {generalInfo.emailPro}
+                {generalInfo.telephonePro || generalInfo.emailPro
+                  ? `Tél : ${generalInfo.telephonePro || '—'} | Email : ${generalInfo.emailPro || '—'}`
+                  : '—'}
               </span>
             </div>
             <div className="grid grid-cols-3 divide-x-2 divide-slate-900 p-2.5">
               <span className="font-bold text-slate-700">Localisation bureau / atelier :</span>
-              <span className="col-span-2 text-slate-900">{generalInfo.localisationBureau}</span>
+              <span className="col-span-2 text-slate-900">{generalInfo.localisationBureau || '—'}</span>
             </div>
           </div>
 
@@ -445,17 +449,17 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
           <div className="space-y-3 text-xs leading-relaxed text-slate-800">
             <div className="p-3 bg-slate-50 border border-slate-300 rounded">
               <strong className="block text-slate-900 font-bold mb-1">Synthèse générale annuelle :</strong>
-              <p>{bilanAnnuel.syntheseGenerale}</p>
+              <p>{bilanAnnuel.syntheseGenerale || 'Aucune synthèse renseignée.'}</p>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-300 rounded">
               <strong className="block text-slate-900 font-bold mb-1">Principales réalisations & Améliorations :</strong>
-              <p className="whitespace-pre-line">{bilanAnnuel.principalesRealisations}</p>
+              <p className="whitespace-pre-line">{bilanAnnuel.principalesRealisations || 'Aucune réalisation renseignée.'}</p>
             </div>
 
             <div className="p-3 bg-slate-50 border border-slate-300 rounded">
               <strong className="block text-slate-900 font-bold mb-1">Investissements informatiques préconisés pour N+1 :</strong>
-              <p className="whitespace-pre-line font-medium text-blue-900">{bilanAnnuel.investissementsInformatiquesPreconises}</p>
+              <p className="whitespace-pre-line font-medium text-blue-900">{bilanAnnuel.investissementsInformatiquesPreconises || 'Aucun investissement préconisé.'}</p>
             </div>
 
             {bilanAnnuel.projetsRoi && bilanAnnuel.projetsRoi.length > 0 && (
@@ -504,18 +508,30 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
 
             <div className="p-3 bg-slate-50 border border-slate-300 rounded">
               <strong className="block text-slate-900 font-bold mb-1">Appréciation officielle du Responsable SI (RSI) :</strong>
-              <p className="italic text-slate-700">« {bilanAnnuel.appreciationRsi} »</p>
+              <p className="italic text-slate-700">
+                {bilanAnnuel.appreciationRsi ? `« ${bilanAnnuel.appreciationRsi} »` : 'En attente de validation RSI.'}
+              </p>
             </div>
 
             {/* Signatures officielles */}
             <div className="grid grid-cols-2 gap-6 pt-6 text-center text-xs">
               <div className="border-2 border-slate-900 p-4 h-28 flex flex-col justify-between">
-                <strong className="text-slate-900">{generalInfo.prenomTechnicien} {generalInfo.nomTechnicien} ({generalInfo.fonction})</strong>
-                <span className="text-emerald-700 font-semibold">[Signé le {bilanAnnuel.signatureTechnicienDate}]</span>
+                <strong className="text-slate-900">
+                  {`${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim() || 'Technicien IT'}
+                  {generalInfo.fonction ? ` (${generalInfo.fonction})` : ''}
+                </strong>
+                <span className={bilanAnnuel.signatureTechnicienDate ? 'text-emerald-700 font-semibold' : 'text-slate-400 italic'}>
+                  {bilanAnnuel.signatureTechnicienDate ? `[Signé le ${bilanAnnuel.signatureTechnicienDate}]` : '[Visa et Date]'}
+                </span>
               </div>
               <div className="border-2 border-slate-900 p-4 h-28 flex flex-col justify-between">
-                <strong className="text-slate-900">{generalInfo.responsableHierarchique} ({generalInfo.titreResponsable})</strong>
-                <span className="text-emerald-700 font-semibold">[Validé le {bilanAnnuel.signatureRsiDate}]</span>
+                <strong className="text-slate-900">
+                  {generalInfo.responsableHierarchique || 'Responsable SI'}
+                  {generalInfo.titreResponsable ? ` (${generalInfo.titreResponsable})` : ''}
+                </strong>
+                <span className={bilanAnnuel.signatureRsiDate ? 'text-emerald-700 font-semibold' : 'text-slate-400 italic'}>
+                  {bilanAnnuel.signatureRsiDate ? `[Validé le ${bilanAnnuel.signatureRsiDate}]` : '[Approbation et Date]'}
+                </span>
               </div>
             </div>
           </div>

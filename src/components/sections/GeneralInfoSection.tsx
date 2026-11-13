@@ -1,22 +1,31 @@
-import React, { useState } from 'react';
-import { GeneralInfo } from '../../types/it-tracker';
-import { ShieldCheck, UserCheck, Building, Calendar, Phone, Mail, MapPin, Edit3, Check, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { CahierSuiviData, GeneralInfo } from '../../types/it-tracker';
+import { ShieldCheck, UserCheck, Building, Phone, Mail, Edit3, Check, FileText } from 'lucide-react';
+import { DashboardStats } from '../dashboard/DashboardStats';
 
 interface GeneralInfoSectionProps {
+  data: CahierSuiviData;
   info: GeneralInfo;
   onUpdate: (info: GeneralInfo) => void;
+  onNavigateTab: (tab: string) => void;
   onDownloadDocx: () => void;
   onDownloadPdf: () => void;
 }
 
 export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
+  data,
   info,
   onUpdate,
+  onNavigateTab,
   onDownloadDocx,
   onDownloadPdf,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<GeneralInfo>(info);
+
+  useEffect(() => {
+    setFormData(info);
+  }, [info]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,10 +40,10 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold">1</span>
-            Informations Générales & Page de Garde
+            Tableau de Bord & Page de Garde
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Page de garde officielle, identification du titulaire, rattachement hiérarchique et charte déontologique.
+            Pilotage annuel, évolution mensuelle des interventions terminées et page de garde officielle du cahier.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -47,6 +56,11 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Tableau de bord statistique (KPIs + Graphique linéaire Recharts) */}
+      {!isEditing && (
+        <DashboardStats data={data} onNavigateTab={onNavigateTab} />
+      )}
 
       {/* Mode formulaire d'édition */}
       {isEditing ? (
@@ -217,23 +231,35 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
               <div className="space-y-2 text-xs">
                 <div>
                   <span className="text-slate-500 block">Nom & Prénom :</span>
-                  <span className="text-slate-900 font-bold text-sm">{info.prenomTechnicien} {info.nomTechnicien}</span>
+                  <span className="text-slate-900 font-bold text-sm">
+                    {`${info.prenomTechnicien} ${info.nomTechnicien}`.trim() || (
+                      <span className="text-slate-400 font-normal italic">Non renseigné</span>
+                    )}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Fonction :</span>
-                  <span className="text-slate-900 font-medium">{info.fonction}</span>
+                  <span className="text-slate-900 font-medium">{info.fonction || 'Technicien Informatique'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Date de prise de fonction :</span>
-                  <span className="text-slate-900 font-medium">{info.datePriseFonction}</span>
+                  <span className="text-slate-900 font-medium">{info.datePriseFonction || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Atelier / Bureau :</span>
-                  <span className="text-slate-900 font-medium">{info.localisationBureau}</span>
+                  <span className="text-slate-900 font-medium">
+                    {info.localisationBureau || <span className="text-slate-400 italic">Non renseigné</span>}
+                  </span>
                 </div>
                 <div className="pt-1 flex flex-col gap-1 text-slate-600">
-                  <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 text-blue-600" /> {info.telephonePro}</span>
-                  <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5 text-blue-600" /> {info.emailPro}</span>
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-blue-600" />
+                    {info.telephonePro || <span className="text-slate-400 italic">Non renseigné</span>}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-600" />
+                    {info.emailPro || <span className="text-slate-400 italic">Non renseigné</span>}
+                  </span>
                 </div>
               </div>
             </div>
@@ -247,15 +273,19 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
               <div className="space-y-2 text-xs">
                 <div>
                   <span className="text-slate-500 block">Entreprise / Organisation :</span>
-                  <span className="text-slate-900 font-bold text-sm">{info.entreprise}</span>
+                  <span className="text-slate-900 font-bold text-sm">
+                    {info.entreprise || <span className="text-slate-400 font-normal italic">À renseigner</span>}
+                  </span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Direction / Service :</span>
-                  <span className="text-slate-900 font-medium">{info.departement}</span>
+                  <span className="text-slate-900 font-medium">{info.departement || 'DSI'}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 block">Responsable hiérarchique :</span>
-                  <span className="text-slate-900 font-bold">{info.responsableHierarchique}</span>
+                  <span className="text-slate-900 font-bold">
+                    {info.responsableHierarchique || <span className="text-slate-400 font-normal italic">Non renseigné</span>}
+                  </span>
                   <span className="text-slate-500 text-[11px] block">{info.titreResponsable}</span>
                 </div>
                 <div>

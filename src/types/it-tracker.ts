@@ -252,6 +252,11 @@ export interface RapportMensuel {
   activitesMoisSuivant: string;
   valideParHierarchie: boolean;
   dateValidation?: string;
+  statutLivraison?: 'Non livré' | 'Prêt à livrer' | 'Livré';
+  dateLivraison?: string;
+  destinataireLivraison?: string;
+  modeLivraison?: 'PDF (.pdf)' | 'Word (.docx)' | 'PDF & Word' | 'Remise directe / Email';
+  noteLivraison?: string;
 }
 
 export interface BilanTrimestriel {

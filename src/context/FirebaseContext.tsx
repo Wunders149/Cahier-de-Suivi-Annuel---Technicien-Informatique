@@ -108,6 +108,7 @@ export function FirebaseProvider({
           } else {
             // Aucun document dans le cloud -> sauvegarde automatique des données locales actuelles
             try {
+              isSavingRef.current = true;
               setSyncStatus('saving');
               await saveWorkbookToFirestore(
                 user.uid,
@@ -119,6 +120,10 @@ export function FirebaseProvider({
             } catch (err) {
               console.error('Erreur premier envoi du cahier vers le Cloud:', err);
               setSyncStatus('error');
+            } finally {
+              setTimeout(() => {
+                isSavingRef.current = false;
+              }, 500);
             }
           }
           return;
