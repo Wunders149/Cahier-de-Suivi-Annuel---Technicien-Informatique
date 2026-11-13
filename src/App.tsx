@@ -17,12 +17,13 @@ import { ConsumablesSection } from './components/sections/ConsumablesSection';
 import { MonthlyReportsSection } from './components/sections/MonthlyReportsSection';
 import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSection';
 import { PrintBooklet } from './components/PrintBooklet';
+import { DataManagementModal } from './components/DataManagementModal';
 import { generateDocx } from './utils/docxGenerator';
 import { generateDirectPdf, triggerPrintToPdf } from './utils/pdfGenerator';
 import { CheckCircle2, AlertTriangle, Cloud, X } from 'lucide-react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 
-const STORAGE_KEY = 'cahier_suivi_technicien_it_v1';
+const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
 
 function CahierContent({
   data,
@@ -46,6 +47,7 @@ function CahierContent({
   const [activeTab, setActiveTab] = useState<string>('general');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [dataModalOpen, setDataModalOpen] = useState(false);
 
   const {
     user,
@@ -119,6 +121,15 @@ function CahierContent({
         }}
       />
 
+      {/* Centre de gestion des données, sauvegarde & bascule production */}
+      <DataManagementModal
+        isOpen={dataModalOpen}
+        onClose={() => setDataModalOpen(false)}
+        data={data}
+        onUpdateData={(newData) => setData(newData)}
+        onShowToast={showToast}
+      />
+
       {/* Vue Livret Complet Imprimable A4 */}
       {activeTab === 'livret' ? (
         <PrintBooklet
@@ -139,6 +150,7 @@ function CahierContent({
             generalInfo={data.generalInfo}
             badgeCounts={{ pendingTasks, activeInterventions, lowStock }}
             onResetData={handleResetData}
+            onOpenDataModal={() => setDataModalOpen(true)}
           />
 
           {/* Contenu principal */}
@@ -276,6 +288,7 @@ function CahierContent({
                 <QuarterlyAnnualSection
                   bilansTrimestriels={data.bilansTrimestriels}
                   bilanAnnuel={data.bilanAnnuel}
+                  generalInfo={data.generalInfo}
                   onUpdateTrimestriels={(bilansTrimestriels) => setData({ ...data, bilansTrimestriels })}
                   onUpdateBilanAnnuel={(bilanAnnuel) => setData({ ...data, bilanAnnuel })}
                 />
@@ -385,10 +398,10 @@ export default function App() {
   };
 
   const handleResetData = () => {
-    if (window.confirm('Voulez-vous réinitialiser toutes les données aux valeurs d\'exemple par défaut ?')) {
+    if (window.confirm('Voulez-vous réinitialiser le cahier sur une base vierge de production ?')) {
       setData(initialCahierData);
       localStorage.removeItem(STORAGE_KEY);
-      showToast('Données réinitialisées avec succès.');
+      showToast('Cahier réinitialisé sur la base vierge de production.');
     }
   };
 

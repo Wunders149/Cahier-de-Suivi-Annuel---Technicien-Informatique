@@ -510,11 +510,11 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
             {/* Signatures officielles */}
             <div className="grid grid-cols-2 gap-6 pt-6 text-center text-xs">
               <div className="border-2 border-slate-900 p-4 h-28 flex flex-col justify-between">
-                <strong className="text-slate-900">Alexandre DUBOIS (Technicien IT)</strong>
+                <strong className="text-slate-900">{generalInfo.prenomTechnicien} {generalInfo.nomTechnicien} ({generalInfo.fonction})</strong>
                 <span className="text-emerald-700 font-semibold">[Signé le {bilanAnnuel.signatureTechnicienDate}]</span>
               </div>
               <div className="border-2 border-slate-900 p-4 h-28 flex flex-col justify-between">
-                <strong className="text-slate-900">Marc LEFEBVRE (Responsable SI)</strong>
+                <strong className="text-slate-900">{generalInfo.responsableHierarchique} ({generalInfo.titreResponsable})</strong>
                 <span className="text-emerald-700 font-semibold">[Validé le {bilanAnnuel.signatureRsiDate}]</span>
               </div>
             </div>

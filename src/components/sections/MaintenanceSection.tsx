@@ -328,7 +328,16 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filtered.map((item) => (
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                    {maintenances.length === 0
+                      ? "Aucune ligne de maintenance enregistrée. Cliquez sur « Nouveau Contrôle » pour créer vos fiches de maintenance préventive et corrective."
+                      : "Aucune tâche de maintenance ne correspond à votre filtre."}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50/80 transition">
                   <td className="p-3 align-top whitespace-nowrap">
                     <button
@@ -383,7 +392,7 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
                     )}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

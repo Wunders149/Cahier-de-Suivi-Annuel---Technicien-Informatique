@@ -443,12 +443,19 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {consommables.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 align-top">
-                      <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">{c.reference}</strong>
-                      <span className="text-slate-900 font-medium text-xs">{c.designation}</span>
+                {consommables.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                      Aucun consommable ou pièce détachée en stock. Cliquez sur « Nouvel Article » pour créer votre inventaire d'atelier (toners, câbles, adaptateurs).
                     </td>
+                  </tr>
+                ) : (
+                  consommables.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 align-top">
+                        <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">{c.reference}</strong>
+                        <span className="text-slate-900 font-medium text-xs">{c.designation}</span>
+                      </td>
                     <td className="p-3 align-top whitespace-nowrap text-xs text-slate-600 font-medium">
                       {c.categorie}
                     </td>
@@ -502,7 +509,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                       </div>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -530,8 +537,15 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {demandesAchat.map((da) => (
-                  <tr key={da.id} className="hover:bg-slate-50 transition">
+                {demandesAchat.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500 italic">
+                      Aucune demande d'achat enregistrée. Utilisez « Nouvelle Demande d'Achat » pour planifier vos commandes de matériel et réapprovisionnements.
+                    </td>
+                  </tr>
+                ) : (
+                  demandesAchat.map((da) => (
+                    <tr key={da.id} className="hover:bg-slate-50 transition">
                     <td className="p-3 align-top whitespace-nowrap">
                       <strong className="text-blue-900 font-bold block">{da.numeroCommande}</strong>
                       <span className="text-slate-400 text-[11px]">{da.dateDemande}</span>
@@ -579,7 +593,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                       <span>{da.observations}</span>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

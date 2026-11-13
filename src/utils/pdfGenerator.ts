@@ -305,12 +305,12 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   doc.setFontSize(8);
   doc.text(`Signature Technicien Informatique (${bilanAnnuel.signatureTechnicienDate}) :`, margin + 6, y + 8);
   doc.setFont('helvetica', 'italic');
-  doc.text('Alexandre DUBOIS [Signé]', margin + 6, y + 16);
+  doc.text(`${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien} [Signé]`, margin + 6, y + 16);
 
   doc.setFont('helvetica', 'bold');
   doc.text(`Validation Hiérarchique RSI (${bilanAnnuel.signatureRsiDate}) :`, margin + 95, y + 8);
   doc.setFont('helvetica', 'italic');
-  doc.text('Marc LEFEBVRE, RSI [Approuvé]', margin + 95, y + 16);
+  doc.text(`${generalInfo.responsableHierarchique} [Approuvé]`, margin + 95, y + 16);
 
   addFooter(5);
 

@@ -220,7 +220,18 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
         </div>
 
         <div className="grid grid-cols-1 gap-4">
-          {objectifs.map((obj) => (
+          {objectifs.length === 0 ? (
+            <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-3">
+              <Target className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="text-xs text-slate-600 font-medium">
+                Aucun objectif annuel défini pour le moment.
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Cliquez sur « Nouvel Objectif » ci-dessus pour planifier vos missions, projets et indicateurs clés de performance (KPI) pour l'année.
+              </p>
+            </div>
+          ) : (
+            objectifs.map((obj) => (
             <div
               key={obj.id}
               className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm hover:border-blue-300 transition"
@@ -295,7 +306,8 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
                 </div>
               </div>
             </div>
-          ))}
+          )))
+        }
         </div>
       </div>
 
@@ -312,7 +324,18 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {jalons.map((jalon) => (
+          {jalons.length === 0 ? (
+            <div className="col-span-full bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-3">
+              <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="text-xs text-slate-600 font-medium">
+                Aucun jalon ou opération planifiée dans le calendrier.
+              </div>
+              <p className="text-[11px] text-slate-400">
+                Les jalons et audits périodiques programmés au cours de l'année apparaîtront ici.
+              </p>
+            </div>
+          ) : (
+            jalons.map((jalon) => (
             <div
               key={jalon.id}
               onClick={() => handleToggleJalon(jalon.id)}
@@ -347,7 +370,8 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
                 </span>
               </div>
             </div>
-          ))}
+          )))
+        }
         </div>
       </div>
     </div>

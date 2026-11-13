@@ -343,10 +343,19 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filtered.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition border-b border-slate-100">
-                  <td className="p-3 align-top whitespace-nowrap">
-                    <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                    {parc.length === 0
+                      ? "Aucun équipement enregistré dans le parc. Cliquez sur « Ajouter un Équipement » pour débuter l'inventaire CMDB."
+                      : "Aucun équipement ne correspond à votre recherche."}
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50 transition border-b border-slate-100">
+                    <td className="p-3 align-top whitespace-nowrap">
+                      <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">
                       {item.numeroInventaire}
                     </strong>
                     <span className="text-[11px] text-slate-500 font-medium">
@@ -386,7 +395,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                     {item.historiqueInterventions || 'N/A'}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>

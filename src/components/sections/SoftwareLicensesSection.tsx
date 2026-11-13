@@ -251,10 +251,17 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
-              {licences.map((lic) => {
-                const disponible = lic.nombreLicencesAchetees - lic.nombreLicencesAttribuees;
-                return (
-                  <tr key={lic.id} className="hover:bg-slate-50 transition">
+              {licences.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                    Aucune licence ou logiciel répertorié. Cliquez sur « Ajouter une Licence » pour suivre vos abonnements SaaS, licences perpétuelles et dates d'expiration.
+                  </td>
+                </tr>
+              ) : (
+                licences.map((lic) => {
+                  const disponible = lic.nombreLicencesAchetees - lic.nombreLicencesAttribuees;
+                  return (
+                    <tr key={lic.id} className="hover:bg-slate-50 transition">
                     <td className="p-3 align-top">
                       <strong className="text-blue-900 block font-bold text-sm">{lic.nomLogiciel}</strong>
                       <span className="text-[11px] text-slate-500 font-medium">{lic.editeur}</span>
@@ -306,7 +313,7 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
                     </td>
                   </tr>
                 );
-              })}
+              }))}
             </tbody>
           </table>
         </div>

@@ -327,7 +327,22 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Liste des tickets (gauche) */}
         <div className="lg:col-span-5 space-y-2">
-          {filtered.map((it) => (
+          {filtered.length === 0 ? (
+            <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center space-y-3">
+              <Wrench className="w-8 h-8 text-slate-300 mx-auto" />
+              <div className="text-xs text-slate-600 font-medium">
+                {interventions.length === 0
+                  ? "Aucune fiche d'intervention enregistrée."
+                  : "Aucune intervention ne correspond à votre recherche."}
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {interventions.length === 0
+                  ? "Cliquez sur « Nouvelle Fiche d'Intervention » pour documenter votre première intervention technique."
+                  : "Modifiez votre terme de recherche."}
+              </p>
+            </div>
+          ) : (
+            filtered.map((it) => (
             <div
               key={it.id}
               onClick={() => setSelectedIntervention(it)}
@@ -362,7 +377,8 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                 </span>
               </div>
             </div>
-          ))}
+          ))
+        )}
         </div>
 
         {/* Fiche d'intervention détaillée (droite) */}
@@ -487,7 +503,9 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 italic">
-              Sélectionnez une fiche d'intervention dans la liste pour afficher tous les détails.
+              {interventions.length === 0
+                ? "Le registre des interventions est vierge et prêt à recevoir vos fiches techniques."
+                : "Sélectionnez une fiche d'intervention dans la liste pour afficher tous les détails."}
             </div>
           )}
         </div>

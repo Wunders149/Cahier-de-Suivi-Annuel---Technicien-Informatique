@@ -119,15 +119,22 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {sauvegardes.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <strong className="text-blue-900 font-bold block">{s.nomJob}</strong>
-                      <span className="text-[11px] text-slate-500">{s.serveurCible}</span>
+                {sauvegardes.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                      Aucun job de sauvegarde consigné. Documentez vos sauvegardes (règle 3-2-1) et vos tests périodiques de restauration.
                     </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">
-                        {s.typeSauvegarde}
+                  </tr>
+                ) : (
+                  sauvegardes.map((s) => (
+                    <tr key={s.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <strong className="text-blue-900 font-bold block">{s.nomJob}</strong>
+                        <span className="text-[11px] text-slate-500">{s.serveurCible}</span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-medium">
+                          {s.typeSauvegarde}
                       </span>
                     </td>
                     <td className="p-3 align-top whitespace-nowrap text-[11px]">
@@ -154,7 +161,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
                       </span>
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -300,42 +307,50 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {incidentsSecurite.map((sec) => (
-                  <tr key={sec.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 align-top whitespace-nowrap font-medium text-slate-900">
-                      {sec.dateHeure}
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <strong className="text-slate-900 block font-semibold">{sec.typeIncident}</strong>
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          sec.severite === 'Critique'
-                            ? 'bg-red-100 text-red-800'
-                            : sec.severite === 'Élevée'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        Sévérité {sec.severite}
-                      </span>
-                    </td>
-                    <td className="p-3 align-top text-[11px] text-slate-800 font-medium max-w-[140px]">
-                      {sec.postesConcernes}
-                    </td>
-                    <td className="p-3 align-top text-slate-700 max-w-xs">
-                      {sec.description}
-                    </td>
-                    <td className="p-3 align-top text-emerald-900 bg-emerald-50/40 max-w-xs">
-                      {sec.actionsMenées}
-                    </td>
-                    <td className="p-3 align-top text-[11px]">
-                      <span className="inline-block px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold mb-1">
-                        {sec.statut}
-                      </span>
-                      <p className="text-slate-500 italic">{sec.leconsApprises}</p>
+                {incidentsSecurite.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-slate-500 italic">
+                      Aucun incident de cybersécurité enregistré. Le registre PSSI est vierge et prêt pour la consignation des événements.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  incidentsSecurite.map((sec) => (
+                    <tr key={sec.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 align-top whitespace-nowrap font-medium text-slate-900">
+                        {sec.dateHeure}
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <strong className="text-slate-900 block font-semibold">{sec.typeIncident}</strong>
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            sec.severite === 'Critique'
+                              ? 'bg-red-100 text-red-800'
+                              : sec.severite === 'Élevée'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          Sévérité {sec.severite}
+                        </span>
+                      </td>
+                      <td className="p-3 align-top text-[11px] text-slate-800 font-medium max-w-[140px]">
+                        {sec.postesConcernes}
+                      </td>
+                      <td className="p-3 align-top text-slate-700 max-w-xs">
+                        {sec.description}
+                      </td>
+                      <td className="p-3 align-top text-emerald-900 bg-emerald-50/40 max-w-xs">
+                        {sec.actionsMenées}
+                      </td>
+                      <td className="p-3 align-top text-[11px]">
+                        <span className="inline-block px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold mb-1">
+                          {sec.statut}
+                        </span>
+                        <p className="text-slate-500 italic">{sec.leconsApprises}</p>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

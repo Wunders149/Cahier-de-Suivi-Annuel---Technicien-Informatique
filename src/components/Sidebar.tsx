@@ -18,6 +18,7 @@ import {
   RotateCcw,
   LogIn,
   LogOut,
+  Database,
 } from 'lucide-react';
 import { GeneralInfo } from '../types/it-tracker';
 import { useFirebase } from '../context/FirebaseContext';
@@ -34,6 +35,7 @@ interface SidebarProps {
     lowStock: number;
   };
   onResetData: () => void;
+  onOpenDataModal: () => void;
 }
 
 interface NavItem {
@@ -58,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   generalInfo,
   badgeCounts,
   onResetData,
+  onOpenDataModal,
 }) => {
   const { user, isAdmin, signInWithGoogle, signOut } = useFirebase();
   const navSections: NavSection[] = [
@@ -228,6 +231,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             </div>
           ))}
+        </div>
+
+        {/* Gestion des données & Sauvegarde */}
+        <div className="px-3 pt-2 pb-1 border-t border-slate-800/80 shrink-0 bg-slate-900">
+          <button
+            onClick={() => {
+              onOpenDataModal();
+              onClose();
+            }}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 bg-slate-800/60 border border-slate-700/80 transition group shadow-2xs"
+            title="Centre de sauvegarde, restauration et préparation production"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <Database className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
+              <span className="truncate">Données & Sauvegarde</span>
+            </div>
+            <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">
+              JSON
+            </span>
+          </button>
         </div>
 
         {/* Profil du technicien et statut Firebase en bas */}

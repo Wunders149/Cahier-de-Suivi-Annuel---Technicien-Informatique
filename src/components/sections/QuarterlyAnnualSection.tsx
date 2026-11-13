@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BilanTrimestriel, BilanAnnuel } from '../../types/it-tracker';
+import { BilanTrimestriel, BilanAnnuel, GeneralInfo } from '../../types/it-tracker';
 import {
   Award,
   CheckCircle2,
@@ -19,6 +19,7 @@ import { RoiProjectsSection } from '../roi/RoiProjectsSection';
 interface QuarterlyAnnualSectionProps {
   bilansTrimestriels: BilanTrimestriel[];
   bilanAnnuel: BilanAnnuel;
+  generalInfo?: GeneralInfo;
   onUpdateTrimestriels: (bilans: BilanTrimestriel[]) => void;
   onUpdateBilanAnnuel: (bilan: BilanAnnuel) => void;
 }
@@ -26,6 +27,7 @@ interface QuarterlyAnnualSectionProps {
 export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
   bilansTrimestriels,
   bilanAnnuel,
+  generalInfo,
   onUpdateTrimestriels,
   onUpdateBilanAnnuel,
 }) => {
@@ -331,7 +333,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                     Visa & Signature du Technicien IT :
                   </span>
                   <strong className="text-slate-900 dark:text-white text-sm block mt-1">
-                    Alexandre DUBOIS
+                    {generalInfo ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}` : 'Alexandre DUBOIS'}
                   </strong>
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold block mt-1">
                     ✓ Signé électroniquement le {bilanAnnuel.signatureTechnicienDate}
@@ -342,7 +344,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                     Validation Hiérarchique du RSI :
                   </span>
                   <strong className="text-slate-900 dark:text-white text-sm block mt-1">
-                    Marc LEFEBVRE (RSI)
+                    {generalInfo ? `${generalInfo.responsableHierarchique}` : 'Marc LEFEBVRE (RSI)'}
                   </strong>
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold block mt-1">
                     ✓ Approuvé et visé le {bilanAnnuel.signatureRsiDate}

@@ -248,38 +248,46 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {equipements.map((eq) => (
-                  <tr key={eq.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <strong className="text-slate-900 block font-semibold">{eq.nom}</strong>
-                      <span className="text-[11px] text-blue-700 font-medium">{eq.type}</span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="text-slate-800">{eq.marqueModele}</span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap font-mono text-[11px]">
-                      <span className="text-slate-900 font-bold block">{eq.adresseIp}</span>
-                      <span className="text-slate-400">{eq.adresseMac}</span>
-                    </td>
-                    <td className="p-3 align-top text-[11px]">
-                      <span className="text-slate-800 block">{eq.localisation}</span>
-                      <span className="text-slate-500 font-medium">{eq.vlan}</span>
-                    </td>
-                    <td className="p-3 align-top text-[11px]">
-                      <span className="text-slate-700">{eq.portsPoE}</span>
-                    </td>
-                    <td className="p-3 align-top text-[11px] whitespace-nowrap">
-                      <span className="text-slate-800 font-mono">{eq.firmwareVersion}</span>
-                      <span className="text-slate-400 block text-[10px]">Reboot: {eq.dernierReboot}</span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                        {eq.etat}
-                      </span>
+                {equipements.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                      Aucun équipement réseau enregistré. Utilisez le bouton « Ajouter un Équipement » ci-dessus pour recenser vos switchs, routeurs et bornes Wi-Fi.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  equipements.map((eq) => (
+                    <tr key={eq.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <strong className="text-slate-900 block font-semibold">{eq.nom}</strong>
+                        <span className="text-[11px] text-blue-700 font-medium">{eq.type}</span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="text-slate-800">{eq.marqueModele}</span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap font-mono text-[11px]">
+                        <span className="text-slate-900 font-bold block">{eq.adresseIp}</span>
+                        <span className="text-slate-400">{eq.adresseMac}</span>
+                      </td>
+                      <td className="p-3 align-top text-[11px]">
+                        <span className="text-slate-800 block">{eq.localisation}</span>
+                        <span className="text-slate-500 font-medium">{eq.vlan}</span>
+                      </td>
+                      <td className="p-3 align-top text-[11px]">
+                        <span className="text-slate-700">{eq.portsPoE}</span>
+                      </td>
+                      <td className="p-3 align-top text-[11px] whitespace-nowrap">
+                        <span className="text-slate-800 font-mono">{eq.firmwareVersion}</span>
+                        <span className="text-slate-400 block text-[10px]">Reboot: {eq.dernierReboot}</span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded font-semibold border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          {eq.etat}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -308,36 +316,44 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-slate-700">
-                {incidents.map((inc) => (
-                  <tr key={inc.id} className="hover:bg-slate-50 transition">
-                    <td className="p-3 align-top whitespace-nowrap font-medium text-slate-900">
-                      {inc.dateHeure}
-                    </td>
-                    <td className="p-3 align-top font-semibold text-slate-900">
-                      {inc.equipementOuLiaison}
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
-                        {inc.typeIncident}
-                      </span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="font-bold text-slate-800">{inc.dureeInterruptionMin} min</span>
-                      <span className="text-slate-400 block text-[11px]">Impact: {inc.impactUtilisateurs}</span>
-                    </td>
-                    <td className="p-3 align-top text-slate-700 max-w-xs">
-                      {inc.cause}
-                    </td>
-                    <td className="p-3 align-top text-emerald-800 bg-emerald-50/40 max-w-xs">
-                      {inc.actionCorrective}
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
-                        {inc.statut}
-                      </span>
+                {incidents.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                      Aucun incident de connectivité réseau consigné. Cliquez sur « Déclarer un Incident » en cas de coupure ou dégradation de service.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  incidents.map((inc) => (
+                    <tr key={inc.id} className="hover:bg-slate-50 transition">
+                      <td className="p-3 align-top whitespace-nowrap font-medium text-slate-900">
+                        {inc.dateHeure}
+                      </td>
+                      <td className="p-3 align-top font-semibold text-slate-900">
+                        {inc.equipementOuLiaison}
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+                          {inc.typeIncident}
+                        </span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="font-bold text-slate-800">{inc.dureeInterruptionMin} min</span>
+                        <span className="text-slate-400 block text-[11px]">Impact: {inc.impactUtilisateurs}</span>
+                      </td>
+                      <td className="p-3 align-top text-slate-700 max-w-xs">
+                        {inc.cause}
+                      </td>
+                      <td className="p-3 align-top text-emerald-800 bg-emerald-50/40 max-w-xs">
+                        {inc.actionCorrective}
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold">
+                          {inc.statut}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -352,32 +368,38 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {testsDebit.map((t) => (
-            <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-2 text-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                <span className="font-bold text-slate-900 text-sm">{t.ligneConcernee}</span>
-                <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[11px]">
-                  {t.statutConformite}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-center py-2 bg-slate-50 rounded-lg">
-                <div>
-                  <span className="text-slate-400 text-[10px] block uppercase">Débit Descendant</span>
-                  <strong className="text-base text-blue-700 font-extrabold">{t.debitDescendantMbps} Mbps</strong>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[10px] block uppercase">Débit Montant</span>
-                  <strong className="text-base text-indigo-700 font-extrabold">{t.debitMontantMbps} Mbps</strong>
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-slate-500 text-[11px]">
-                <span>Latence (Ping) : <strong className="text-slate-800">{t.latenceMs} ms</strong></span>
-                <span>Gigue (Jitter) : <strong className="text-slate-800">{t.gigueMs} ms</strong></span>
-                <span>Mesuré le {t.dateHeure}</span>
-              </div>
-              <p className="text-slate-600 text-[11px] italic bg-slate-50 p-1.5 rounded">{t.observations}</p>
+          {testsDebit.length === 0 ? (
+            <div className="col-span-full bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center text-slate-500 italic">
+              Aucune mesure de débit enregistrée. Réalisez des tests périodiques pour documenter les performances de la connexion Internet et du réseau local.
             </div>
-          ))}
+          ) : (
+            testsDebit.map((t) => (
+              <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                  <span className="font-bold text-slate-900 text-sm">{t.ligneConcernee}</span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold text-[11px]">
+                    {t.statutConformite}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center py-2 bg-slate-50 rounded-lg">
+                  <div>
+                    <span className="text-slate-400 text-[10px] block uppercase">Débit Descendant</span>
+                    <strong className="text-base text-blue-700 font-extrabold">{t.debitDescendantMbps} Mbps</strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 text-[10px] block uppercase">Débit Montant</span>
+                    <strong className="text-base text-indigo-700 font-extrabold">{t.debitMontantMbps} Mbps</strong>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-slate-500 text-[11px]">
+                  <span>Latence (Ping) : <strong className="text-slate-800">{t.latenceMs} ms</strong></span>
+                  <span>Gigue (Jitter) : <strong className="text-slate-800">{t.gigueMs} ms</strong></span>
+                  <span>Mesuré le {t.dateHeure}</span>
+                </div>
+                <p className="text-slate-600 text-[11px] italic bg-slate-50 p-1.5 rounded">{t.observations}</p>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

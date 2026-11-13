@@ -341,8 +341,10 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({ taches, onUpda
             <tbody className="divide-y divide-slate-200 text-slate-700">
               {filteredTaches.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400 italic">
-                    Aucune entrée trouvée pour les critères de recherche.
+                  <td colSpan={7} className="p-8 text-center text-slate-500 italic">
+                    {taches.length === 0
+                      ? "Votre journal quotidien est vierge et prêt pour vos premières saisies. Cliquez sur « Consigner une tâche » pour enregistrer votre première activité."
+                      : "Aucune tâche trouvée pour les critères de recherche."}
                   </td>
                 </tr>
               ) : (
