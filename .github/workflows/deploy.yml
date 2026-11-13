@@ -24,10 +24,10 @@ jobs:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
 
-      - name: Configurer Node.js 22
+      - name: Configurer Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Installer les dépendances
         run: npm install --no-audit --no-fund
