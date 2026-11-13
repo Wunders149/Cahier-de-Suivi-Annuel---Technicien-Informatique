@@ -25,6 +25,7 @@ import {
   RapportMensuel,
   TacheJournal,
 } from '../types/it-tracker';
+import { formatDuration } from './durationFormatter';
 
 export const MONTH_NAMES = [
   'Janvier',
@@ -271,7 +272,7 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
   const boxW = (contentWidth - 9) / 4;
   const kpis = [
     { label: 'Interventions', val: `${totalIntervDisplay}`, sub: `${resolvedDisplay} terminées` },
-    { label: 'Taux Résolution', val: `${snap.tauxResolution}%`, sub: `MTTR ${snap.avgInterventionMinutes} min` },
+    { label: 'Taux Résolution', val: `${snap.tauxResolution}%`, sub: `MTTR ${formatDuration(snap.avgInterventionMinutes)}` },
     { label: 'Journal Quotidien', val: `${snap.taches.length}`, sub: `${snap.tachesTerminees} terminées` },
     { label: 'Maintenances', val: `${snap.maintenances.length}`, sub: `${snap.reseauIncidents.length} inc. réseau` },
   ];
@@ -377,7 +378,7 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
         y + 4.5
       );
       doc.text(
-        `${it.resultat} (${it.tempsConsacreMin} min)`,
+        `${it.resultat} (${formatDuration(it.tempsConsacreMin)})`,
         pageWidth - margin - 3,
         y + 4.5,
         { align: 'right' }
@@ -574,7 +575,7 @@ export async function generateMonthlyDocx(
             makeTextCell(it.dateReception),
             makeTextCell(`${it.nomDemandeur} (${it.serviceDemandeur})`),
             makeTextCell(`${it.descriptionPanne} → ${it.solutionAppliquee || 'En cours'}`),
-            makeTextCell(`${it.resultat} (${it.tempsConsacreMin}m)`),
+            makeTextCell(`${it.resultat} (${formatDuration(it.tempsConsacreMin)})`),
           ],
         })
       );

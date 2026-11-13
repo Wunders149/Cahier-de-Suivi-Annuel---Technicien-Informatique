@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import { CahierSuiviData } from '../types/it-tracker';
+import { formatDuration } from './durationFormatter';
 
 /**
  * Déclenche l'aperçu avant impression et l'impression directe en PDF A4 vectoriel haute fidélité
@@ -269,7 +270,7 @@ export function generateDirectPdf(data: CahierSuiviData): void {
       doc.text(`Diagnostic technique : ${it.diagnosticTechnique || '—'}`, margin + 4, y + 28);
       doc.text(`Cause identifiée : ${it.causeIdentifiee || '—'}`, margin + 4, y + 36);
       doc.text(`Solution appliquée : ${it.solutionAppliquee || '—'}`, margin + 4, y + 44);
-      doc.text(`Matériel/Outils utilisés : ${it.materielLogicielUtilise || '—'} | Temps passé : ${it.tempsConsacreMin} min`, margin + 4, y + 52);
+      doc.text(`Matériel/Outils utilisés : ${it.materielLogicielUtilise || '—'} | Temps passé : ${formatDuration(it.tempsConsacreMin)}`, margin + 4, y + 52);
       doc.text(`Résultat : ${it.resultat} | Validation demandeur : ${it.validationDemandeur ? 'OUI (' + (it.dateValidation || 'Validé') + ')' : 'NON'}`, margin + 4, y + 60);
 
       y += 76;

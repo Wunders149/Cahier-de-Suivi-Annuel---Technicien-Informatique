@@ -1,6 +1,7 @@
 import React from 'react';
 import { CahierSuiviData } from '../types/it-tracker';
 import { Printer, Download, ArrowLeft, FileText } from 'lucide-react';
+import { formatDuration } from '../utils/durationFormatter';
 
 interface PrintBookletProps {
   data: CahierSuiviData;
@@ -387,7 +388,7 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
                 </div>
                 <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200 text-[10px]">
                   <span>Matériel/Outils : {it.materielLogicielUtilise}</span>
-                  <span>Temps : {it.tempsConsacreMin} min</span>
+                  <span>Temps : {formatDuration(it.tempsConsacreMin)}</span>
                   <span className="font-bold text-slate-900">Résultat : {it.resultat}</span>
                   <span>Validation demandeur : {it.validationDemandeur ? '[X] Signé' : '[ ] Non signé'}</span>
                 </div>

@@ -246,6 +246,8 @@ function CahierContent({
                 <InterventionsSection
                   interventions={data.interventions}
                   onUpdateInterventions={(interventions) => setData({ ...data, interventions })}
+                  generalInfo={data.generalInfo}
+                  onShowToast={showToast}
                 />
               )}
 

@@ -18,6 +18,7 @@ import {
 } from 'docx';
 import { saveAs } from 'file-saver';
 import { CahierSuiviData } from '../types/it-tracker';
+import { formatDuration } from './durationFormatter';
 
 // Couleurs de la charte
 const COLOR_PRIMARY = '0F2A4A'; // Bleu Marine profond
@@ -192,7 +193,7 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: `${generalInfo.entreprise} — Direction des Systèmes d'Information`,
+                    text: `${generalInfo.entreprise?.trim() || 'Cahier de Suivi IT'} — Direction des Systèmes d'Information`,
                     size: 16,
                     color: '94A3B8',
                   }),
@@ -292,49 +293,55 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
               new TableRow({
                 children: [
                   createTextCell('TECHNICIEN TITULAIRE', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(`${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`),
+                  createTextCell(
+                    `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() || 'Non renseigné'
+                  ),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('FONCTION', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(generalInfo.fonction),
+                  createTextCell(generalInfo.fonction || 'Technicien Informatique'),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('DÉPARTEMENT / SERVICE', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(generalInfo.departement),
+                  createTextCell(generalInfo.departement || 'DSI'),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('ENTREPRISE / ORGANISATION', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(generalInfo.entreprise),
+                  createTextCell(generalInfo.entreprise || 'Non renseignée'),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('RESPONSABLE HIÉRARCHIQUE', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(`${generalInfo.responsableHierarchique} (${generalInfo.titreResponsable})`),
+                  createTextCell(
+                    generalInfo.responsableHierarchique
+                      ? `${generalInfo.responsableHierarchique}${generalInfo.titreResponsable ? ` (${generalInfo.titreResponsable})` : ''}`
+                      : generalInfo.titreResponsable || 'Non renseigné'
+                  ),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('DATE DE PRISE DE FONCTION', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(generalInfo.datePriseFonction),
+                  createTextCell(generalInfo.datePriseFonction || '—'),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('CONTACT PROFESSIONNEL', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(`Tél : ${generalInfo.telephonePro} | Email : ${generalInfo.emailPro}`),
+                  createTextCell(`Tél : ${generalInfo.telephonePro || '—'} | Email : ${generalInfo.emailPro || '—'}`),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('LOCALISATION BUREAU / ATELIER', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(generalInfo.localisationBureau),
+                  createTextCell(generalInfo.localisationBureau || '—'),
                 ],
               }),
             ],
@@ -369,7 +376,9 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                 alignment: AlignmentType.RIGHT,
                 children: [
                   new TextRun({
-                    text: `Cahier de Suivi Annuel IT ${generalInfo.anneeReference} | ${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`,
+                    text: `Cahier de Suivi Annuel IT ${generalInfo.anneeReference} | ${
+                      `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() || 'Technicien IT'
+                    }`,
                     size: 16,
                     color: '94A3B8',
                   }),
@@ -546,7 +555,7 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                     createTextCell('TYPE & PRIORITÉ', { bold: true, bg: COLOR_LIGHT_BG }),
                     createTextCell(`${it.typeIntervention} | Priorité: ${it.priorite}`),
                     createTextCell('DURÉE CONSACRÉE', { bold: true, bg: COLOR_LIGHT_BG }),
-                    createTextCell(`${it.tempsConsacreMin} minutes`),
+                    createTextCell(formatDuration(it.tempsConsacreMin, true)),
                   ],
                 }),
                 new TableRow({
@@ -902,7 +911,7 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                     createTextCell('TAUX RÉSOLUTION 1ER CONTACT (FCR)', { bold: true, bg: COLOR_LIGHT_BG }),
                     createTextCell(`${rep.tauxResolutionFCR}%`),
                     createTextCell('TEMPS MOYEN DE RÉSOLUTION (MTTR)', { bold: true, bg: COLOR_LIGHT_BG }),
-                    createTextCell(`${rep.dureeMoyenneResolutionMin} minutes`),
+                    createTextCell(formatDuration(rep.dureeMoyenneResolutionMin, true)),
                   ],
                 }),
                 new TableRow({
@@ -1037,14 +1046,22 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
               new TableRow({
                 children: [
                   createTextCell('APPRÉCIATION DU RESPONSABLE SI (RSI)', { bold: true, bg: COLOR_LIGHT_BG }),
-                  createTextCell(bilanAnnuel.appreciationRsi, { bold: true }),
+                  createTextCell(bilanAnnuel.appreciationRsi || 'En attente de revue hiérarchique.', { bold: true }),
                 ],
               }),
               new TableRow({
                 children: [
                   createTextCell('SIGNATURES & CLÔTURE', { bold: true, bg: COLOR_LIGHT_BG }),
                   createTextCell(
-                    `Date de signature Technicien : ${bilanAnnuel.signatureTechnicienDate}  [Signé]\nDate de signature RSI : ${bilanAnnuel.signatureRsiDate}  [Approuvé et validé]`
+                    `Date de signature Technicien : ${
+                      bilanAnnuel.signatureTechnicienDate
+                        ? `${bilanAnnuel.signatureTechnicienDate}  [Signé]`
+                        : '—  [En attente]'
+                    }\nDate de signature RSI : ${
+                      bilanAnnuel.signatureRsiDate
+                        ? `${bilanAnnuel.signatureRsiDate}  [Approuvé et validé]`
+                        : '—  [En attente]'
+                    }`
                   ),
                 ],
               }),

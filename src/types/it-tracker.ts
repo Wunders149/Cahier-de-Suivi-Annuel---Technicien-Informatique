@@ -57,6 +57,18 @@ export interface TacheJournal {
   observations: string;
 }
 
+export interface InterventionEquipementDetail {
+  id: string;
+  equipement: string;
+  titre: string;
+  constatDiagnostic: string;
+  actionsCorrectives: string[];
+  operationsResume?: string;
+  materielSpecifique: string;
+  statut: 'Résolu' | 'En cours' | 'En attente pièce' | 'Escaladé N3' | 'Non résolu';
+  resultatDetail?: string;
+}
+
 export interface FicheIntervention {
   id: string;
   numeroReference: string; // Ex: INT-2026-001
@@ -65,11 +77,14 @@ export interface FicheIntervention {
   nomDemandeur: string;
   serviceDemandeur: string;
   equipementConcerne: string;
-  typeIntervention: 'Matériel' | 'Logiciel' | 'Réseau' | 'Compte/Accès' | 'Téléphonie';
+  typeIntervention: 'Matériel' | 'Logiciel' | 'Réseau' | 'Vidéosurveillance' | 'Infrastructure' | 'Compte/Accès' | 'Téléphonie';
   priorite: 'Critique' | 'Haute' | 'Normale' | 'Basse';
+  domaineTitre?: string; // En-tête métier (ex: MAINTENANCE & INFRASTRUCTURE VIDÉOSURVEILLANCE)
+  titreRapport?: string; // Sous-titre descriptif du rapport détaillé
   descriptionPanne: string;
   diagnosticTechnique: string;
   causeIdentifiee: string;
+  analyseCauseRacine?: string; // Analyse technique approfondie (Section 2)
   solutionAppliquee: string;
   materielLogicielUtilise: string;
   tempsConsacreMin: number;
@@ -77,6 +92,7 @@ export interface FicheIntervention {
   validationDemandeur: boolean;
   dateValidation?: string;
   commentairesDemandeur?: string;
+  detailEquipements?: InterventionEquipementDetail[];
 }
 
 export interface ItemMaintenance {

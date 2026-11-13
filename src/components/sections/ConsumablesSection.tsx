@@ -31,8 +31,19 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
     statut: 'En stock',
   });
 
+  const getNextDaNumber = () => {
+    const year = new Date().getFullYear();
+    const maxNum = demandesAchat.reduce((max, da) => {
+      const m = da.numeroCommande?.match(/(\d+)$/);
+      const parsed = m ? parseInt(m[1], 10) : 0;
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 0);
+    const nextNum = Math.max(demandesAchat.length + 1, maxNum + 1);
+    return `DA-${year}-${String(nextNum).padStart(3, '0')}`;
+  };
+
   const [newDA, setNewDA] = useState<Partial<DemandeAchat>>({
-    numeroCommande: `DA-2026-0${demandesAchat.length + 90}`,
+    numeroCommande: getNextDaNumber(),
     dateDemande: new Date().toISOString().split('T')[0],
     demandeur: 'Technicien IT',
     articlesDemandes: '',
@@ -132,7 +143,16 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
             <span>Nouvel Article Consommable</span>
           </button>
           <button
-            onClick={() => setShowAddDA(true)}
+            onClick={() => {
+              setNewDA((prev) => ({
+                ...prev,
+                numeroCommande: getNextDaNumber(),
+                dateDemande: new Date().toISOString().split('T')[0],
+                articlesDemandes: '',
+                observations: '',
+              }));
+              setShowAddDA(true);
+            }}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shadow transition"
           >
             <ShoppingCart className="w-4 h-4" />

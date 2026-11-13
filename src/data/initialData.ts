@@ -1400,7 +1400,6 @@ export const demoCahierData: CahierSuiviData = {
       recommandationsTechnicien: 'Planifier le remplacement de 12 postes arrivant en fin de garantie au T1 2027.',
       activitesMoisSuivant: 'Clôture de l\'exercice, grand inventaire annuel et bilan global.',
       valideParHierarchie: false,
-      dateValidation: undefined,
     },
     {
       moisIndex: 12,
@@ -1419,7 +1418,6 @@ export const demoCahierData: CahierSuiviData = {
       recommandationsTechnicien: 'Maintenir la veille technologique sur les outils d\'automatisation et scripts PowerShell.',
       activitesMoisSuivant: 'Ouverture du cahier de suivi de la nouvelle année et nouveaux objectifs.',
       valideParHierarchie: false,
-      dateValidation: undefined,
     },
   ],
 

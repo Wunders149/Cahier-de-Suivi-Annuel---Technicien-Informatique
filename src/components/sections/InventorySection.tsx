@@ -14,8 +14,18 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  const getNextInventoryRef = () => {
+    const maxNum = parc.reduce((max, p) => {
+      const m = p.numeroInventaire?.match(/(\d+)$/);
+      const parsed = m ? parseInt(m[1], 10) : 0;
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 0);
+    const nextNum = Math.max(parc.length + 1, maxNum + 1);
+    return `PARC-PC-${String(nextNum).padStart(2, '0')}`;
+  };
+
   const [newItem, setNewItem] = useState<Partial<EquipementParc>>({
-    numeroInventaire: `PARC-PC-0${parc.length + 1}`,
+    numeroInventaire: getNextInventoryRef(),
     designation: '',
     type: 'PC Portable',
     marqueModele: '',
@@ -37,7 +47,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
 
     const item: EquipementParc = {
       id: `PARC-${Date.now()}`,
-      numeroInventaire: newItem.numeroInventaire || `PARC-${parc.length + 1}`,
+      numeroInventaire: newItem.numeroInventaire?.trim() || getNextInventoryRef(),
       designation: newItem.designation || '',
       type: (newItem.type as any) || 'PC Portable',
       marqueModele: newItem.marqueModele || '',
@@ -89,7 +99,17 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
+          onClick={() => {
+            setNewItem((prev) => ({
+              ...prev,
+              numeroInventaire: getNextInventoryRef(),
+              designation: '',
+              marqueModele: '',
+              numeroSerie: '',
+              configurationTechnique: '',
+            }));
+            setShowAddModal(true);
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
         >
           <Plus className="w-4 h-4" />

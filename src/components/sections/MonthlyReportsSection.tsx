@@ -19,6 +19,7 @@ import {
   generateMonthlyPdf,
   getMonthlyActivitySnapshot,
 } from '../../utils/monthlyDeliverableGenerator';
+import { formatDuration } from '../../utils/durationFormatter';
 
 interface MonthlyReportsSectionProps {
   data: CahierSuiviData;
@@ -59,6 +60,17 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       setFormData(currentReport);
     }
   }, [currentReport]);
+
+  useEffect(() => {
+    if (deliveryModalMonth === null) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDeliveryModalMonth(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [deliveryModalMonth]);
 
   const monthSnapshot = useMemo(
     () => getMonthlyActivitySnapshot(data, selectedMonthIndex),
@@ -549,15 +561,19 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
               </label>
               <input
                 type="number"
+                min={0}
                 value={formData.dureeMoyenneResolutionMin}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    dureeMoyenneResolutionMin: parseInt(e.target.value) || 0,
+                    dureeMoyenneResolutionMin: Math.max(0, parseInt(e.target.value) || 0),
                   })
                 }
                 className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
               />
+              <span className="mt-1 inline-block text-[10px] font-medium text-slate-500">
+                Équivalent : {formatDuration(formData.dureeMoyenneResolutionMin || 0)}
+              </span>
             </div>
           </div>
 
@@ -850,9 +866,10 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
               Délai Moyen (MTTR)
             </span>
             <strong className="text-2xl font-black text-indigo-600 font-mono tabular-nums">
-              {currentReport.dureeMoyenneResolutionMin ||
-                monthSnapshot.avgInterventionMinutes}
-              m
+              {formatDuration(
+                currentReport.dureeMoyenneResolutionMin ||
+                  monthSnapshot.avgInterventionMinutes
+              )}
             </strong>
             <span className="text-[11px] text-slate-500 block">
               temps de traitement
@@ -1093,7 +1110,12 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
 
       {/* Modal de livraison du cahier mensuel */}
       {deliveryModalMonth !== null && modalTargetReport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setDeliveryModalMonth(null);
+          }}
+          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
+        >
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden text-xs">
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">

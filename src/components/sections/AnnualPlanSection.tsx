@@ -52,8 +52,14 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
   const handleAddObjectiveSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newObj.titre) return;
+    const maxObjNum = objectifs.reduce((max, obj) => {
+      const m = obj.id?.match(/OBJ-(\d+)/i);
+      const parsed = m ? parseInt(m[1], 10) : 0;
+      return Number.isFinite(parsed) && parsed > max ? parsed : max;
+    }, 0);
+    const nextObjNum = Math.max(objectifs.length + 1, maxObjNum + 1);
     const item: ObjectifAnnuel = {
-      id: `OBJ-${objectifs.length + 1 < 10 ? '0' + (objectifs.length + 1) : objectifs.length + 1}`,
+      id: `OBJ-${String(nextObjNum).padStart(2, '0')}`,
       titre: newObj.titre || '',
       description: newObj.description || '',
       missionsPrevue: newObj.missionsPrevue || '',
