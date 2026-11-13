@@ -17,6 +17,10 @@ import {
 import { saveAs } from 'file-saver';
 import { FicheIntervention, GeneralInfo } from '../types/it-tracker';
 import { formatDuration } from './durationFormatter';
+import {
+  formatInterventionStatusLabel,
+  getInterventionVocabulary,
+} from './interventionLabels';
 
 function sanitizeFileSlug(text: string): string {
   return (text || 'intervention')
@@ -78,10 +82,16 @@ export function generateInterventionReportPdf(
     y += 5;
   };
 
+  const vocab = getInterventionVocabulary(intervention.natureIntervention);
+  const statusDisplay = formatInterventionStatusLabel(
+    intervention.resultat,
+    intervention.natureIntervention
+  );
+
   // --- EN-TÊTE DU RAPPORT ---
   const domaineText = (
     intervention.domaineTitre?.trim() ||
-    `MAINTENANCE & SUPPORT ${intervention.typeIntervention.toUpperCase()}`
+    `${vocab.domainPrefix} · ${intervention.typeIntervention.toUpperCase()}`
   ).toUpperCase();
 
   doc.setFont('helvetica', 'bold');
@@ -111,13 +121,13 @@ export function generateInterventionReportPdf(
   doc.line(margin, y, pageWidth - margin, y);
   y += 8;
 
-  // --- 1. SYNTHÈSE GÉNÉRALE DE L'INCIDENT ---
-  drawSectionHeading("1. Synthèse Générale de l'Incident");
+  // --- 1. SYNTHÈSE ---
+  drawSectionHeading(vocab.summaryHeading);
 
   const techLine = generalInfo
     ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
     : '';
-  const resultLabel = `${intervention.resultat}${
+  const resultLabel = `${statusDisplay}${
     intervention.solutionAppliquee?.trim()
       ? ` — ${intervention.solutionAppliquee.trim()}`
       : ''
@@ -126,7 +136,7 @@ export function generateInterventionReportPdf(
   const summaryRows: Array<{ label: string; value: string; isResult?: boolean }> = [
     {
       label: 'Référence & Date',
-      value: `${intervention.numeroReference} · Reçu le ${intervention.dateReception} à ${intervention.heureReception}${
+      value: `${intervention.numeroReference} · Le ${intervention.dateReception} à ${intervention.heureReception}${
         techLine ? ` · Intervenant : ${techLine}` : ''
       }`,
     },
@@ -135,23 +145,23 @@ export function generateInterventionReportPdf(
       value: `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
     },
     {
-      label: 'Équipements concernés',
+      label: vocab.equipmentsRowLabel,
       value: intervention.equipementConcerne || '—',
     },
     {
-      label: 'Description de la panne',
+      label: vocab.descriptionCardTitle,
       value: intervention.descriptionPanne || '—',
     },
     {
-      label: 'Diagnostic technique',
+      label: vocab.diagnosticLabel,
       value: intervention.diagnosticTechnique || '—',
     },
     {
-      label: 'Cause identifiée',
+      label: vocab.causeLabel,
       value: intervention.causeIdentifiee || '—',
     },
     {
-      label: 'Matériel utilisé',
+      label: vocab.materialLabel,
       value: intervention.materielLogicielUtilise || '—',
     },
     {
@@ -159,7 +169,7 @@ export function generateInterventionReportPdf(
       value: formatDuration(intervention.tempsConsacreMin, true),
     },
     {
-      label: 'Résultat final',
+      label: 'Statut final',
       value: resultLabel,
       isResult: true,
     },
@@ -212,12 +222,12 @@ export function generateInterventionReportPdf(
 
   y += 8;
 
-  // --- 2. ANALYSE TECHNIQUE ET CAUSE RACINE ---
-  drawSectionHeading('2. Analyse Technique et Cause Racine');
+  // --- 2. ANALYSE TECHNIQUE / ÉTAPES RÉALISÉES ---
+  drawSectionHeading(vocab.analysisHeading);
 
   const analysisText =
     intervention.analyseCauseRacine?.trim() ||
-    `${intervention.diagnosticTechnique}\n\nCause identifiée : ${intervention.causeIdentifiee}`;
+    `${intervention.diagnosticTechnique}\n\n${vocab.causeLabel} : ${intervention.causeIdentifiee}\n\n${vocab.solutionCardTitle} : ${intervention.solutionAppliquee}`;
 
   const paragraphs = analysisText
     .split(/\n{2,}/)
@@ -235,11 +245,11 @@ export function generateInterventionReportPdf(
     y += lines.length * 4.3 + 3.5;
   });
 
-  // --- 3. RAPPORT DÉTAILLÉ PAR ÉQUIPEMENT (SI PRÉSENT) ---
+  // --- 3. RAPPORT DÉTAILLÉ PAR ÉQUIPEMENT / UNITÉ (SI PRÉSENT) ---
   const details = intervention.detailEquipements || [];
   if (details.length > 0) {
     y += 4;
-    drawSectionHeading('3. Rapport Détaillé par Équipement');
+    drawSectionHeading(vocab.equipmentsHeading);
 
     details.forEach((item, idx) => {
       const startSectionY = () => y;
@@ -272,16 +282,16 @@ export function generateInterventionReportPdf(
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(...blue);
-      const subTitle = `3.${idx + 1}. Incident ${item.equipement} — ${item.titre}`;
+      const subTitle = `3.${idx + 1}. ${vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`;
       const subTitleLines = doc.splitTextToSize(subTitle, contentWidth - 8);
       doc.text(subTitleLines, margin + 4, y + 3);
       y += subTitleLines.length * 4.5 + 2.5;
 
-      // Constat et diagnostic
+      // Constat / Emplacement
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.8);
       doc.setTextColor(...slate900);
-      doc.text('Constat et diagnostic :', margin + 4, y);
+      doc.text(`${vocab.equipmentDiagLabel} :`, margin + 4, y);
       y += 4.2;
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...slate700);
@@ -290,12 +300,12 @@ export function generateInterventionReportPdf(
       doc.text(diagLines, margin + 4, y);
       y += diagLines.length * 4.1 + 2.5;
 
-      // Actions correctives
+      // Actions / Opérations
       if (actions.length > 0) {
         ensureSpace(8);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...slate900);
-        doc.text('Actions correctives appliquées :', margin + 4, y);
+        doc.text(`${vocab.equipmentActionsLabel} :`, margin + 4, y);
         y += 4.5;
 
         doc.setFont('helvetica', 'normal');
@@ -326,15 +336,15 @@ export function generateInterventionReportPdf(
       y += 5;
     });
 
-    // --- 4. RÉCAPITULATIF COMPARATIF DES INTERVENTIONS ---
+    // --- 4. RÉCAPITULATIF COMPARATIF ---
     y += 2;
-    drawSectionHeading('4. Récapitulatif Comparatif des Interventions');
+    drawSectionHeading(vocab.comparisonHeading);
 
     const cols = [
-      { title: 'Équipement', width: 22 },
-      { title: 'Diagnostic', width: 42 },
-      { title: 'Opérations réalisées', width: 48 },
-      { title: 'Matériel spécifique', width: 44 },
+      { title: vocab.comparisonEquipCol, width: 28 },
+      { title: vocab.comparisonDiagCol, width: 40 },
+      { title: vocab.comparisonOpsCol, width: 48 },
+      { title: vocab.comparisonMatCol, width: 40 },
       { title: 'Statut', width: contentWidth - 156 },
     ];
 
@@ -402,6 +412,29 @@ export function generateInterventionReportPdf(
     });
   }
 
+  // --- RECOMMANDATIONS D'EXPLOITATION (SI RENSEIGNÉES) ---
+  if (intervention.recommandations?.trim()) {
+    const recSectionNum = details.length > 0 ? 5 : 3;
+    y += 6;
+    drawSectionHeading(`${recSectionNum}. ${vocab.recommandationsTitle}`);
+
+    const recLines = intervention.recommandations
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(...slate700);
+
+    recLines.forEach((line) => {
+      const wrapped = doc.splitTextToSize(line, contentWidth);
+      ensureSpace(wrapped.length * 4.3 + 2.5);
+      doc.text(wrapped, margin, y);
+      y += wrapped.length * 4.3 + 2;
+    });
+  }
+
   // --- PIED DE PAGE SUR TOUTES LES PAGES ---
   const totalPages = doc.getNumberOfPages();
   const footerLeft = `Rapport d'Intervention Technique (${intervention.numeroReference}) — ${intervention.equipementConcerne}`;
@@ -432,9 +465,15 @@ export async function generateInterventionReportDocx(
   intervention: FicheIntervention,
   generalInfo?: GeneralInfo
 ): Promise<void> {
+  const vocab = getInterventionVocabulary(intervention.natureIntervention);
+  const statusDisplay = formatInterventionStatusLabel(
+    intervention.resultat,
+    intervention.natureIntervention
+  );
+
   const domaineText = (
     intervention.domaineTitre?.trim() ||
-    `MAINTENANCE & SUPPORT ${intervention.typeIntervention.toUpperCase()}`
+    `${vocab.domainPrefix} · ${intervention.typeIntervention.toUpperCase()}`
   ).toUpperCase();
 
   const subtitleText =
@@ -445,7 +484,7 @@ export async function generateInterventionReportDocx(
     ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
     : '';
 
-  const resultLabel = `${intervention.resultat}${
+  const resultLabel = `${statusDisplay}${
     intervention.solutionAppliquee?.trim()
       ? ` — ${intervention.solutionAppliquee.trim()}`
       : ''
@@ -462,13 +501,13 @@ export async function generateInterventionReportDocx(
       'Demandeur / Service',
       `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
     ],
-    ['Équipements concernés', intervention.equipementConcerne || '—'],
-    ['Description de la panne', intervention.descriptionPanne || '—'],
-    ['Diagnostic technique', intervention.diagnosticTechnique || '—'],
-    ['Cause identifiée', intervention.causeIdentifiee || '—'],
-    ['Matériel utilisé', intervention.materielLogicielUtilise || '—'],
+    [vocab.equipmentsRowLabel, intervention.equipementConcerne || '—'],
+    [vocab.descriptionCardTitle, intervention.descriptionPanne || '—'],
+    [vocab.diagnosticLabel, intervention.diagnosticTechnique || '—'],
+    [vocab.causeLabel, intervention.causeIdentifiee || '—'],
+    [vocab.materialLabel, intervention.materielLogicielUtilise || '—'],
     ['Temps total consacré', formatDuration(intervention.tempsConsacreMin, true)],
-    ['Résultat final', resultLabel, true],
+    ['Statut final', resultLabel, true],
   ];
 
   const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' };
@@ -567,7 +606,7 @@ export async function generateInterventionReportDocx(
 
   const analysisText =
     intervention.analyseCauseRacine?.trim() ||
-    `${intervention.diagnosticTechnique}\n\nCause identifiée : ${intervention.causeIdentifiee}`;
+    `${intervention.diagnosticTechnique}\n\n${vocab.causeLabel} : ${intervention.causeIdentifiee}\n\n${vocab.solutionCardTitle} : ${intervention.solutionAppliquee}`;
   const analysisParagraphs = analysisText
     .split(/\n{2,}/)
     .map((p) => p.trim())
@@ -629,15 +668,15 @@ export async function generateInterventionReportDocx(
         }),
       ],
     }),
-    sectionHeading("1. Synthèse Générale de l'Incident"),
+    sectionHeading(vocab.summaryHeading),
     summaryTable,
-    sectionHeading('2. Analyse Technique et Cause Racine'),
+    sectionHeading(vocab.analysisHeading),
     ...analysisParagraphs,
   ];
 
   const details = intervention.detailEquipements || [];
   if (details.length > 0) {
-    children.push(sectionHeading('3. Rapport Détaillé par Équipement'));
+    children.push(sectionHeading(vocab.equipmentsHeading));
 
     details.forEach((item, idx) => {
       children.push(
@@ -649,7 +688,7 @@ export async function generateInterventionReportDocx(
           },
           children: [
             new TextRun({
-              text: `3.${idx + 1}. Incident ${item.equipement} — ${item.titre}`,
+              text: `3.${idx + 1}. ${vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`,
               bold: true,
               size: 21,
               color: '0284C7',
@@ -661,7 +700,7 @@ export async function generateInterventionReportDocx(
           indent: { left: 180 },
           children: [
             new TextRun({
-              text: 'Constat et diagnostic : ',
+              text: `${vocab.equipmentDiagLabel} : `,
               bold: true,
               size: 19,
               color: '0F172A',
@@ -683,7 +722,7 @@ export async function generateInterventionReportDocx(
             indent: { left: 180 },
             children: [
               new TextRun({
-                text: 'Actions correctives appliquées :',
+                text: `${vocab.equipmentActionsLabel} :`,
                 bold: true,
                 size: 19,
                 color: '0F172A',
@@ -730,13 +769,13 @@ export async function generateInterventionReportDocx(
       );
     });
 
-    children.push(sectionHeading('4. Récapitulatif Comparatif des Interventions'));
+    children.push(sectionHeading(vocab.comparisonHeading));
 
     const headers = [
-      'Équipement',
-      'Diagnostic',
-      'Opérations réalisées',
-      'Matériel spécifique',
+      vocab.comparisonEquipCol,
+      vocab.comparisonDiagCol,
+      vocab.comparisonOpsCol,
+      vocab.comparisonMatCol,
       'Statut',
     ];
 
@@ -851,6 +890,29 @@ export async function generateInterventionReportDocx(
         ],
       })
     );
+  }
+
+  if (intervention.recommandations?.trim()) {
+    const recSectionNum = details.length > 0 ? 5 : 3;
+    children.push(sectionHeading(`${recSectionNum}. ${vocab.recommandationsTitle}`));
+    intervention.recommandations
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        children.push(
+          new Paragraph({
+            spacing: { after: 90 },
+            children: [
+              new TextRun({
+                text: line,
+                size: 19,
+                color: '334155',
+              }),
+            ],
+          })
+        );
+      });
   }
 
   const doc = new Document({

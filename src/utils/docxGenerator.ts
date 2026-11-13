@@ -19,6 +19,7 @@ import {
 import { saveAs } from 'file-saver';
 import { CahierSuiviData } from '../types/it-tracker';
 import { formatDuration } from './durationFormatter';
+import { formatInterventionStatusLabel } from './interventionLabels';
 
 // Couleurs de la charte
 const COLOR_PRIMARY = '0F2A4A'; // Bleu Marine profond
@@ -576,10 +577,20 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                     createTextCell(`${it.solutionAppliquee}\nOutils/Composants : ${it.materielLogicielUtilise}`, { widthPercent: 75 }),
                   ],
                 }),
+                ...(it.recommandations?.trim()
+                  ? [
+                      new TableRow({
+                        children: [
+                          createTextCell('RECOMMANDATIONS', { bold: true, bg: COLOR_LIGHT_BG }),
+                          createTextCell(it.recommandations.trim(), { widthPercent: 75 }),
+                        ],
+                      }),
+                    ]
+                  : []),
                 new TableRow({
                   children: [
                     createTextCell('RÉSULTAT & VALIDATION', { bold: true, bg: COLOR_LIGHT_BG }),
-                    createTextCell(`Statut : ${it.resultat} | Validation demandeur : ${it.validationDemandeur ? '[X] OUI (' + (it.dateValidation || '') + ')' : '[ ] NON'}\nAvis : ${it.commentairesDemandeur || 'N/A'}`, { widthPercent: 75 }),
+                    createTextCell(`Statut : ${formatInterventionStatusLabel(it.resultat, it.natureIntervention)} | Validation demandeur : ${it.validationDemandeur ? '[X] OUI (' + (it.dateValidation || '') + ')' : '[ ] NON'}\nAvis : ${it.commentairesDemandeur || 'N/A'}`, { widthPercent: 75 }),
                   ],
                 }),
               ],

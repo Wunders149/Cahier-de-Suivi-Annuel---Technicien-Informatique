@@ -57,6 +57,11 @@ export interface TacheJournal {
   observations: string;
 }
 
+export type NatureIntervention =
+  | 'Incident / Dépannage'
+  | 'Déploiement / Installation'
+  | 'Maintenance / Contrôle';
+
 export interface InterventionEquipementDetail {
   id: string;
   equipement: string;
@@ -77,16 +82,27 @@ export interface FicheIntervention {
   nomDemandeur: string;
   serviceDemandeur: string;
   equipementConcerne: string;
-  typeIntervention: 'Matériel' | 'Logiciel' | 'Réseau' | 'Vidéosurveillance' | 'Infrastructure' | 'Compte/Accès' | 'Téléphonie';
+  natureIntervention?: NatureIntervention;
+  typeIntervention:
+    | 'Matériel'
+    | 'Logiciel'
+    | 'Réseau'
+    | 'Vidéosurveillance'
+    | 'Infrastructure'
+    | 'Déploiement'
+    | 'Systèmes / IoT'
+    | 'Compte/Accès'
+    | 'Téléphonie';
   priorite: 'Critique' | 'Haute' | 'Normale' | 'Basse';
-  domaineTitre?: string; // En-tête métier (ex: MAINTENANCE & INFRASTRUCTURE VIDÉOSURVEILLANCE)
+  domaineTitre?: string; // En-tête métier (ex: DÉPLOIEMENT & SÉCURISATION MARITIME)
   titreRapport?: string; // Sous-titre descriptif du rapport détaillé
   descriptionPanne: string;
   diagnosticTechnique: string;
   causeIdentifiee: string;
-  analyseCauseRacine?: string; // Analyse technique approfondie (Section 2)
+  analyseCauseRacine?: string; // Analyse technique approfondie ou étapes techniques réalisées (Section 2)
   solutionAppliquee: string;
   materielLogicielUtilise: string;
+  recommandations?: string; // Recommandations d'exploitation et d'entretien
   tempsConsacreMin: number;
   resultat: 'Résolu' | 'En cours' | 'En attente pièce' | 'Escaladé N3' | 'Non résolu';
   validationDemandeur: boolean;

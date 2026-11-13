@@ -3,6 +3,7 @@ import {
   FicheIntervention,
   GeneralInfo,
   InterventionEquipementDetail,
+  NatureIntervention,
 } from '../../types/it-tracker';
 import {
   Plus,
@@ -21,12 +22,17 @@ import {
   Cpu,
   AlertCircle,
   CheckCircle2,
+  Lightbulb,
 } from 'lucide-react';
 import {
   combineDurationToMinutes,
   formatDuration,
   splitDurationMinutes,
 } from '../../utils/durationFormatter';
+import {
+  formatInterventionStatusLabel,
+  getInterventionVocabulary,
+} from '../../utils/interventionLabels';
 
 interface InterventionsSectionProps {
   interventions: FicheIntervention[];
@@ -35,12 +41,19 @@ interface InterventionsSectionProps {
   onShowToast?: (msg: string) => void;
 }
 
+const NATURE_OPTIONS: NatureIntervention[] = [
+  'Incident / Dépannage',
+  'Déploiement / Installation',
+  'Maintenance / Contrôle',
+];
+
 const DEFAULT_NEW_TICKET = (): Partial<FicheIntervention> => ({
   dateReception: new Date().toISOString().split('T')[0],
   heureReception: '10:00',
   nomDemandeur: '',
   serviceDemandeur: '',
   equipementConcerne: '',
+  natureIntervention: 'Incident / Dépannage',
   typeIntervention: 'Matériel',
   priorite: 'Normale',
   domaineTitre: '',
@@ -51,6 +64,7 @@ const DEFAULT_NEW_TICKET = (): Partial<FicheIntervention> => ({
   analyseCauseRacine: '',
   solutionAppliquee: '',
   materielLogicielUtilise: '',
+  recommandations: '',
   tempsConsacreMin: 30,
   resultat: 'Résolu',
   validationDemandeur: true,
@@ -202,8 +216,11 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
     const domaineTrimmed = formTicket.domaineTitre?.trim();
     const titreTrimmed = formTicket.titreRapport?.trim();
     const analyseTrimmed = formTicket.analyseCauseRacine?.trim();
+    const recommandationsTrimmed = formTicket.recommandations?.trim();
     const commentTrimmed = formTicket.commentairesDemandeur?.trim();
     const validDate = existing?.dateValidation || `${dateRec} ${heureRec}`;
+    const nature = formTicket.natureIntervention || 'Incident / Dépannage';
+    const saveVocab = getInterventionVocabulary(nature);
 
     const item: FicheIntervention = {
       id: existing?.id || `INT-${Date.now()}`,
@@ -214,6 +231,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       serviceDemandeur: formTicket.serviceDemandeur?.trim() || 'Général',
       equipementConcerne:
         formTicket.equipementConcerne?.trim() || 'Poste de travail',
+      natureIntervention: nature,
       typeIntervention:
         (formTicket.typeIntervention as FicheIntervention['typeIntervention']) ||
         'Matériel',
@@ -221,13 +239,11 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
         (formTicket.priorite as FicheIntervention['priorite']) || 'Normale',
       descriptionPanne: formTicket.descriptionPanne.trim(),
       diagnosticTechnique:
-        formTicket.diagnosticTechnique?.trim() ||
-        'Diagnostic préliminaire conforme.',
+        formTicket.diagnosticTechnique?.trim() || saveVocab.defaultDiagnostic,
       causeIdentifiee:
-        formTicket.causeIdentifiee?.trim() || 'Dysfonctionnement identifié.',
+        formTicket.causeIdentifiee?.trim() || saveVocab.defaultCause,
       solutionAppliquee:
-        formTicket.solutionAppliquee?.trim() ||
-        'Résolution standard appliquée.',
+        formTicket.solutionAppliquee?.trim() || saveVocab.defaultSolution,
       materielLogicielUtilise:
         formTicket.materielLogicielUtilise?.trim() || 'Outillage standard',
       tempsConsacreMin: Math.max(0, Number(formTicket.tempsConsacreMin ?? 30) || 0),
@@ -239,6 +255,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       ...(domaineTrimmed ? { domaineTitre: domaineTrimmed } : {}),
       ...(titreTrimmed ? { titreRapport: titreTrimmed } : {}),
       ...(analyseTrimmed ? { analyseCauseRacine: analyseTrimmed } : {}),
+      ...(recommandationsTrimmed ? { recommandations: recommandationsTrimmed } : {}),
       ...(cleanedDetails.length > 0 ? { detailEquipements: cleanedDetails } : {}),
     };
 
@@ -395,288 +412,364 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
               onSubmit={handleSaveTicket}
               className="p-6 space-y-5 text-xs overflow-y-auto flex-1"
             >
-              {/* Bloc 1 : Contexte & Identification */}
-              <div className="space-y-3">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  1. Contexte & Identification
-                </div>
+              {(() => {
+                const modalVocab = getInterventionVocabulary(
+                  formTicket.natureIntervention
+                );
+                return (
+                  <>
+                    {/* Bloc 1 : Contexte & Identification */}
+                    <div className="space-y-3">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        1. Contexte & Identification
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Date de réception
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      value={formTicket.dateReception || ''}
-                      onChange={(e) =>
-                        setFormTicket({ ...formTicket, dateReception: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Heure
-                    </label>
-                    <input
-                      type="time"
-                      required
-                      value={formTicket.heureReception || '10:00'}
-                      onChange={(e) =>
-                        setFormTicket({ ...formTicket, heureReception: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Domaine / Type
-                    </label>
-                    <select
-                      value={formTicket.typeIntervention || 'Matériel'}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          typeIntervention: e.target.value as FicheIntervention['typeIntervention'],
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      <option value="Matériel">Matériel</option>
-                      <option value="Logiciel">Logiciel</option>
-                      <option value="Réseau">Réseau</option>
-                      <option value="Vidéosurveillance">Vidéosurveillance</option>
-                      <option value="Infrastructure">Infrastructure</option>
-                      <option value="Compte/Accès">Compte/Accès</option>
-                      <option value="Téléphonie">Téléphonie</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Priorité
-                    </label>
-                    <select
-                      value={formTicket.priorite || 'Normale'}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          priorite: e.target.value as FicheIntervention['priorite'],
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    >
-                      <option value="Critique">Critique</option>
-                      <option value="Haute">Haute</option>
-                      <option value="Normale">Normale</option>
-                      <option value="Basse">Basse</option>
-                    </select>
-                  </div>
-                </div>
+                      {/* Sélecteur de nature d'intervention */}
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1.5">
+                          Nature de l'intervention
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {NATURE_OPTIONS.map((opt) => {
+                            const active =
+                              (formTicket.natureIntervention ||
+                                'Incident / Dépannage') === opt;
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() =>
+                                  setFormTicket({
+                                    ...formTicket,
+                                    natureIntervention: opt,
+                                  })
+                                }
+                                className={`px-3 py-2 rounded-lg border text-left font-semibold transition ${
+                                  active
+                                    ? 'bg-blue-50 border-blue-500 text-blue-900 ring-1 ring-blue-400/50'
+                                    : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Nom du demandeur *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Jean DUPONT"
-                      value={formTicket.nomDemandeur || ''}
-                      onChange={(e) =>
-                        setFormTicket({ ...formTicket, nomDemandeur: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Service concerné
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: Comptabilité, Sûreté..."
-                      value={formTicket.serviceDemandeur || ''}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          serviceDemandeur: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Équipement(s) concerné(s)
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Ex: PC Portable, Switch, Caméra..."
-                      value={formTicket.equipementConcerne || ''}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          equipementConcerne: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Date de l'intervention
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={formTicket.dateReception || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                dateReception: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Heure
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={formTicket.heureReception || '10:00'}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                heureReception: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Domaine / Type
+                          </label>
+                          <select
+                            value={formTicket.typeIntervention || 'Matériel'}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                typeIntervention: e.target
+                                  .value as FicheIntervention['typeIntervention'],
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            <option value="Matériel">Matériel</option>
+                            <option value="Logiciel">Logiciel</option>
+                            <option value="Réseau">Réseau</option>
+                            <option value="Déploiement">Déploiement</option>
+                            <option value="Systèmes / IoT">Systèmes / IoT</option>
+                            <option value="Vidéosurveillance">Vidéosurveillance</option>
+                            <option value="Infrastructure">Infrastructure</option>
+                            <option value="Compte/Accès">Compte/Accès</option>
+                            <option value="Téléphonie">Téléphonie</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Priorité
+                          </label>
+                          <select
+                            value={formTicket.priorite || 'Normale'}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                priorite: e.target
+                                  .value as FicheIntervention['priorite'],
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          >
+                            <option value="Critique">Critique</option>
+                            <option value="Haute">Haute</option>
+                            <option value="Normale">Normale</option>
+                            <option value="Basse">Basse</option>
+                          </select>
+                        </div>
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Intitulé du domaine rapport (optionnel)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: SUPPORT UTILISATEUR / MAINTENANCE INFRASTRUCTURE"
-                      value={formTicket.domaineTitre || ''}
-                      onChange={(e) =>
-                        setFormTicket({ ...formTicket, domaineTitre: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Objet / Sous-titre du rapport (optionnel)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Remise en service suite à panne matérielle..."
-                      value={formTicket.titreRapport || ''}
-                      onChange={(e) =>
-                        setFormTicket({ ...formTicket, titreRapport: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Nom du demandeur *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Jean DUPONT, Direction Flotte..."
+                            value={formTicket.nomDemandeur || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                nomDemandeur: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Service / Département concerné
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Opérations Maritimes, Sûreté..."
+                            value={formTicket.serviceDemandeur || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                serviceDemandeur: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            {modalVocab.equipmentsRowLabel}
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Ex: Navires FANJAVA 7 & 5, PC Portable..."
+                            value={formTicket.equipementConcerne || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                equipementConcerne: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
 
-              {/* Bloc 2 : Panne, Diagnostic & Solution */}
-              <div className="space-y-3 pt-4 border-t border-slate-200">
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                  2. Incident, Diagnostic & Résolution
-                </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Intitulé du domaine rapport (optionnel)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: GÉOLOCALISATION SATELLITE & SÉCURITÉ FLOTTE"
+                            value={formTicket.domaineTitre || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                domaineTitre: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            Objet / Sous-titre du rapport (optionnel)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ex: Installation des balises GPS SPOT Trace..."
+                            value={formTicket.titreRapport || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                titreRapport: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Description de la panne ou de la demande *
-                  </label>
-                  <textarea
-                    rows={2}
-                    required
-                    placeholder="Symptômes constatés et contexte de la panne..."
-                    value={formTicket.descriptionPanne || ''}
-                    onChange={(e) =>
-                      setFormTicket({
-                        ...formTicket,
-                        descriptionPanne: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+                    {/* Bloc 2 : Détails techniques, Étapes & Recommandations */}
+                    <div className="space-y-3 pt-4 border-t border-slate-200">
+                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        2. {modalVocab.summaryHeading.replace(/^\d+\.\s*/, '')} & Réalisation
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Diagnostic technique
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Tests réalisés, constatations..."
-                      value={formTicket.diagnosticTechnique || ''}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          diagnosticTechnique: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Cause identifiée
-                    </label>
-                    <textarea
-                      rows={2}
-                      placeholder="Origine du dysfonctionnement..."
-                      value={formTicket.causeIdentifiee || ''}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          causeIdentifiee: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1">
+                          {modalVocab.descriptionLabel}
+                        </label>
+                        <textarea
+                          rows={2}
+                          required
+                          placeholder={modalVocab.descriptionPlaceholder}
+                          value={formTicket.descriptionPanne || ''}
+                          onChange={(e) =>
+                            setFormTicket({
+                              ...formTicket,
+                              descriptionPanne: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
 
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Solution corrective appliquée
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="Actions de réparation, remplacement ou paramétrage..."
-                    value={formTicket.solutionAppliquee || ''}
-                    onChange={(e) =>
-                      setFormTicket({
-                        ...formTicket,
-                        solutionAppliquee: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            {modalVocab.diagnosticLabel}
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder={modalVocab.diagnosticPlaceholder}
+                            value={formTicket.diagnosticTechnique || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                diagnosticTechnique: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block font-medium text-slate-700 mb-1">
+                            {modalVocab.causeLabel}
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder={modalVocab.causePlaceholder}
+                            value={formTicket.causeIdentifiee || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                causeIdentifiee: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
+                      </div>
 
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Analyse technique et cause racine approfondie (optionnel)
-                  </label>
-                  <textarea
-                    rows={3}
-                    placeholder="Explication détaillée de l'inspection et de la cause racine pour le rapport..."
-                    value={formTicket.analyseCauseRacine || ''}
-                    onChange={(e) =>
-                      setFormTicket({
-                        ...formTicket,
-                        analyseCauseRacine: e.target.value,
-                      })
-                    }
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  />
-                </div>
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1">
+                          {modalVocab.solutionLabel}
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder={modalVocab.solutionPlaceholder}
+                          value={formTicket.solutionAppliquee || ''}
+                          onChange={(e) =>
+                            setFormTicket({
+                              ...formTicket,
+                              solutionAppliquee: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                  <div className="sm:col-span-5">
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Matériel / Outils utilisés
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Câble RJ45, multimètre..."
-                      value={formTicket.materielLogicielUtilise || ''}
-                      onChange={(e) =>
-                        setFormTicket({
-                          ...formTicket,
-                          materielLogicielUtilise: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1">
+                          {modalVocab.analysisFieldLabel}
+                        </label>
+                        <textarea
+                          rows={3}
+                          placeholder={modalVocab.analysisPlaceholder}
+                          value={formTicket.analyseCauseRacine || ''}
+                          onChange={(e) =>
+                            setFormTicket({
+                              ...formTicket,
+                              analyseCauseRacine: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block font-medium text-slate-700 mb-1">
+                          {modalVocab.recommandationsTitle} (optionnel)
+                        </label>
+                        <textarea
+                          rows={2}
+                          placeholder={modalVocab.recommandationsPlaceholder}
+                          value={formTicket.recommandations || ''}
+                          onChange={(e) =>
+                            setFormTicket({
+                              ...formTicket,
+                              recommandations: e.target.value,
+                            })
+                          }
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-5">
+                          <label className="block font-medium text-slate-700 mb-1">
+                            {modalVocab.materialLabel}
+                          </label>
+                          <input
+                            type="text"
+                            placeholder={modalVocab.materialPlaceholder}
+                            value={formTicket.materielLogicielUtilise || ''}
+                            onChange={(e) =>
+                              setFormTicket({
+                                ...formTicket,
+                                materielLogicielUtilise: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                          />
+                        </div>
                   <div className="sm:col-span-4">
                     <div className="flex items-center justify-between mb-1">
                       <label className="block font-medium text-slate-700">
@@ -778,7 +871,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   </div>
                   <div className="sm:col-span-3">
                     <label className="block font-medium text-slate-700 mb-1">
-                      Résultat
+                      Statut / Résultat
                     </label>
                     <select
                       value={formTicket.resultat || 'Résolu'}
@@ -790,7 +883,12 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       }
                       className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                     >
-                      <option value="Résolu">Résolu</option>
+                      <option value="Résolu">
+                        {formTicket.natureIntervention ===
+                        'Déploiement / Installation'
+                          ? 'Opérationnel / Terminé'
+                          : 'Résolu'}
+                      </option>
                       <option value="En cours">En cours</option>
                       <option value="En attente pièce">En attente pièce</option>
                       <option value="Escaladé N3">Escaladé N3</option>
@@ -800,148 +898,159 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                 </div>
               </div>
 
-              {/* Bloc 3 : Détail par équipement (Optionnel) */}
-              <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-blue-600" />
-                      <span>Détail par équipement (optionnel)</span>
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Ajoutez des sous-rapports si l'intervention concerne plusieurs équipements distincts.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddEquipementRow}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold transition"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Ajouter un équipement</span>
-                  </button>
-                </div>
+                      {/* Bloc 3 : Détail par équipement / unité (Optionnel) */}
+                      <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
+                              <Layers className="w-4 h-4 text-blue-600" />
+                              <span>
+                                {modalVocab.equipmentsHeading.replace(/^\d+\.\s*/, '')} (optionnel)
+                              </span>
+                            </h4>
+                            <p className="text-[11px] text-slate-500">
+                              {modalVocab.equipmentsSubtitle}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleAddEquipementRow}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold transition"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-blue-600" />
+                            <span>Ajouter une unité / équipement</span>
+                          </button>
+                        </div>
 
-                {(formTicket.detailEquipements || []).map((eq, idx) => (
-                  <div
-                    key={eq.id}
-                    className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-blue-600 p-3.5 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-bold text-blue-900">
-                        Équipement #{idx + 1}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveEquipementRow(eq.id)}
-                        className="text-red-600 hover:text-red-700 text-[11px] font-medium inline-flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span>Retirer</span>
-                      </button>
-                    </div>
+                        {(formTicket.detailEquipements || []).map((eq, idx) => (
+                          <div
+                            key={eq.id}
+                            className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-blue-600 p-3.5 space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-bold text-blue-900">
+                                {modalVocab.equipmentItemPrefix} #{idx + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveEquipementRow(eq.id)}
+                                className="text-red-600 hover:text-red-700 text-[11px] font-medium inline-flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Retirer</span>
+                              </button>
+                            </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Nom équipement"
-                        value={eq.equipement}
-                        onChange={(e) =>
-                          handleUpdateEquipementRow(eq.id, {
-                            equipement: e.target.value,
-                          })
-                        }
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900 font-semibold"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Objet de l'intervention sur cet équipement"
-                        value={eq.titre}
-                        onChange={(e) =>
-                          handleUpdateEquipementRow(eq.id, { titre: e.target.value })
-                        }
-                        className="sm:col-span-2 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                      />
-                    </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <input
+                                type="text"
+                                placeholder="Ex: Navire FANJAVA 7, Caméra 01..."
+                                value={eq.equipement}
+                                onChange={(e) =>
+                                  handleUpdateEquipementRow(eq.id, {
+                                    equipement: e.target.value,
+                                  })
+                                }
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900 font-semibold"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Équipement installé / Objet sur cette unité"
+                                value={eq.titre}
+                                onChange={(e) =>
+                                  handleUpdateEquipementRow(eq.id, { titre: e.target.value })
+                                }
+                                className="sm:col-span-2 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                              />
+                            </div>
 
-                    <textarea
-                      rows={2}
-                      placeholder="Constat et diagnostic sur cet équipement..."
-                      value={eq.constatDiagnostic}
-                      onChange={(e) =>
-                        handleUpdateEquipementRow(eq.id, {
-                          constatDiagnostic: e.target.value,
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                    />
+                            <textarea
+                              rows={2}
+                              placeholder={modalVocab.equipmentDiagPlaceholder}
+                              value={eq.constatDiagnostic}
+                              onChange={(e) =>
+                                handleUpdateEquipementRow(eq.id, {
+                                  constatDiagnostic: e.target.value,
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                            />
 
-                    <textarea
-                      rows={2}
-                      placeholder="Actions correctives appliquées (une ligne par action)..."
-                      value={(eq.actionsCorrectives || []).join('\n')}
-                      onChange={(e) =>
-                        handleUpdateEquipementRow(eq.id, {
-                          actionsCorrectives: e.target.value.split('\n'),
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                    />
+                            <textarea
+                              rows={2}
+                              placeholder={modalVocab.equipmentActionsPlaceholder}
+                              value={(eq.actionsCorrectives || []).join('\n')}
+                              onChange={(e) =>
+                                handleUpdateEquipementRow(eq.id, {
+                                  actionsCorrectives: e.target.value.split('\n'),
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                            />
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Résumé opérations (tableau)"
-                        value={eq.operationsResume || ''}
-                        onChange={(e) =>
-                          handleUpdateEquipementRow(eq.id, {
-                            operationsResume: e.target.value,
-                          })
-                        }
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Matériel spécifique"
-                        value={eq.materielSpecifique}
-                        onChange={(e) =>
-                          handleUpdateEquipementRow(eq.id, {
-                            materielSpecifique: e.target.value,
-                          })
-                        }
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                      />
-                      <select
-                        value={eq.statut}
-                        onChange={(e) =>
-                          handleUpdateEquipementRow(eq.id, {
-                            statut: e.target.value as InterventionEquipementDetail['statut'],
-                          })
-                        }
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                      >
-                        <option value="Résolu">Résolu</option>
-                        <option value="En cours">En cours</option>
-                        <option value="En attente pièce">En attente pièce</option>
-                        <option value="Escaladé N3">Escaladé N3</option>
-                        <option value="Non résolu">Non résolu</option>
-                      </select>
-                    </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              <input
+                                type="text"
+                                placeholder="Résumé opérations (tableau)"
+                                value={eq.operationsResume || ''}
+                                onChange={(e) =>
+                                  handleUpdateEquipementRow(eq.id, {
+                                    operationsResume: e.target.value,
+                                  })
+                                }
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                              />
+                              <input
+                                type="text"
+                                placeholder={modalVocab.comparisonMatCol}
+                                value={eq.materielSpecifique}
+                                onChange={(e) =>
+                                  handleUpdateEquipementRow(eq.id, {
+                                    materielSpecifique: e.target.value,
+                                  })
+                                }
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                              />
+                              <select
+                                value={eq.statut}
+                                onChange={(e) =>
+                                  handleUpdateEquipementRow(eq.id, {
+                                    statut: e.target
+                                      .value as InterventionEquipementDetail['statut'],
+                                  })
+                                }
+                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                              >
+                                <option value="Résolu">
+                                  {formTicket.natureIntervention ===
+                                  'Déploiement / Installation'
+                                    ? 'Opérationnel / Validé'
+                                    : 'Résolu'}
+                                </option>
+                                <option value="En cours">En cours</option>
+                                <option value="En attente pièce">En attente pièce</option>
+                                <option value="Escaladé N3">Escaladé N3</option>
+                                <option value="Non résolu">Non résolu</option>
+                              </select>
+                            </div>
 
-                    <input
-                      type="text"
-                      placeholder="Résultat constaté sur cet équipement"
-                      value={eq.resultatDetail || ''}
-                      onChange={(e) =>
-                        handleUpdateEquipementRow(eq.id, {
-                          resultatDetail: e.target.value,
-                        })
-                      }
-                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                    />
-                  </div>
-                ))}
-              </div>
+                            <input
+                              type="text"
+                              placeholder="Résultat des tests / validation sur cette unité"
+                              value={eq.resultatDetail || ''}
+                              onChange={(e) =>
+                                handleUpdateEquipementRow(eq.id, {
+                                  resultatDetail: e.target.value,
+                                })
+                              }
+                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                  </>
+                );
+              })()}
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
@@ -1011,7 +1120,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                           : 'bg-amber-100 text-amber-800'
                       }`}
                     >
-                      {it.resultat}
+                      {formatInterventionStatusLabel(it.resultat, it.natureIntervention)}
                     </span>
                   </div>
 
@@ -1052,7 +1161,16 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
 
         {/* Fiche d'intervention détaillée (droite) */}
         <div className="lg:col-span-8">
-          {selectedIntervention ? (
+          {selectedIntervention ? (() => {
+            const viewVocab = getInterventionVocabulary(
+              selectedIntervention.natureIntervention
+            );
+            const statusDisplay = formatInterventionStatusLabel(
+              selectedIntervention.resultat,
+              selectedIntervention.natureIntervention
+            );
+
+            return (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               {/* Bandeau d'accent supérieur */}
               <div className="h-1.5 bg-gradient-to-r from-blue-700 via-sky-500 to-emerald-500" />
@@ -1066,6 +1184,16 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         {selectedIntervention.domaineTitre ||
                           selectedIntervention.typeIntervention}
                       </span>
+                      {selectedIntervention.natureIntervention &&
+                        selectedIntervention.natureIntervention !==
+                          'Incident / Dépannage' && (
+                          <>
+                            <span className="text-slate-300">·</span>
+                            <span className="font-semibold text-blue-700">
+                              {selectedIntervention.natureIntervention}
+                            </span>
+                          </>
+                        )}
                       <span className="text-slate-300">·</span>
                       <span className="font-mono font-semibold text-slate-600">
                         {selectedIntervention.numeroReference}
@@ -1093,7 +1221,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       }`}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      {selectedIntervention.resultat}
+                      {statusDisplay}
                     </span>
                     <span
                       className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
@@ -1205,7 +1333,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                     </div>
                     <div className="min-w-0">
                       <span className="text-[11px] text-slate-500 block">
-                        Équipement(s)
+                        {viewVocab.equipmentsRowLabel}
                       </span>
                       <strong className="text-slate-900 block">
                         {selectedIntervention.equipementConcerne}
@@ -1219,7 +1347,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                     </div>
                     <div>
                       <span className="text-[11px] text-slate-500 block">
-                        Temps de résolution
+                        Temps consacré
                       </span>
                       <strong className="text-slate-900 text-sm font-mono tabular-nums block">
                         {formatDuration(selectedIntervention.tempsConsacreMin)}
@@ -1231,14 +1359,35 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   </div>
                 </div>
 
-                {/* Panne & Solution côte à côte */}
+                {/* Synthèse / Objet & Solution / Travaux côte à côte */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-rose-200/80 bg-rose-50/40 p-4 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-bold text-rose-900">
-                      <AlertCircle className="w-4 h-4 text-rose-600" />
-                      <span>Problème / Panne signalée</span>
+                  <div
+                    className={`rounded-xl border p-4 space-y-1.5 ${
+                      selectedIntervention.natureIntervention ===
+                      'Déploiement / Installation'
+                        ? 'border-sky-200/80 bg-sky-50/40'
+                        : 'border-rose-200/80 bg-rose-50/40'
+                    }`}
+                  >
+                    <div
+                      className={`flex items-center gap-1.5 font-bold ${
+                        selectedIntervention.natureIntervention ===
+                        'Déploiement / Installation'
+                          ? 'text-sky-900'
+                          : 'text-rose-900'
+                      }`}
+                    >
+                      <AlertCircle
+                        className={`w-4 h-4 ${
+                          selectedIntervention.natureIntervention ===
+                          'Déploiement / Installation'
+                            ? 'text-sky-600'
+                            : 'text-rose-600'
+                        }`}
+                      />
+                      <span>{viewVocab.descriptionCardTitle}</span>
                     </div>
-                    <p className="text-slate-700 leading-relaxed">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedIntervention.descriptionPanne}
                     </p>
                   </div>
@@ -1246,49 +1395,49 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-4 space-y-1.5">
                     <div className="flex items-center gap-1.5 font-bold text-emerald-900">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                      <span>Solution corrective appliquée</span>
+                      <span>{viewVocab.solutionCardTitle}</span>
                     </div>
-                    <p className="text-slate-700 leading-relaxed">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedIntervention.solutionAppliquee}
                     </p>
                   </div>
                 </div>
 
-                {/* Diagnostic, Cause & Matériel */}
+                {/* Diagnostic / Préparation, Contexte & Matériel */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="rounded-xl border border-slate-200 p-4 space-y-1.5 bg-white">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                      Diagnostic technique
+                      {viewVocab.diagnosticLabel}
                     </span>
-                    <p className="text-slate-700 leading-relaxed">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedIntervention.diagnosticTechnique}
                     </p>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 p-4 space-y-1.5 bg-white">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                      Cause identifiée
+                      {viewVocab.causeLabel}
                     </span>
-                    <p className="text-slate-700 leading-relaxed">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedIntervention.causeIdentifiee}
                     </p>
                   </div>
 
                   <div className="rounded-xl border border-slate-200 p-4 space-y-1.5 bg-white">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                      Matériel / Outils utilisés
+                      {viewVocab.materialLabel}
                     </span>
-                    <p className="text-slate-700 leading-relaxed">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-line">
                       {selectedIntervention.materielLogicielUtilise}
                     </p>
                   </div>
                 </div>
 
-                {/* Analyse Technique et Cause Racine (si renseignée) */}
+                {/* Analyse Technique / Étapes Techniques Réalisées (si renseignée) */}
                 {selectedIntervention.analyseCauseRacine && (
                   <div className="space-y-2">
                     <h4 className="text-sm font-bold text-slate-900">
-                      Analyse Technique et Cause Racine
+                      {viewVocab.analysisHeading.replace(/^\d+\.\s*/, '')}
                     </h4>
                     <div className="text-slate-700 leading-relaxed whitespace-pre-line bg-slate-50 p-4 rounded-xl border border-slate-200">
                       {selectedIntervention.analyseCauseRacine}
@@ -1296,12 +1445,13 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   </div>
                 )}
 
-                {/* Détail par Équipement (si présent) */}
+                {/* Détail par Équipement / Unité (si présent) */}
                 {selectedIntervention.detailEquipements &&
                   selectedIntervention.detailEquipements.length > 0 && (
                     <div className="space-y-4">
                       <h4 className="text-sm font-bold text-slate-900">
-                        Détail par Équipement ({selectedIntervention.detailEquipements.length})
+                        {viewVocab.equipmentsHeading.replace(/^\d+\.\s*/, '')} (
+                        {selectedIntervention.detailEquipements.length})
                       </h4>
 
                       <div className="space-y-3">
@@ -1321,14 +1471,17 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                                     : 'bg-amber-100 text-amber-800'
                                 }`}
                               >
-                                {eq.statut}
+                                {formatInterventionStatusLabel(
+                                  eq.statut,
+                                  selectedIntervention.natureIntervention
+                                )}
                               </span>
                             </div>
 
                             {eq.constatDiagnostic && (
                               <p className="text-slate-700 leading-relaxed">
                                 <strong className="text-slate-900">
-                                  Diagnostic :
+                                  {viewVocab.equipmentDiagLabel} :
                                 </strong>{' '}
                                 {eq.constatDiagnostic}
                               </p>
@@ -1348,7 +1501,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                                 {eq.materielSpecifique && (
                                   <span>
                                     <strong className="text-slate-800">
-                                      Matériel :
+                                      {viewVocab.comparisonMatCol} :
                                     </strong>{' '}
                                     {eq.materielSpecifique}
                                   </span>
@@ -1369,12 +1522,18 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         <table className="w-full text-left border-collapse text-[11px]">
                           <thead>
                             <tr className="bg-slate-900 text-white">
-                              <th className="p-2.5 font-semibold">Équipement</th>
-                              <th className="p-2.5 font-semibold">Diagnostic</th>
                               <th className="p-2.5 font-semibold">
-                                Opérations réalisées
+                                {viewVocab.comparisonEquipCol}
                               </th>
-                              <th className="p-2.5 font-semibold">Matériel</th>
+                              <th className="p-2.5 font-semibold">
+                                {viewVocab.comparisonDiagCol}
+                              </th>
+                              <th className="p-2.5 font-semibold">
+                                {viewVocab.comparisonOpsCol}
+                              </th>
+                              <th className="p-2.5 font-semibold">
+                                {viewVocab.comparisonMatCol}
+                              </th>
                               <th className="p-2.5 font-semibold">Statut</th>
                             </tr>
                           </thead>
@@ -1397,7 +1556,10 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                                       : 'text-amber-700'
                                   }`}
                                 >
-                                  {eq.statut}
+                                  {formatInterventionStatusLabel(
+                                    eq.statut,
+                                    selectedIntervention.natureIntervention
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -1406,6 +1568,19 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       </div>
                     </div>
                   )}
+
+                {/* Recommandations d'exploitation (si renseignées) */}
+                {selectedIntervention.recommandations && (
+                  <div className="rounded-xl border border-amber-200/90 bg-amber-50/50 p-4 space-y-2">
+                    <h4 className="text-xs font-bold text-amber-950 flex items-center gap-1.5">
+                      <Lightbulb className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>{viewVocab.recommandationsTitle}</span>
+                    </h4>
+                    <div className="text-slate-700 leading-relaxed whitespace-pre-line">
+                      {selectedIntervention.recommandations}
+                    </div>
+                  </div>
+                )}
 
                 {/* Validation du demandeur */}
                 <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200/80 flex flex-wrap items-center justify-between gap-3">
@@ -1446,7 +1621,8 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+            );
+          })() : (
             <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center text-slate-400 italic">
               {interventions.length === 0
                 ? 'Le registre des interventions est vierge et prêt à recevoir vos fiches techniques.'
