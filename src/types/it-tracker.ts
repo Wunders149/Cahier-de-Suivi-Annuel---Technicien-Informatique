@@ -62,6 +62,21 @@ export type NatureIntervention =
   | 'Déploiement / Installation'
   | 'Maintenance / Contrôle';
 
+export const INTERVENTION_TYPES = [
+  'Matériel',
+  'Réseau',
+  'Logiciel',
+  'Sécurité',
+  'Déploiement',
+  'Systèmes / IoT',
+  'Vidéosurveillance',
+  'Infrastructure',
+  'Compte/Accès',
+  'Téléphonie',
+] as const;
+
+export type InterventionType = (typeof INTERVENTION_TYPES)[number];
+
 export interface InterventionEquipementDetail {
   id: string;
   equipement: string;
@@ -83,16 +98,8 @@ export interface FicheIntervention {
   serviceDemandeur: string;
   equipementConcerne: string;
   natureIntervention?: NatureIntervention;
-  typeIntervention:
-    | 'Matériel'
-    | 'Logiciel'
-    | 'Réseau'
-    | 'Vidéosurveillance'
-    | 'Infrastructure'
-    | 'Déploiement'
-    | 'Systèmes / IoT'
-    | 'Compte/Accès'
-    | 'Téléphonie';
+  typeIntervention: InterventionType;
+  type?: InterventionType;
   priorite: 'Critique' | 'Haute' | 'Normale' | 'Basse';
   domaineTitre?: string; // En-tête métier (ex: DÉPLOIEMENT & SÉCURISATION MARITIME)
   titreRapport?: string; // Sous-titre descriptif du rapport détaillé

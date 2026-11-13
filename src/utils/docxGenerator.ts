@@ -554,7 +554,7 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                 new TableRow({
                   children: [
                     createTextCell('TYPE & PRIORITÉ', { bold: true, bg: COLOR_LIGHT_BG }),
-                    createTextCell(`${it.typeIntervention} | Priorité: ${it.priorite}`),
+                    createTextCell(`${it.type || it.typeIntervention} | Priorité: ${it.priorite}`),
                     createTextCell('DURÉE CONSACRÉE', { bold: true, bg: COLOR_LIGHT_BG }),
                     createTextCell(formatDuration(it.tempsConsacreMin, true)),
                   ],

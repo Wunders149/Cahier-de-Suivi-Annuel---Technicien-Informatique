@@ -2,13 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
   FicheIntervention,
   GeneralInfo,
+  INTERVENTION_TYPES,
   InterventionEquipementDetail,
+  InterventionType,
   NatureIntervention,
 } from '../../types/it-tracker';
 import {
   Plus,
   Wrench,
   Search,
+  Filter,
   Check,
   UserCheck,
   Download,
@@ -55,6 +58,7 @@ const DEFAULT_NEW_TICKET = (): Partial<FicheIntervention> => ({
   equipementConcerne: '',
   natureIntervention: 'Incident / Dépannage',
   typeIntervention: 'Matériel',
+  type: 'Matériel',
   priorite: 'Normale',
   domaineTitre: '',
   titreRapport: '',
@@ -82,6 +86,9 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
     interventions[0]?.id || null
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'Tous' | InterventionType>('Tous');
+  const [statusFilter, setStatusFilter] = useState<'Tous' | FicheIntervention['resultat']>('Tous');
+  const [priorityFilter, setPriorityFilter] = useState<'Toutes' | FicheIntervention['priorite']>('Toutes');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -117,8 +124,11 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
 
   const openEditModal = (it: FicheIntervention) => {
     setEditingId(it.id);
+    const resolvedType = it.type || it.typeIntervention || 'Matériel';
     setFormTicket({
       ...it,
+      type: resolvedType,
+      typeIntervention: resolvedType,
       detailEquipements: (it.detailEquipements || []).map((eq) => ({
         ...eq,
         actionsCorrectives: [...(eq.actionsCorrectives || [])],
@@ -222,6 +232,11 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
     const nature = formTicket.natureIntervention || 'Incident / Dépannage';
     const saveVocab = getInterventionVocabulary(nature);
 
+    const resolvedType: InterventionType =
+      (formTicket.type as InterventionType) ||
+      (formTicket.typeIntervention as InterventionType) ||
+      'Matériel';
+
     const item: FicheIntervention = {
       id: existing?.id || `INT-${Date.now()}`,
       numeroReference: existing?.numeroReference || defaultRef,
@@ -232,9 +247,8 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       equipementConcerne:
         formTicket.equipementConcerne?.trim() || 'Poste de travail',
       natureIntervention: nature,
-      typeIntervention:
-        (formTicket.typeIntervention as FicheIntervention['typeIntervention']) ||
-        'Matériel',
+      typeIntervention: resolvedType,
+      type: resolvedType,
       priorite:
         (formTicket.priorite as FicheIntervention['priorite']) || 'Normale',
       descriptionPanne: formTicket.descriptionPanne.trim(),
@@ -328,14 +342,39 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
     }
   };
 
-  const filtered = interventions.filter(
-    (i) =>
-      i.numeroReference.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.nomDemandeur.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.serviceDemandeur.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.equipementConcerne.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.descriptionPanne.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const hasActiveFilters =
+    searchTerm.trim() !== '' ||
+    typeFilter !== 'Tous' ||
+    statusFilter !== 'Tous' ||
+    priorityFilter !== 'Toutes';
+
+  const resetFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('Tous');
+    setStatusFilter('Tous');
+    setPriorityFilter('Toutes');
+  };
+
+  const filtered = interventions.filter((i) => {
+    const itemType = i.type || i.typeIntervention;
+    const q = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      i.numeroReference.toLowerCase().includes(q) ||
+      i.nomDemandeur.toLowerCase().includes(q) ||
+      i.serviceDemandeur.toLowerCase().includes(q) ||
+      i.equipementConcerne.toLowerCase().includes(q) ||
+      i.descriptionPanne.toLowerCase().includes(q) ||
+      (i.titreRapport || '').toLowerCase().includes(q) ||
+      itemType.toLowerCase().includes(q);
+
+    const matchesType = typeFilter === 'Tous' || itemType === typeFilter;
+    const matchesStatus = statusFilter === 'Tous' || i.resultat === statusFilter;
+    const matchesPriority =
+      priorityFilter === 'Toutes' || i.priorite === priorityFilter;
+
+    return matchesSearch && matchesType && matchesStatus && matchesPriority;
+  });
 
   return (
     <div className="space-y-6">
@@ -362,20 +401,88 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
         </button>
       </div>
 
-      {/* Barre de recherche */}
-      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center gap-3">
-        <div className="relative flex-1">
+      {/* Barre de recherche & filtres */}
+      <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col lg:flex-row lg:items-center gap-2.5 text-xs">
+        <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Rechercher par N° ticket, demandeur, service, équipement..."
+            placeholder="Rechercher par N° ticket, demandeur, service, équipement, type..."
             className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <div className="text-xs text-slate-500 shrink-0 font-medium px-1">
-          {filtered.length} fiche(s)
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <select
+              aria-label="Filtrer par type d'intervention"
+              value={typeFilter}
+              onChange={(e) =>
+                setTypeFilter(e.target.value as 'Tous' | InterventionType)
+              }
+              className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="Tous">Tous les types</option>
+              {INTERVENTION_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <select
+            aria-label="Filtrer par statut"
+            value={statusFilter}
+            onChange={(e) =>
+              setStatusFilter(
+                e.target.value as 'Tous' | FicheIntervention['resultat']
+              )
+            }
+            className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="Tous">Tous statuts</option>
+            <option value="Résolu">Résolu / Opérationnel</option>
+            <option value="En cours">En cours</option>
+            <option value="En attente pièce">En attente pièce</option>
+            <option value="Escaladé N3">Escaladé N3</option>
+            <option value="Non résolu">Non résolu</option>
+          </select>
+
+          <select
+            aria-label="Filtrer par priorité"
+            value={priorityFilter}
+            onChange={(e) =>
+              setPriorityFilter(
+                e.target.value as 'Toutes' | FicheIntervention['priorite']
+              )
+            }
+            className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="Toutes">Toutes priorités</option>
+            <option value="Critique">Critique</option>
+            <option value="Haute">Haute</option>
+            <option value="Normale">Normale</option>
+            <option value="Basse">Basse</option>
+          </select>
+
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="px-2.5 py-2 rounded-lg text-blue-700 hover:bg-blue-100/70 font-semibold transition"
+            >
+              Réinitialiser
+            </button>
+          )}
+
+          <div className="text-xs text-slate-500 shrink-0 font-medium px-1.5">
+            {filtered.length}
+            {hasActiveFilters ? ` / ${interventions.length}` : ''} fiche(s)
+          </div>
         </div>
       </div>
 
@@ -494,28 +601,29 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         </div>
                         <div>
                           <label className="block font-medium text-slate-700 mb-1">
-                            Domaine / Type
+                            Type
                           </label>
                           <select
-                            value={formTicket.typeIntervention || 'Matériel'}
-                            onChange={(e) =>
+                            value={
+                              formTicket.type ||
+                              formTicket.typeIntervention ||
+                              'Matériel'
+                            }
+                            onChange={(e) => {
+                              const nextType = e.target.value as InterventionType;
                               setFormTicket({
                                 ...formTicket,
-                                typeIntervention: e.target
-                                  .value as FicheIntervention['typeIntervention'],
-                              })
-                            }
+                                type: nextType,
+                                typeIntervention: nextType,
+                              });
+                            }}
                             className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
                           >
-                            <option value="Matériel">Matériel</option>
-                            <option value="Logiciel">Logiciel</option>
-                            <option value="Réseau">Réseau</option>
-                            <option value="Déploiement">Déploiement</option>
-                            <option value="Systèmes / IoT">Systèmes / IoT</option>
-                            <option value="Vidéosurveillance">Vidéosurveillance</option>
-                            <option value="Infrastructure">Infrastructure</option>
-                            <option value="Compte/Accès">Compte/Accès</option>
-                            <option value="Téléphonie">Téléphonie</option>
+                            {INTERVENTION_TYPES.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
                           </select>
                         </div>
                         <div>
@@ -1128,8 +1236,14 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                     {it.equipementConcerne}
                   </div>
 
-                  <div className="text-slate-500 text-[11px] truncate">
-                    {it.nomDemandeur} · {it.serviceDemandeur}
+                  <div className="text-slate-500 text-[11px] truncate flex items-center gap-1.5">
+                    <span className="font-semibold text-sky-700 shrink-0">
+                      {it.type || it.typeIntervention}
+                    </span>
+                    <span className="text-slate-300">·</span>
+                    <span className="truncate">
+                      {it.nomDemandeur} ({it.serviceDemandeur})
+                    </span>
                   </div>
 
                   <p className="text-slate-600 text-[11px] line-clamp-2 leading-relaxed">
@@ -1182,6 +1296,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                     <div className="flex flex-wrap items-center gap-2 text-[11px]">
                       <span className="font-bold uppercase tracking-wider text-sky-700">
                         {selectedIntervention.domaineTitre ||
+                          selectedIntervention.type ||
                           selectedIntervention.typeIntervention}
                       </span>
                       {selectedIntervention.natureIntervention &&
@@ -1353,7 +1468,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         {formatDuration(selectedIntervention.tempsConsacreMin)}
                       </strong>
                       <span className="text-[11px] text-slate-500 block">
-                        {selectedIntervention.typeIntervention}
+                        Type : {selectedIntervention.type || selectedIntervention.typeIntervention}
                       </span>
                     </div>
                   </div>

@@ -91,7 +91,7 @@ export function generateInterventionReportPdf(
   // --- EN-TÊTE DU RAPPORT ---
   const domaineText = (
     intervention.domaineTitre?.trim() ||
-    `${vocab.domainPrefix} · ${intervention.typeIntervention.toUpperCase()}`
+    `${vocab.domainPrefix} · ${(intervention.type || intervention.typeIntervention).toUpperCase()}`
   ).toUpperCase();
 
   doc.setFont('helvetica', 'bold');
@@ -473,7 +473,7 @@ export async function generateInterventionReportDocx(
 
   const domaineText = (
     intervention.domaineTitre?.trim() ||
-    `${vocab.domainPrefix} · ${intervention.typeIntervention.toUpperCase()}`
+    `${vocab.domainPrefix} · ${(intervention.type || intervention.typeIntervention).toUpperCase()}`
   ).toUpperCase();
 
   const subtitleText =
