@@ -14,6 +14,8 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  LayoutList,
+  CalendarDays,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
@@ -26,6 +28,7 @@ import {
   secondaryButtonClass,
 } from '../ui/formStyles';
 import { formatDuration } from '../../utils/durationFormatter';
+import { DailyLogCalendar } from '../journal/DailyLogCalendar';
 
 interface DailyLogSectionProps {
   taches: TacheJournal[];
@@ -118,6 +121,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
   onUpdateTaches,
   onShowToast,
 }) => {
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tous');
   const [categoryFilter, setCategoryFilter] = useState<string>('Tous');
@@ -149,10 +153,16 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
     [taches, confirmDeleteId]
   );
 
-  const openCreateModal = () => {
+  const openCreateModal = (presetDate?: string) => {
     setEditingId(null);
     setIsDuplicating(false);
-    setFormTask(DEFAULT_TASK_FORM());
+    const today = getTodayIso();
+    const targetDate = presetDate || today;
+    setFormTask({
+      ...DEFAULT_TASK_FORM(),
+      date: targetDate,
+      statut: targetDate > today ? 'À faire' : 'Terminé',
+    });
     setShowFormModal(true);
   };
 
@@ -248,7 +258,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
     statusFilter !== 'Tous' ||
     categoryFilter !== 'Tous' ||
     priorityFilter !== 'Toutes' ||
-    periodFilter !== 'all';
+    (viewMode === 'list' && periodFilter !== 'all');
 
   const resetFilters = () => {
     setSearchTerm('');
@@ -258,17 +268,10 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
     setPeriodFilter('all');
   };
 
-  const filteredTaches = useMemo(() => {
-    const today = getTodayIso();
-    const now = new Date();
-    const weekAgoDate = new Date(now);
-    weekAgoDate.setDate(now.getDate() - 7);
-    const weekAgoIso = weekAgoDate.toISOString().split('T')[0];
-    const currentMonthPrefix = today.slice(0, 7);
-
+  const baseFilteredTaches = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
-    const filtered = taches.filter((t) => {
+    return taches.filter((t) => {
       const matchSearch =
         !query ||
         t.tache.toLowerCase().includes(query) ||
@@ -282,18 +285,32 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
       const matchPriority =
         priorityFilter === 'Toutes' || t.priorite === priorityFilter;
 
-      let matchPeriod = true;
-      if (periodFilter === 'today') {
-        matchPeriod = t.date === today;
-      } else if (periodFilter === 'week') {
-        matchPeriod = t.date >= weekAgoIso && t.date <= today;
-      } else if (periodFilter === 'month') {
-        matchPeriod = t.date.startsWith(currentMonthPrefix);
-      } else if (periodFilter === 'custom' && customDate) {
-        matchPeriod = t.date === customDate;
-      }
+      return matchSearch && matchStatus && matchCat && matchPriority;
+    });
+  }, [taches, searchTerm, statusFilter, categoryFilter, priorityFilter]);
 
-      return matchSearch && matchStatus && matchCat && matchPriority && matchPeriod;
+  const filteredTaches = useMemo(() => {
+    const today = getTodayIso();
+    const now = new Date();
+    const weekAgoDate = new Date(now);
+    weekAgoDate.setDate(now.getDate() - 7);
+    const weekAgoIso = weekAgoDate.toISOString().split('T')[0];
+    const currentMonthPrefix = today.slice(0, 7);
+
+    const filtered = baseFilteredTaches.filter((t) => {
+      if (periodFilter === 'today') {
+        return t.date === today;
+      }
+      if (periodFilter === 'week') {
+        return t.date >= weekAgoIso && t.date <= today;
+      }
+      if (periodFilter === 'month') {
+        return t.date.startsWith(currentMonthPrefix);
+      }
+      if (periodFilter === 'custom' && customDate) {
+        return t.date === customDate;
+      }
+      return true;
     });
 
     return [...filtered].sort((a, b) => {
@@ -304,35 +321,29 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
         ? keyB.localeCompare(keyA)
         : keyA.localeCompare(keyB);
     });
-  }, [
-    taches,
-    searchTerm,
-    statusFilter,
-    categoryFilter,
-    priorityFilter,
-    periodFilter,
-    customDate,
-    sortDirection,
-  ]);
+  }, [baseFilteredTaches, periodFilter, customDate, sortDirection]);
+
+  const activeScopeTaches =
+    viewMode === 'calendar' ? baseFilteredTaches : filteredTaches;
 
   const stats = useMemo(() => {
-    const totalRealMin = filteredTaches.reduce(
+    const totalRealMin = activeScopeTaches.reduce(
       (acc, t) => acc + (t.dureeReelleMin || 0),
       0
     );
-    const totalEstMin = filteredTaches.reduce(
+    const totalEstMin = activeScopeTaches.reduce(
       (acc, t) => acc + (t.dureeEstimeeMin || 0),
       0
     );
-    const completedCount = filteredTaches.filter(
+    const completedCount = activeScopeTaches.filter(
       (t) => t.statut === 'Terminé'
     ).length;
-    const activeCount = filteredTaches.filter(
+    const activeCount = activeScopeTaches.filter(
       (t) => t.statut === 'À faire' || t.statut === 'En cours' || t.statut === 'En attente'
     ).length;
     const completionRate =
-      filteredTaches.length > 0
-        ? Math.round((completedCount / filteredTaches.length) * 100)
+      activeScopeTaches.length > 0
+        ? Math.round((completedCount / activeScopeTaches.length) * 100)
         : 0;
 
     return {
@@ -342,7 +353,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
       activeCount,
       completionRate,
     };
-  }, [filteredTaches]);
+  }, [activeScopeTaches]);
 
   const formDurationDiff =
     (Number(formTask.dureeReelleMin) || 0) - (Number(formTask.dureeEstimeeMin) || 0);
@@ -359,17 +370,52 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
             <span>Gestion Quotidienne des Activités (Journal de Bord)</span>
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Consignation chronologique, édition, suivi des durées réelles et clôture des activités quotidiennes.
+            Consignation chronologique, planification mensuelle, suivi des durées réelles et clôture des activités.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openCreateModal}
-          className={primaryButtonClass}
-        >
-          <Plus className="w-4 h-4" />
-          <span>Ajouter une tâche</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div
+            role="group"
+            aria-label="Mode d'affichage du journal"
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg border border-slate-200/80"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              aria-pressed={viewMode === 'list'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <LayoutList className="w-3.5 h-3.5" />
+              <span>Liste</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('calendar')}
+              aria-pressed={viewMode === 'calendar'}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
+                viewMode === 'calendar'
+                  ? 'bg-white text-slate-900 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>Calendrier</span>
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => openCreateModal()}
+            className={primaryButtonClass}
+          >
+            <Plus className="w-4 h-4" />
+            <span>Ajouter une tâche</span>
+          </button>
+        </div>
       </div>
 
       {/* Synthèse quantitative du journal (selon filtres actifs) */}
@@ -380,7 +426,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-2">
             <span className="text-lg font-bold text-slate-900 font-mono tabular-nums">
-              {filteredTaches.length}
+              {activeScopeTaches.length}
             </span>
             <span className="text-[11px] text-slate-500 font-mono tabular-nums">
               sur {taches.length} au total
@@ -499,70 +545,85 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
               ))}
             </select>
 
-            <button
-              type="button"
-              onClick={() =>
-                setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
-              }
-              title="Inverser l'ordre chronologique"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium whitespace-nowrap shrink-0 transition-colors"
-            >
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
-              <span>
-                {sortDirection === 'desc' ? 'Plus récent' : 'Plus ancien'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Sélecteur de période + Réinitialisation */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
-          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg">
-            {(
-              [
-                { id: 'all', label: 'Toutes dates' },
-                { id: 'today', label: "Aujourd'hui" },
-                { id: 'week', label: '7 jours' },
-                { id: 'month', label: 'Ce mois' },
-                { id: 'custom', label: 'Date précise' },
-              ] as { id: PeriodFilter; label: string }[]
-            ).map((opt) => (
+            {viewMode === 'list' && (
               <button
-                key={opt.id}
                 type="button"
-                onClick={() => setPeriodFilter(opt.id)}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
-                  periodFilter === opt.id
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+                onClick={() =>
+                  setSortDirection((prev) => (prev === 'desc' ? 'asc' : 'desc'))
+                }
+                title="Inverser l'ordre chronologique"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium whitespace-nowrap shrink-0 transition-colors"
               >
-                {opt.label}
+                <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                <span>
+                  {sortDirection === 'desc' ? 'Plus récent' : 'Plus ancien'}
+                </span>
               </button>
-            ))}
+            )}
 
-            {periodFilter === 'custom' && (
-              <input
-                type="date"
-                value={customDate}
-                onChange={(e) => setCustomDate(e.target.value)}
-                aria-label="Choisir une date précise"
-                className="ml-1 px-2 py-1 rounded-md border border-slate-300 bg-white text-slate-800 text-xs font-mono tabular-nums"
-              />
+            {viewMode === 'calendar' && hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-medium whitespace-nowrap shrink-0 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Réinitialiser</span>
+              </button>
             )}
           </div>
-
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium whitespace-nowrap shrink-0 transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Réinitialiser les filtres</span>
-            </button>
-          )}
         </div>
+
+        {/* Sélecteur de période + Réinitialisation (mode liste) */}
+        {viewMode === 'list' && (
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-lg">
+              {(
+                [
+                  { id: 'all', label: 'Toutes dates' },
+                  { id: 'today', label: "Aujourd'hui" },
+                  { id: 'week', label: '7 jours' },
+                  { id: 'month', label: 'Ce mois' },
+                  { id: 'custom', label: 'Date précise' },
+                ] as { id: PeriodFilter; label: string }[]
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setPeriodFilter(opt.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap shrink-0 transition-colors ${
+                    periodFilter === opt.id
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+
+              {periodFilter === 'custom' && (
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                  aria-label="Choisir une date précise"
+                  className="ml-1 px-2 py-1 rounded-md border border-slate-300 bg-white text-slate-800 text-xs font-mono tabular-nums"
+                />
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 text-xs font-medium whitespace-nowrap shrink-0 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Réinitialiser les filtres</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Modal Création / Édition / Duplication */}
@@ -1034,47 +1095,62 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
         )}
       </Modal>
 
-      {/* Tableau du journal */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-900 text-white">
-                <th className="p-3 font-semibold whitespace-nowrap">Date &amp; Heure</th>
-                <th className="p-3 font-semibold">Tâche &amp; Description</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Catégorie</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Priorité</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Durée (Réelle / Est.)</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Statut</th>
-                <th className="p-3 font-semibold">Résultat &amp; Observations</th>
-                <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filteredTaches.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-10 text-center">
-                    <div className="max-w-md mx-auto space-y-3">
-                      <p className="text-sm font-medium text-slate-700">
-                        {taches.length === 0
-                          ? 'Votre journal quotidien est vierge et prêt pour vos premières saisies.'
-                          : 'Aucune entrée ne correspond aux critères sélectionnés.'}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {taches.length === 0
-                          ? 'Consignez vos interventions de support, déploiements et contrôles techniques avec suivi des durées.'
-                          : 'Essayez de modifier votre recherche ou de réinitialiser les filtres actifs.'}
-                      </p>
-                      <div className="pt-1 flex items-center justify-center gap-2">
-                        {taches.length === 0 ? (
-                          <button
-                            type="button"
-                            onClick={openCreateModal}
-                            className={primaryButtonClass}
-                          >
-                            <Plus className="w-4 h-4" />
-                            <span>Consigner une première tâche</span>
-                          </button>
+      {/* Vue Calendrier ou Tableau du journal */}
+      {viewMode === 'calendar' ? (
+        <DailyLogCalendar
+          taches={baseFilteredTaches}
+          allTachesCount={taches.length}
+          statuts={STATUTS}
+          onCreateForDate={(isoDate) => openCreateModal(isoDate)}
+          onInspectTask={(tache) => setInspectingId(tache.id)}
+          onEditTask={openEditModal}
+          onDuplicateTask={openDuplicateModal}
+          onDeleteTask={(id) => setConfirmDeleteId(id)}
+          onStatusChange={handleStatusChange}
+          hasActiveFilters={hasActiveFilters}
+          onResetFilters={resetFilters}
+        />
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3 font-semibold whitespace-nowrap">Date &amp; Heure</th>
+                  <th className="p-3 font-semibold">Tâche &amp; Description</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Catégorie</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Priorité</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Durée (Réelle / Est.)</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Statut</th>
+                  <th className="p-3 font-semibold">Résultat &amp; Observations</th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-slate-700">
+                {filteredTaches.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-10 text-center">
+                      <div className="max-w-md mx-auto space-y-3">
+                        <p className="text-sm font-medium text-slate-700">
+                          {taches.length === 0
+                            ? 'Votre journal quotidien est vierge et prêt pour vos premières saisies.'
+                            : 'Aucune entrée ne correspond aux critères sélectionnés.'}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {taches.length === 0
+                            ? 'Consignez vos interventions de support, déploiements et contrôles techniques avec suivi des durées.'
+                            : 'Essayez de modifier votre recherche ou de réinitialiser les filtres actifs.'}
+                        </p>
+                        <div className="pt-1 flex items-center justify-center gap-2">
+                          {taches.length === 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => openCreateModal()}
+                              className={primaryButtonClass}
+                            >
+                              <Plus className="w-4 h-4" />
+                              <span>Consigner une première tâche</span>
+                            </button>
                         ) : (
                           <button
                             type="button"
@@ -1219,6 +1295,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 };
