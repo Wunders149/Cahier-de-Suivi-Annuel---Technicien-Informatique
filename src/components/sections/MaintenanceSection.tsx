@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { ItemMaintenance } from '../../types/it-tracker';
-import { CheckSquare, Plus, Search, Filter, AlertCircle, CheckCircle2, ShieldCheck, RefreshCw } from 'lucide-react';
+import { CheckSquare, Plus, Search } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface MaintenanceSectionProps {
   maintenances: ItemMaintenance[];
@@ -71,6 +80,18 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
 
     onUpdateMaintenances([...maintenances, item]);
     setShowAddModal(false);
+    setNewItem({
+      categorie: 'Ordinateurs',
+      typeMaintenance: 'Préventive',
+      tacheControle: '',
+      frequence: 'Mensuelle',
+      dernierControle: new Date().toISOString().split('T')[0],
+      prochainControle: '',
+      statut: 'Conforme',
+      responsableOuEquipement: 'Parc bureautique',
+      observations: '',
+      valide: true,
+    });
   };
 
   const filtered = maintenances.filter((m) => {
@@ -188,129 +209,195 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
       </div>
 
       {/* Modal d'ajout */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100">
-              Ajouter une Tâche de Maintenance
-            </h3>
-            <form onSubmit={handleAddMaintenance} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Domaine</label>
-                  <select
-                    value={newItem.categorie}
-                    onChange={(e) => setNewItem({ ...newItem, categorie: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    {categories.filter((c) => c !== 'Tous').map((c) => (
-                      <option key={c} value={c}>{c}</option>
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Ajouter une tâche de maintenance"
+        subtitle="Planifiez un contrôle préventif ou une action corrective sur les 11 domaines IT."
+        icon={<CheckSquare className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddMaintenance}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Enregistrer le contrôle
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Domaine & Procédure de contrôle">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="Domaine" required>
+                <select
+                  value={newItem.categorie || 'Ordinateurs'}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      categorie: e.target.value as ItemMaintenance['categorie'],
+                    })
+                  }
+                  className={fieldSelectClass}
+                >
+                  {categories
+                    .filter((c) => c !== 'Tous')
+                    .map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
                     ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Type de maintenance</label>
-                  <select
-                    value={newItem.typeMaintenance}
-                    onChange={(e) => setNewItem({ ...newItem, typeMaintenance: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Préventive">Préventive</option>
-                    <option value="Corrective">Corrective</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Équipement ou périmètre concerné</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Baie serveur 1, Ensemble des postes portables..."
-                  value={newItem.responsableOuEquipement}
-                  onChange={(e) => setNewItem({ ...newItem, responsableOuEquipement: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Tâche de contrôle / Procédure</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Détail du contrôle ou de l'intervention..."
-                  value={newItem.tacheControle}
-                  onChange={(e) => setNewItem({ ...newItem, tacheControle: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Fréquence</label>
-                  <select
-                    value={newItem.frequence}
-                    onChange={(e) => setNewItem({ ...newItem, frequence: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Quotidienne">Quotidienne</option>
-                    <option value="Hebdomadaire">Hebdomadaire</option>
-                    <option value="Mensuelle">Mensuelle</option>
-                    <option value="Trimestrielle">Trimestrielle</option>
-                    <option value="Semestrielle">Semestrielle</option>
-                    <option value="Annuelle">Annuelle</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Dernier contrôle</label>
-                  <input
-                    type="date"
-                    value={newItem.dernierControle}
-                    onChange={(e) => setNewItem({ ...newItem, dernierControle: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Prochain contrôle</label>
-                  <input
-                    type="date"
-                    value={newItem.prochainControle}
-                    onChange={(e) => setNewItem({ ...newItem, prochainControle: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Observations / Résultats</label>
-                <input
-                  type="text"
-                  placeholder="Notes techniques, valeurs mesurées..."
-                  value={newItem.observations}
-                  onChange={(e) => setNewItem({ ...newItem, observations: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+                </select>
+              </FormField>
+              <FormField label="Type de maintenance" required>
+                <select
+                  value={newItem.typeMaintenance || 'Préventive'}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      typeMaintenance: e.target
+                        .value as ItemMaintenance['typeMaintenance'],
+                    })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+                  <option value="Préventive">Préventive</option>
+                  <option value="Corrective">Corrective</option>
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Équipement ou périmètre concerné" required>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Baie serveur 1, Ensemble des postes portables..."
+                value={newItem.responsableOuEquipement || ''}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    responsableOuEquipement: e.target.value,
+                  })
+                }
+                className={fieldInputClass}
+              />
+            </FormField>
+
+            <FormField label="Tâche de contrôle / Procédure" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Détail du contrôle ou de l'intervention..."
+                value={newItem.tacheControle || ''}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, tacheControle: e.target.value })
+                }
+                className={fieldTextareaClass}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection title="2. Fréquence & Conformité" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <FormField label="Fréquence">
+                <select
+                  value={newItem.frequence || 'Mensuelle'}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      frequence: e.target.value as ItemMaintenance['frequence'],
+                    })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Enregistrer
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Quotidienne">Quotidienne</option>
+                  <option value="Hebdomadaire">Hebdomadaire</option>
+                  <option value="Mensuelle">Mensuelle</option>
+                  <option value="Trimestrielle">Trimestrielle</option>
+                  <option value="Semestrielle">Semestrielle</option>
+                  <option value="Annuelle">Annuelle</option>
+                </select>
+              </FormField>
+              <FormField label="Dernier contrôle">
+                <input
+                  type="date"
+                  value={newItem.dernierControle || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, dernierControle: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Prochain contrôle">
+                <input
+                  type="date"
+                  value={newItem.prochainControle || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, prochainControle: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-end">
+              <FormField label="Statut de conformité">
+                <select
+                  value={newItem.statut || 'Conforme'}
+                  onChange={(e) => {
+                    const nextStatut = e.target.value as ItemMaintenance['statut'];
+                    setNewItem({
+                      ...newItem,
+                      statut: nextStatut,
+                      valide: nextStatut === 'Conforme',
+                    });
+                  }}
+                  className={fieldSelectClass}
+                >
+                  <option value="Conforme">Conforme</option>
+                  <option value="À traiter">À traiter</option>
+                  <option value="Anomalie mineure">Anomalie mineure</option>
+                  <option value="Critique">Critique</option>
+                </select>
+              </FormField>
+
+              <label className="flex items-center gap-2.5 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer select-none text-xs font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={Boolean(newItem.valide)}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      valide: e.target.checked,
+                      statut: e.target.checked ? 'Conforme' : 'À traiter',
+                    })
+                  }
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span>Marquer ce point comme validé conforme</span>
+              </label>
+            </div>
+
+            <FormField label="Observations / Mesures relevées">
+              <input
+                type="text"
+                placeholder="Notes techniques, valeurs mesurées..."
+                value={newItem.observations || ''}
+                onChange={(e) =>
+                  setNewItem({ ...newItem, observations: e.target.value })
+                }
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Grille des tâches de maintenance */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">

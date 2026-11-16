@@ -10,7 +10,6 @@ import {
   RefreshCw,
   CheckCircle2,
   Clock,
-  X,
   PackageCheck,
   FileDown,
 } from 'lucide-react';
@@ -20,6 +19,15 @@ import {
   getMonthlyActivitySnapshot,
 } from '../../utils/monthlyDeliverableGenerator';
 import { formatDuration } from '../../utils/durationFormatter';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface MonthlyReportsSectionProps {
   data: CahierSuiviData;
@@ -60,17 +68,6 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       setFormData(currentReport);
     }
   }, [currentReport]);
-
-  useEffect(() => {
-    if (deliveryModalMonth === null) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setDeliveryModalMonth(null);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deliveryModalMonth]);
 
   const monthSnapshot = useMemo(
     () => getMonthlyActivitySnapshot(data, selectedMonthIndex),
@@ -500,207 +497,194 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       {isEditing ? (
         <form
           onSubmit={handleSaveReport}
-          className="bg-white rounded-2xl border-2 border-blue-400 p-6 shadow-md space-y-4 text-xs"
+          className="bg-white rounded-2xl border border-blue-200 p-6 shadow-md space-y-5 text-xs"
         >
-          <h3 className="text-base font-bold text-blue-900 pb-2 border-b border-blue-100">
-            Modifier le Rapport de {formData.nomMois} {formData.annee}
-          </h3>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-200">
             <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Total interventions
-              </label>
-              <input
-                type="number"
-                value={formData.totalInterventions}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    totalInterventions: parseInt(e.target.value) || 0,
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Interventions terminées
-              </label>
-              <input
-                type="number"
-                value={formData.incidentsResolus}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    incidentsResolus: parseInt(e.target.value) || 0,
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                En cours / ouvertes
-              </label>
-              <input
-                type="number"
-                value={formData.incidentsEnCours}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    incidentsEnCours: parseInt(e.target.value) || 0,
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Temps moyen résolution (min)
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={formData.dureeMoyenneResolutionMin}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    dureeMoyenneResolutionMin: Math.max(0, parseInt(e.target.value) || 0),
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-              <span className="mt-1 inline-block text-[10px] font-medium text-slate-500">
-                Équivalent : {formatDuration(formData.dureeMoyenneResolutionMin || 0)}
-              </span>
+              <h3 className="text-base font-bold text-slate-900">
+                Modifier le Rapport de {formData.nomMois} {formData.annee}
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Ajustement manuel des indicateurs et rédaction de la synthèse mensuelle.
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Travaux & Projets réalisés
-            </label>
-            <textarea
-              rows={2}
-              value={formData.travauxRealises}
-              onChange={(e) =>
-                setFormData({ ...formData, travauxRealises: e.target.value })
-              }
-              className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-            />
-          </div>
+          <FormSection title="1. Indicateurs d'activité du mois">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <FormField label="Total interventions">
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.totalInterventions}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      totalInterventions: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Interventions terminées">
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.incidentsResolus}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      incidentsResolus: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="En cours / ouvertes">
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.incidentsEnCours}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      incidentsEnCours: parseInt(e.target.value, 10) || 0,
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField
+                label="Temps moyen (min)"
+                rightSlot={
+                  <span className="text-[11px] font-mono tabular-nums font-semibold text-blue-700">
+                    {formatDuration(formData.dureeMoyenneResolutionMin || 0)}
+                  </span>
+                }
+              >
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.dureeMoyenneResolutionMin}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      dureeMoyenneResolutionMin: Math.max(
+                        0,
+                        parseInt(e.target.value, 10) || 0
+                      ),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+          </FormSection>
 
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Maintenance effectuée
-            </label>
-            <textarea
-              rows={2}
-              value={formData.maintenanceEffectuee}
-              onChange={(e) =>
-                setFormData({ ...formData, maintenanceEffectuee: e.target.value })
-              }
-              className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-            />
-          </div>
+          <FormSection title="2. Synthèse opérationnelle & Maintenance" separated>
+            <FormField label="Travaux & Projets réalisés">
+              <textarea
+                rows={3}
+                value={formData.travauxRealises}
+                onChange={(e) =>
+                  setFormData({ ...formData, travauxRealises: e.target.value })
+                }
+                className={fieldTextareaClass}
+              />
+            </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Problèmes récurrents
-              </label>
+            <FormField label="Maintenance effectuée">
               <textarea
                 rows={2}
-                value={formData.problemesRecurrents}
+                value={formData.maintenanceEffectuee}
                 onChange={(e) =>
-                  setFormData({ ...formData, problemesRecurrents: e.target.value })
+                  setFormData({ ...formData, maintenanceEffectuee: e.target.value })
                 }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                className={fieldTextareaClass}
               />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Difficultés rencontrées
-              </label>
-              <textarea
-                rows={2}
-                value={formData.difficultesRencontrees}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    difficultesRencontrees: e.target.value,
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-          </div>
+            </FormField>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Besoins matériels & logiciels
-              </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Problèmes récurrents">
+                <textarea
+                  rows={2}
+                  value={formData.problemesRecurrents}
+                  onChange={(e) =>
+                    setFormData({ ...formData, problemesRecurrents: e.target.value })
+                  }
+                  className={fieldTextareaClass}
+                />
+              </FormField>
+              <FormField label="Difficultés rencontrées">
+                <textarea
+                  rows={2}
+                  value={formData.difficultesRencontrees}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      difficultesRencontrees: e.target.value,
+                    })
+                  }
+                  className={fieldTextareaClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="3. Besoins & Perspectives M+1" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Besoins matériels & logiciels">
+                <input
+                  type="text"
+                  value={formData.besoinsMaterielsLogiciels}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      besoinsMaterielsLogiciels: e.target.value,
+                    })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Recommandations du technicien">
+                <input
+                  type="text"
+                  value={formData.recommandationsTechnicien}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      recommandationsTechnicien: e.target.value,
+                    })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+
+            <FormField label="Activités prévues pour le mois suivant (M+1)">
               <input
                 type="text"
-                value={formData.besoinsMaterielsLogiciels}
+                value={formData.activitesMoisSuivant}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    besoinsMaterielsLogiciels: e.target.value,
+                    activitesMoisSuivant: e.target.value,
                   })
                 }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                className={fieldInputClass}
               />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">
-                Recommandations du technicien
-              </label>
-              <input
-                type="text"
-                value={formData.recommandationsTechnicien}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    recommandationsTechnicien: e.target.value,
-                  })
-                }
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          <div>
-            <label className="block font-medium text-slate-700 mb-1">
-              Activités prévues pour le mois suivant (M+1)
-            </label>
-            <input
-              type="text"
-              value={formData.activitesMoisSuivant}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  activitesMoisSuivant: e.target.value,
-                })
-              }
-              className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={() => setIsEditing(false)}
-              className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+              className={secondaryButtonClass}
             >
               Annuler
             </button>
-            <button
-              type="submit"
-              className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
-            >
+            <button type="submit" className={primaryButtonClass}>
               Enregistrer les modifications
             </button>
           </div>
@@ -1109,41 +1093,71 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       </div>
 
       {/* Modal de livraison du cahier mensuel */}
-      {deliveryModalMonth !== null && modalTargetReport && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setDeliveryModalMonth(null);
-          }}
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4"
-        >
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden text-xs">
-            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <Send className="w-4 h-4 text-blue-400" />
-                <div>
-                  <h4 className="text-sm font-bold">
-                    Livrer le Cahier Mensuel — {modalTargetReport.nomMois} {modalTargetReport.annee}
-                  </h4>
-                  <p className="text-[11px] text-slate-300">
-                    Génération du livrable mensuel et enregistrement officiel de la remise.
-                  </p>
-                </div>
+      <Modal
+        isOpen={deliveryModalMonth !== null && Boolean(modalTargetReport)}
+        onClose={() => setDeliveryModalMonth(null)}
+        title={
+          modalTargetReport
+            ? `Livrer le Cahier Mensuel — ${modalTargetReport.nomMois} ${modalTargetReport.annee}`
+            : 'Livrer le Cahier Mensuel'
+        }
+        subtitle="Génération du livrable mensuel et enregistrement officiel de la remise."
+        icon={<Send className="w-4 h-4" />}
+        size="md"
+        onSubmit={handleConfirmDelivery}
+        footer={
+          modalTargetReport ? (
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
+              <div>
+                {modalTargetReport.statutLivraison === 'Livré' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleResetDeliveryStatus(modalTargetReport.moisIndex)
+                    }
+                    className="text-xs text-rose-600 hover:text-rose-700 hover:underline font-medium"
+                  >
+                    Annuler le statut livré
+                  </button>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setDeliveryModalMonth(null)}
-                className="p-1 text-slate-400 hover:text-white rounded"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2.5 ml-auto">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryModalMonth(null)}
+                  className={secondaryButtonClass}
+                >
+                  Fermer
+                </button>
+                <button type="submit" className={primaryButtonClass}>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Confirmer et livrer</span>
+                </button>
+              </div>
             </div>
+          ) : null
+        }
+      >
+        {modalTargetReport && (() => {
+          const modalSnap = getMonthlyActivitySnapshot(
+            data,
+            modalTargetReport.moisIndex
+          );
+          return (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-blue-50/70 border border-blue-200 px-3.5 py-2.5 text-[11px] text-blue-950 flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold">
+                  Contenu consolidé pour {modalTargetReport.nomMois}
+                </span>
+                <span className="font-mono tabular-nums text-blue-800">
+                  {modalSnap.interventions.length} interv. ·{' '}
+                  {modalSnap.taches.length} tâches ·{' '}
+                  {modalSnap.maintenances.length} maint.
+                </span>
+              </div>
 
-            <form onSubmit={handleConfirmDelivery} className="p-6 space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Format / Mode de livraison
-                  </label>
+                <FormField label="Format / Mode de livraison">
                   <select
                     value={deliveryMode}
                     onChange={(e) =>
@@ -1151,108 +1165,69 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
                         e.target.value as RapportMensuel['modeLivraison']
                       )
                     }
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                    className={fieldSelectClass}
                   >
                     <option value="PDF (.pdf)">PDF (.pdf)</option>
                     <option value="Word (.docx)">Word (.docx)</option>
                     <option value="PDF & Word">PDF & Word</option>
-                    <option value="Remise directe / Email">Remise directe / Email</option>
+                    <option value="Remise directe / Email">
+                      Remise directe / Email
+                    </option>
                   </select>
-                </div>
+                </FormField>
 
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">
-                    Date de livraison
-                  </label>
+                <FormField label="Date de livraison" required>
                   <input
                     type="date"
                     required
                     value={deliveryDate}
                     onChange={(e) => setDeliveryDate(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                    className={`${fieldInputClass} font-mono`}
                   />
-                </div>
+                </FormField>
               </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Destinataire (RSI / Direction)
-                </label>
+              <FormField label="Destinataire (RSI / Direction)" required>
                 <input
                   type="text"
                   required
                   placeholder="Ex: M. le Responsable des Systèmes d'Information"
                   value={deliveryRecipient}
                   onChange={(e) => setDeliveryRecipient(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  className={fieldInputClass}
                 />
-              </div>
+              </FormField>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">
-                  Observation / Commentaire de remise (optionnel)
-                </label>
+              <FormField label="Observation / Commentaire de remise (optionnel)">
                 <textarea
                   rows={2}
                   placeholder="Ex: Transmis par mail avec synthèse des maintenances préventives et demandes d'achat..."
                   value={deliveryNote}
                   onChange={(e) => setDeliveryNote(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  className={fieldTextareaClass}
                 />
-              </div>
+              </FormField>
 
               {(deliveryMode === 'PDF (.pdf)' ||
                 deliveryMode === 'Word (.docx)' ||
                 deliveryMode === 'PDF & Word') && (
-                <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <label className="flex items-center gap-2.5 text-slate-700 cursor-pointer select-none bg-slate-50 px-3 py-2.5 rounded-lg border border-slate-200 hover:bg-slate-100/70 transition-colors">
                   <input
                     type="checkbox"
                     checked={autoDownloadOnDeliver}
                     onChange={(e) => setAutoDownloadOnDeliver(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   />
                   <span>
-                    Télécharger automatiquement le cahier mensuel ({deliveryMode}) lors de la validation
+                    Télécharger automatiquement le cahier mensuel ({deliveryMode})
+                    lors de la validation
                   </span>
                 </label>
               )}
-
-              <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-                <div>
-                  {modalTargetReport.statutLivraison === 'Livré' && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleResetDeliveryStatus(modalTargetReport.moisIndex)
-                      }
-                      className="text-red-600 hover:underline font-medium"
-                    >
-                      Annuler le statut livré
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setDeliveryModalMonth(null)}
-                    className="px-3.5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium"
-                  >
-                    Fermer
-                  </button>
-                  <button
-                    type="submit"
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs transition"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    <span>Confirmer et livrer</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+          );
+        })()}
+      </Modal>
     </div>
   );
 };

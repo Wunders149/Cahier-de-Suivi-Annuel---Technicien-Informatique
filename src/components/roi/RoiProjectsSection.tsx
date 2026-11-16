@@ -7,15 +7,11 @@ import {
   Plus,
   Trash2,
   Edit2,
-  CheckCircle2,
   Sparkles,
   BarChart2,
   ArrowUpRight,
-  ShieldAlert,
   Percent,
-  Calendar,
   Layers,
-  ChevronRight
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -26,8 +22,16 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  Cell
 } from 'recharts';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  emeraldButtonClass,
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface RoiProjectsSectionProps {
   projets: ProjetRoiIT[];
@@ -313,7 +317,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                 Mise en regard du coût d'engagement avec la création de valeur annuelle et la projection à 3 ans.
               </p>
             </div>
-            <span className="text-xs font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
+            <span className="text-xs font-mono tabular-nums font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
               Bénéfice Net Annuel : +{summary.beneficeAnnuelTotal.toLocaleString('fr-FR')} €/an
             </span>
           </div>
@@ -519,222 +523,232 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       </div>
 
       {/* Modal Ajout / Édition de Projet ROI */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-xs max-h-[90vh] overflow-y-auto">
-            <h4 className="text-base font-bold text-slate-900 dark:text-white pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <span>{editingId ? 'Modifier le Projet & Calcul de ROI' : 'Ajouter un Projet au Calcul de ROI'}</span>
-            </h4>
-
-            <form onSubmit={handleSaveProject} className="mt-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Nom du Projet informatique
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Automatisation des Masters PC Autopilot"
-                    value={formData.nomProjet}
-                    onChange={(e) => setFormData({ ...formData, nomProjet: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Catégorie
-                  </label>
-                  <select
-                    value={formData.categorie}
-                    onChange={(e) => setFormData({ ...formData, categorie: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  >
-                    <option value="Infrastructure">Infrastructure (Serveurs, Virtualisation, Baies)</option>
-                    <option value="Sécurité & Sauvegarde">Sécurité & Sauvegarde (PRA, EDR, Immuable)</option>
-                    <option value="Automatisation">Automatisation (Scripts, Déploiements, API)</option>
-                    <option value="Bureautique & Postes">Bureautique & Postes de travail (PC, Écrans)</option>
-                    <option value="Cloud & SaaS">Cloud & SaaS (Microsoft 365, Outils métiers)</option>
-                    <option value="Réseau & Télécoms">Réseau & Télécoms (Fibre, Wi-Fi, Switches)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Description succincte & Objectif opérationnel
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Ex: Remplacement du processus manuel d'installation par une stratégie Intune..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                />
-              </div>
-
-              {/* Champs financiers & gain de temps */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                  Données financières & métriques d'efficience
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Coût d'investissement (€ HT)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={50}
-                      value={formData.coutInvestissementEuros}
-                      onChange={(e) => setFormData({ ...formData, coutInvestissementEuros: Number(e.target.value) })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Matériel, licences, formation, prestation</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Économies financières directes (€ / an)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={50}
-                      value={formData.economiesFinancieresAnnuellesEuros}
-                      onChange={(e) => setFormData({ ...formData, economiesFinancieresAnnuellesEuros: Number(e.target.value) })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Coûts de licences résiliées, baisse facture élec, maintenance évitée</span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">
-                  <div>
-                    <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Gain de temps estimé (heures / an)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={0}
-                      step={5}
-                      value={formData.gainTempsEstimeHeuresParAn}
-                      onChange={(e) => setFormData({ ...formData, gainTempsEstimeHeuresParAn: Number(e.target.value) })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Heures économisées pour le technicien ou les salariés</span>
-                  </div>
-
-                  <div>
-                    <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      Taux horaire moyen valorisé (€ / heure)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={10}
-                      step={5}
-                      value={formData.tauxHoraireMoyenValorise}
-                      onChange={(e) => setFormData({ ...formData, tauxHoraireMoyenValorise: Number(e.target.value) })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono"
-                    />
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">Coût horaire moyen standard d'entreprise (défaut : 35 €/h)</span>
-                  </div>
-                </div>
-
-                {/* Calcul en direct dans le modal */}
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/50 rounded-xl border border-emerald-200 dark:border-emerald-800 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-slate-500 dark:text-slate-400 block text-[11px]">
-                      Bénéfice Annuel Total Projeté :
-                    </span>
-                    <strong className="text-emerald-700 dark:text-emerald-300 text-sm font-mono">
-                      +{liveFormMetrics.gainAnnuelTotal.toLocaleString('fr-FR')} € / an
-                    </strong>
-                  </div>
-
-                  <div className="text-right">
-                    <span className="text-slate-500 dark:text-slate-400 block text-[11px]">
-                      Amortissement & ROI 1 an :
-                    </span>
-                    <strong className="text-slate-900 dark:text-white font-mono text-sm">
-                      {liveFormMetrics.roi1An > 0 ? `+${liveFormMetrics.roi1An}%` : `${liveFormMetrics.roi1An}%`}
-                    </strong>
-                    <span className="text-[10px] text-slate-500 block">
-                      Payback : {liveFormMetrics.paybackMois} mois
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Impacts qualitatifs & Retours utilisateurs
-                </label>
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={
+          editingId
+            ? 'Modifier le Projet & Calcul de ROI'
+            : 'Ajouter un Projet au Calcul de ROI'
+        }
+        subtitle="Estimation financière des économies directes, gains de temps et délai d'amortissement."
+        icon={<TrendingUp className="w-4 h-4" />}
+        tone="emerald"
+        size="xl"
+        onSubmit={handleSaveProject}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={emeraldButtonClass}>
+              {editingId ? 'Mettre à jour le projet' : 'Enregistrer le projet'}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Identification du projet">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Nom du Projet informatique" required>
                 <input
                   type="text"
-                  placeholder="Ex: Diminution des sollicitations au helpdesk, conformité audit..."
-                  value={formData.impactQualitatif}
-                  onChange={(e) => setFormData({ ...formData, impactQualitatif: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  required
+                  placeholder="Ex: Automatisation des Masters PC Autopilot"
+                  value={formData.nomProjet || ''}
+                  onChange={(e) => setFormData({ ...formData, nomProjet: e.target.value })}
+                  className={fieldInputClass}
                 />
-              </div>
+              </FormField>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Date de mise en service
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dateMiseEnService}
-                    onChange={(e) => setFormData({ ...formData, dateMiseEnService: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-medium text-slate-700 dark:text-slate-300 mb-1">
-                    Statut du projet
-                  </label>
-                  <select
-                    value={formData.statut}
-                    onChange={(e) => setFormData({ ...formData, statut: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  >
-                    <option value="En production">En production</option>
-                    <option value="Clôturé avec succès">Clôturé avec succès</option>
-                    <option value="En cours">En cours de déploiement</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+              <FormField label="Catégorie">
+                <select
+                  value={formData.categorie || 'Automatisation'}
+                  onChange={(e) => setFormData({ ...formData, categorie: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 shadow transition"
-                >
-                  {editingId ? 'Mettre à jour le projet' : 'Enregistrer le projet'}
-                </button>
+                  <option value="Infrastructure">Infrastructure (Serveurs, Virtualisation, Baies)</option>
+                  <option value="Sécurité & Sauvegarde">Sécurité & Sauvegarde (PRA, EDR, Immuable)</option>
+                  <option value="Automatisation">Automatisation (Scripts, Déploiements, API)</option>
+                  <option value="Bureautique & Postes">Bureautique & Postes de travail (PC, Écrans)</option>
+                  <option value="Cloud & SaaS">Cloud & SaaS (Microsoft 365, Outils métiers)</option>
+                  <option value="Réseau & Télécoms">Réseau & Télécoms (Fibre, Wi-Fi, Switches)</option>
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Description succincte & Objectif opérationnel">
+              <textarea
+                rows={2}
+                placeholder="Ex: Remplacement du processus manuel d'installation par une stratégie Intune..."
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                className={fieldTextareaClass}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title="2. Données financières & métriques d'efficience"
+            separated
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField
+                label="Coût d'investissement (€ HT)"
+                required
+                hint="Matériel, licences, formation, prestation"
+              >
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={50}
+                  value={formData.coutInvestissementEuros ?? 0}
+                  onChange={(e) =>
+                    setFormData({ ...formData, coutInvestissementEuros: Number(e.target.value) })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+
+              <FormField
+                label="Économies financières directes (€ / an)"
+                required
+                hint="Coûts de licences résiliées, électricité, maintenance évitée"
+              >
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={50}
+                  value={formData.economiesFinancieresAnnuellesEuros ?? 0}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      economiesFinancieresAnnuellesEuros: Number(e.target.value),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField
+                label="Gain de temps estimé (heures / an)"
+                required
+                hint="Heures économisées pour le technicien ou les salariés"
+              >
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={5}
+                  value={formData.gainTempsEstimeHeuresParAn ?? 0}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      gainTempsEstimeHeuresParAn: Number(e.target.value),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+
+              <FormField
+                label="Taux horaire moyen valorisé (€ / heure)"
+                required
+                hint="Coût horaire moyen standard d'entreprise (défaut : 35 €/h)"
+              >
+                <input
+                  type="number"
+                  required
+                  min={10}
+                  step={5}
+                  value={formData.tauxHoraireMoyenValorise ?? 35}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      tauxHoraireMoyenValorise: Number(e.target.value),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+
+            {/* Aperçu du calcul en direct */}
+            <div className="p-3.5 bg-emerald-50 rounded-xl border border-emerald-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div>
+                <span className="text-slate-600 block text-[11px]">
+                  Bénéfice Annuel Total Projeté
+                </span>
+                <strong className="text-emerald-800 text-sm font-mono tabular-nums">
+                  +{liveFormMetrics.gainAnnuelTotal.toLocaleString('fr-FR')} € / an
+                </strong>
+                <span className="text-[11px] text-slate-500 block">
+                  dont +{liveFormMetrics.valTemps.toLocaleString('fr-FR')} € de temps valorisé
+                </span>
               </div>
-            </form>
-          </div>
+
+              <div className="text-right">
+                <span className="text-slate-600 block text-[11px]">
+                  Amortissement & ROI 1 an
+                </span>
+                <strong className="text-slate-900 font-mono tabular-nums text-sm">
+                  {liveFormMetrics.roi1An > 0
+                    ? `+${liveFormMetrics.roi1An}%`
+                    : `${liveFormMetrics.roi1An}%`}
+                </strong>
+                <span className="text-[11px] text-slate-600 block font-mono tabular-nums">
+                  Payback : {liveFormMetrics.paybackMois} mois
+                </span>
+              </div>
+            </div>
+          </FormSection>
+
+          <FormSection title="3. Retour qualitatif & Suivi" separated>
+            <FormField label="Impacts qualitatifs & Retours utilisateurs">
+              <input
+                type="text"
+                placeholder="Ex: Diminution des sollicitations au helpdesk, conformité audit..."
+                value={formData.impactQualitatif || ''}
+                onChange={(e) => setFormData({ ...formData, impactQualitatif: e.target.value })}
+                className={fieldInputClass}
+              />
+            </FormField>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Date de mise en service">
+                <input
+                  type="date"
+                  value={formData.dateMiseEnService || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, dateMiseEnService: e.target.value })
+                  }
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
+
+              <FormField label="Statut du projet">
+                <select
+                  value={formData.statut || 'En production'}
+                  onChange={(e) => setFormData({ ...formData, statut: e.target.value as any })}
+                  className={fieldSelectClass}
+                >
+                  <option value="En production">En production</option>
+                  <option value="Clôturé avec succès">Clôturé avec succès</option>
+                  <option value="En cours">En cours de déploiement</option>
+                </select>
+              </FormField>
+            </div>
+          </FormSection>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

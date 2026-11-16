@@ -1,31 +1,46 @@
 import React, { useState } from 'react';
 import { LogicielLicence } from '../../types/it-tracker';
-import { KeyRound, ShieldAlert, Plus, CheckCircle2, AlertTriangle, Lock, Users } from 'lucide-react';
+import { KeyRound, Plus, CheckCircle2, Lock } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface SoftwareLicensesSectionProps {
   licences: LogicielLicence[];
   onUpdateLicences: (licences: LogicielLicence[]) => void;
 }
 
+const DEFAULT_NEW_LICENCE = (): Partial<LogicielLicence> => ({
+  nomLogiciel: '',
+  editeur: '',
+  version: '',
+  typeLicence: 'Abonnement SaaS',
+  nombreLicencesAchetees: 10,
+  nombreLicencesAttribuees: 10,
+  dateExpiration: '2026-12-31',
+  coutRenouvellementEstime: '—',
+  procedureInstallation: 'Standard',
+  gestionComptesEtDroits: 'Synchronisation Entra ID / MFA',
+  statutConformite: 'Conforme',
+  observations: '',
+});
+
 export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = ({
   licences,
   onUpdateLicences,
 }) => {
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newLic, setNewLic] = useState<Partial<LogicielLicence>>({
-    nomLogiciel: '',
-    editeur: '',
-    version: '',
-    typeLicence: 'Abonnement SaaS',
-    nombreLicencesAchetees: 10,
-    nombreLicencesAttribuees: 10,
-    dateExpiration: '2026-12-31',
-    coutRenouvellementEstime: '—',
-    procedureInstallation: 'Standard',
-    gestionComptesEtDroits: 'Synchronisation Entra ID / MFA',
-    statutConformite: 'Conforme',
-    observations: '',
-  });
+  const [newLic, setNewLic] = useState<Partial<LogicielLicence>>(DEFAULT_NEW_LICENCE);
+
+  const openModal = () => {
+    setNewLic(DEFAULT_NEW_LICENCE());
+    setShowAddModal(true);
+  };
 
   const handleAddLicence = (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,8 +63,13 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
     };
 
     onUpdateLicences([...licences, item]);
+    setNewLic(DEFAULT_NEW_LICENCE());
     setShowAddModal(false);
   };
+
+  const seatBalance =
+    (Number(newLic.nombreLicencesAchetees) || 0) -
+    (Number(newLic.nombreLicencesAttribuees) || 0);
 
   return (
     <div className="space-y-6">
@@ -65,8 +85,9 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
           </p>
         </div>
         <button
-          onClick={() => setShowAddModal(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
+          type="button"
+          onClick={openModal}
+          className={primaryButtonClass}
         >
           <Plus className="w-4 h-4" />
           <span>Ajouter un Logiciel / Licence</span>
@@ -88,152 +109,179 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
       </div>
 
       {/* Modal d'ajout */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <KeyRound className="w-5 h-5 text-blue-600" />
-              <span>Ajouter une Licence Logicielle</span>
-            </h3>
-
-            <form onSubmit={handleAddLicence} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Nom du logiciel</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Microsoft 365, Adobe CC..."
-                    value={newLic.nomLogiciel}
-                    onChange={(e) => setNewLic({ ...newLic, nomLogiciel: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Éditeur</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Microsoft, Veeam, Adobe..."
-                    value={newLic.editeur}
-                    onChange={(e) => setNewLic({ ...newLic, editeur: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Version utilisée</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: v12.2 ou Cloud SaaS"
-                    value={newLic.version}
-                    onChange={(e) => setNewLic({ ...newLic, version: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Type de licence</label>
-                  <select
-                    value={newLic.typeLicence}
-                    onChange={(e) => setNewLic({ ...newLic, typeLicence: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Abonnement SaaS">Abonnement SaaS</option>
-                    <option value="Perpétuelle">Perpétuelle</option>
-                    <option value="Volume VL">Volume VL</option>
-                    <option value="OEM">OEM</option>
-                    <option value="Open Source">Open Source</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Licences achetées</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={newLic.nombreLicencesAchetees}
-                    onChange={(e) => setNewLic({ ...newLic, nombreLicencesAchetees: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Licences attribuées</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={newLic.nombreLicencesAttribuees}
-                    onChange={(e) => setNewLic({ ...newLic, nombreLicencesAttribuees: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date d'expiration</label>
-                  <input
-                    type="text"
-                    value={newLic.dateExpiration}
-                    onChange={(e) => setNewLic({ ...newLic, dateExpiration: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Coût renouvellement estimé</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 2 400 € / an"
-                    value={newLic.coutRenouvellementEstime}
-                    onChange={(e) => setNewLic({ ...newLic, coutRenouvellementEstime: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Gestion comptes & droits</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: RBAC / Groupes Active Directory"
-                    value={newLic.gestionComptesEtDroits}
-                    onChange={(e) => setNewLic({ ...newLic, gestionComptesEtDroits: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Procédure d'installation / déploiement</label>
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Ajouter une Licence Logicielle"
+        subtitle="Suivi de conformité, quota de postes et renouvellement annuel."
+        icon={<KeyRound className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddLicence}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Enregistrer la licence
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Identification logicielle">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Nom du logiciel" required>
                 <input
                   type="text"
-                  placeholder="Ex: Télédéploiement Intune Win32 ou GPO"
-                  value={newLic.procedureInstallation}
-                  onChange={(e) => setNewLic({ ...newLic, procedureInstallation: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  required
+                  placeholder="Ex: Microsoft 365, Adobe CC..."
+                  value={newLic.nomLogiciel || ''}
+                  onChange={(e) => setNewLic({ ...newLic, nomLogiciel: e.target.value })}
+                  className={fieldInputClass}
                 />
-              </div>
+              </FormField>
+              <FormField label="Éditeur" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Microsoft, Veeam, Adobe..."
+                  value={newLic.editeur || ''}
+                  onChange={(e) => setNewLic({ ...newLic, editeur: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Version utilisée">
+                <input
+                  type="text"
+                  placeholder="Ex: v12.2 ou Cloud SaaS"
+                  value={newLic.version || ''}
+                  onChange={(e) => setNewLic({ ...newLic, version: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Type de licence">
+                <select
+                  value={newLic.typeLicence || 'Abonnement SaaS'}
+                  onChange={(e) => setNewLic({ ...newLic, typeLicence: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+                  <option value="Abonnement SaaS">Abonnement SaaS</option>
+                  <option value="Perpétuelle">Perpétuelle</option>
+                  <option value="Volume VL">Volume VL</option>
+                  <option value="OEM">OEM</option>
+                  <option value="Open Source">Open Source</option>
+                </select>
+              </FormField>
+              <FormField label="Conformité">
+                <select
+                  value={newLic.statutConformite || 'Conforme'}
+                  onChange={(e) => setNewLic({ ...newLic, statutConformite: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Enregistrer la licence
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Conforme">Conforme</option>
+                  <option value="À renouveler">À renouveler</option>
+                  <option value="Non conforme">Non conforme</option>
+                </select>
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection
+            title="2. Quotas, Échéance & Coût"
+            separated
+            rightSlot={
+              <span
+                className={`text-[11px] font-mono tabular-nums font-semibold ${
+                  seatBalance < 0 ? 'text-rose-700' : 'text-emerald-700'
+                }`}
+              >
+                {seatBalance >= 0
+                  ? `${seatBalance} siège(s) disponible(s)`
+                  : `Surconsommation (${Math.abs(seatBalance)})`}
+              </span>
+            }
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Licences achetées">
+                <input
+                  type="number"
+                  min={0}
+                  value={newLic.nombreLicencesAchetees ?? 0}
+                  onChange={(e) =>
+                    setNewLic({ ...newLic, nombreLicencesAchetees: parseInt(e.target.value, 10) || 0 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Licences attribuées">
+                <input
+                  type="number"
+                  min={0}
+                  value={newLic.nombreLicencesAttribuees ?? 0}
+                  onChange={(e) =>
+                    setNewLic({ ...newLic, nombreLicencesAttribuees: parseInt(e.target.value, 10) || 0 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Date d'expiration" hint="Date AAAA-MM-JJ ou « Perpétuelle »">
+                <input
+                  type="text"
+                  placeholder="2026-12-31 ou Perpétuelle"
+                  value={newLic.dateExpiration || ''}
+                  onChange={(e) => setNewLic({ ...newLic, dateExpiration: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Coût renouvellement estimé">
+                <input
+                  type="text"
+                  placeholder="Ex: 2 400 € / an"
+                  value={newLic.coutRenouvellementEstime || ''}
+                  onChange={(e) =>
+                    setNewLic({ ...newLic, coutRenouvellementEstime: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Gestion comptes & droits">
+                <input
+                  type="text"
+                  placeholder="Ex: RBAC / Groupes Active Directory"
+                  value={newLic.gestionComptesEtDroits || ''}
+                  onChange={(e) =>
+                    setNewLic({ ...newLic, gestionComptesEtDroits: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+
+            <FormField label="Procédure d'installation / déploiement">
+              <input
+                type="text"
+                placeholder="Ex: Télédéploiement Intune Win32 ou GPO"
+                value={newLic.procedureInstallation || ''}
+                onChange={(e) =>
+                  setNewLic({ ...newLic, procedureInstallation: e.target.value })
+                }
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Grille des licences */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">

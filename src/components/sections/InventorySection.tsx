@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { EquipementParc } from '../../types/it-tracker';
-import { Laptop, Plus, Search, Filter, ShieldCheck, Tag, Calendar, User, MapPin, X } from 'lucide-react';
+import { Laptop, Plus, Search, X } from 'lucide-react';
 import { InventoryDataViz, categorizeEquipment } from '../inventory/InventoryDataViz';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface InventorySectionProps {
   parc: EquipementParc[];
@@ -65,6 +73,22 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
 
     onUpdateParc([item, ...parc]);
     setShowAddModal(false);
+    setNewItem({
+      numeroInventaire: getNextInventoryRef(),
+      designation: '',
+      type: 'PC Portable',
+      marqueModele: '',
+      numeroSerie: '',
+      configurationTechnique: '',
+      dateAcquisition: new Date().toISOString().split('T')[0],
+      etatMateriel: 'Bon état',
+      utilisateurResponsable: '',
+      service: '',
+      localisation: '',
+      finGarantie: '3 ans constructeur',
+      dureeVieEstimeeAns: 4,
+      historiqueInterventions: 'Mise en service initiale.',
+    });
   };
 
   const filtered = parc.filter((p) => {
@@ -168,184 +192,226 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
       </div>
 
       {/* Modal ajout matériel */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 text-xs max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <Laptop className="w-5 h-5 text-blue-600" />
-              <span>Enregistrer un Nouvel Équipement dans le Parc</span>
-            </h3>
-
-            <form onSubmit={handleAddEquipment} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">N° Inventaire (Code-barres)</label>
-                  <input
-                    type="text"
-                    required
-                    value={newItem.numeroInventaire}
-                    onChange={(e) => setNewItem({ ...newItem, numeroInventaire: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Type de matériel</label>
-                  <select
-                    value={newItem.type}
-                    onChange={(e) => setNewItem({ ...newItem, type: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="PC Portable">PC Portable</option>
-                    <option value="PC Fixe">PC Fixe</option>
-                    <option value="Serveur">Serveur</option>
-                    <option value="Écran">Écran</option>
-                    <option value="Périphérique">Périphérique (Onduleur, Dock, Scanner...)</option>
-                    <option value="Imprimante">Imprimante</option>
-                    <option value="Switch/Réseau">Switch/Réseau</option>
-                    <option value="Smartphone">Smartphone</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Désignation</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: PC Portable Dell Latitude 5540"
-                    value={newItem.designation}
-                    onChange={(e) => setNewItem({ ...newItem, designation: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Marque & Modèle précis</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Dell Latitude 5540 15 pouces"
-                    value={newItem.marqueModele}
-                    onChange={(e) => setNewItem({ ...newItem, marqueModele: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Numéro de Série (S/N / Service Tag)</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: 8XYZ123"
-                    value={newItem.numeroSerie}
-                    onChange={(e) => setNewItem({ ...newItem, numeroSerie: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">État du matériel</label>
-                  <select
-                    value={newItem.etatMateriel}
-                    onChange={(e) => setNewItem({ ...newItem, etatMateriel: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Neuf">Neuf</option>
-                    <option value="Très bon état">Très bon état</option>
-                    <option value="Bon état">Bon état</option>
-                    <option value="Dégradé">Dégradé</option>
-                    <option value="En réparation">En réparation</option>
-                    <option value="Rebut / Obsolète">Rebut / Obsolète</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Configuration Technique</label>
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Enregistrer un nouvel équipement"
+        subtitle="Ajoutez un actif informatique au référentiel CMDB du parc."
+        icon={<Laptop className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddEquipment}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddModal(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Ajouter à l'inventaire
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Identification & Matériel">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="N° Inventaire (Code-barres)" required>
                 <input
                   type="text"
-                  placeholder="CPU, RAM, Disque, OS (Ex: i7-1365U, 32 Go, 1 To NVMe, Win 11 Pro)"
-                  value={newItem.configurationTechnique}
-                  onChange={(e) => setNewItem({ ...newItem, configurationTechnique: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  required
+                  value={newItem.numeroInventaire || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, numeroInventaire: e.target.value })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
                 />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Utilisateur responsable</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Nom Prénom"
-                    value={newItem.utilisateurResponsable}
-                    onChange={(e) => setNewItem({ ...newItem, utilisateurResponsable: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Service / Département</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: RH, Finance, R&D"
-                    value={newItem.service}
-                    onChange={(e) => setNewItem({ ...newItem, service: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Localisation (Bureau)</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Bât A - Bureau 102"
-                    value={newItem.localisation}
-                    onChange={(e) => setNewItem({ ...newItem, localisation: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date d'acquisition</label>
-                  <input
-                    type="date"
-                    value={newItem.dateAcquisition}
-                    onChange={(e) => setNewItem({ ...newItem, dateAcquisition: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Fin de garantie constructeur</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: 2027-05-15 (J+1 sur site)"
-                    value={newItem.finGarantie}
-                    onChange={(e) => setNewItem({ ...newItem, finGarantie: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+              </FormField>
+              <FormField label="Type de matériel" required>
+                <select
+                  value={newItem.type || 'PC Portable'}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, type: e.target.value as EquipementParc['type'] })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded font-semibold hover:bg-blue-700"
+                  <option value="PC Portable">PC Portable</option>
+                  <option value="PC Fixe">PC Fixe</option>
+                  <option value="Serveur">Serveur</option>
+                  <option value="Écran">Écran</option>
+                  <option value="Périphérique">
+                    Périphérique (Onduleur, Dock, Scanner...)
+                  </option>
+                  <option value="Imprimante">Imprimante</option>
+                  <option value="Switch/Réseau">Switch/Réseau</option>
+                  <option value="Smartphone">Smartphone</option>
+                </select>
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="Désignation" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: PC Portable Dell Latitude 5540"
+                  value={newItem.designation || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, designation: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Marque & Modèle précis" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: Dell Latitude 5540 15 pouces"
+                  value={newItem.marqueModele || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, marqueModele: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="Numéro de Série (S/N)" required>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ex: 8XYZ123"
+                  value={newItem.numeroSerie || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, numeroSerie: e.target.value })
+                  }
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
+              <FormField label="État du matériel">
+                <select
+                  value={newItem.etatMateriel || 'Bon état'}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      etatMateriel: e.target.value as EquipementParc['etatMateriel'],
+                    })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Ajouter à l'inventaire
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Neuf">Neuf</option>
+                  <option value="Très bon état">Très bon état</option>
+                  <option value="Bon état">Bon état</option>
+                  <option value="Dégradé">Dégradé</option>
+                  <option value="En réparation">En réparation</option>
+                  <option value="Rebut / Obsolète">Rebut / Obsolète</option>
+                </select>
+              </FormField>
+            </div>
+
+            <FormField
+              label="Configuration technique"
+              hint="Processeur, mémoire vive, stockage, système d'exploitation."
+            >
+              <input
+                type="text"
+                placeholder="Ex: i7-1365U, 32 Go RAM, 1 To NVMe, Windows 11 Pro"
+                value={newItem.configurationTechnique || ''}
+                onChange={(e) =>
+                  setNewItem({
+                    ...newItem,
+                    configurationTechnique: e.target.value,
+                  })
+                }
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection title="2. Affectation & Cycle de vie" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <FormField label="Utilisateur responsable">
+                <input
+                  type="text"
+                  placeholder="Ex: Nom Prénom"
+                  value={newItem.utilisateurResponsable || ''}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      utilisateurResponsable: e.target.value,
+                    })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Service / Département">
+                <input
+                  type="text"
+                  placeholder="Ex: RH, Finance, R&D"
+                  value={newItem.service || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, service: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Localisation (Bureau)">
+                <input
+                  type="text"
+                  placeholder="Ex: Bât A - Bureau 102"
+                  value={newItem.localisation || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, localisation: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <FormField label="Date d'acquisition">
+                <input
+                  type="date"
+                  value={newItem.dateAcquisition || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, dateAcquisition: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Fin de garantie constructeur">
+                <input
+                  type="text"
+                  placeholder="Ex: 2027-05-15 (J+1)"
+                  value={newItem.finGarantie || ''}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, finGarantie: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Durée de vie estimée (ans)">
+                <input
+                  type="number"
+                  min={1}
+                  max={15}
+                  value={newItem.dureeVieEstimeeAns ?? 4}
+                  onChange={(e) =>
+                    setNewItem({
+                      ...newItem,
+                      dureeVieEstimeeAns: Math.max(1, parseInt(e.target.value, 10) || 4),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Tableau d'inventaire */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">

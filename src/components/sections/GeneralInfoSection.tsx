@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { CahierSuiviData, GeneralInfo } from '../../types/it-tracker';
 import { ShieldCheck, UserCheck, Building, Phone, Mail, Edit3, Check, FileText } from 'lucide-react';
 import { DashboardStats } from '../dashboard/DashboardStats';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface GeneralInfoSectionProps {
   data: CahierSuiviData;
@@ -64,134 +70,144 @@ export const GeneralInfoSection: React.FC<GeneralInfoSectionProps> = ({
 
       {/* Mode formulaire d'édition */}
       {isEditing ? (
-        <form onSubmit={handleSave} className="bg-white rounded-xl border border-blue-200 shadow-sm p-6 space-y-4">
-          <h3 className="text-base font-semibold text-blue-900 border-b border-blue-100 pb-2">
-            Modifier les données de la page de garde
-          </h3>
+        <form onSubmit={handleSave} className="bg-white rounded-2xl border border-blue-200 shadow-sm p-6 space-y-5">
+          <div className="border-b border-slate-200 pb-3">
+            <h3 className="text-base font-bold text-slate-900">
+              Modifier les données de la page de garde
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Informations officielles affichées sur la couverture du cahier et les exports PDF / Word.
+            </p>
+          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Année de référence</label>
-              <input
-                type="number"
-                value={formData.anneeReference}
-                onChange={(e) => setFormData({ ...formData, anneeReference: parseInt(e.target.value) || 2026 })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
+          <FormSection title="1. Identité & Poste">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <FormField label="Année de référence" required>
+                <input
+                  type="number"
+                  required
+                  value={formData.anneeReference}
+                  onChange={(e) =>
+                    setFormData({ ...formData, anneeReference: parseInt(e.target.value, 10) || 2026 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Prénom du technicien" required>
+                <input
+                  type="text"
+                  required
+                  value={formData.prenomTechnicien}
+                  onChange={(e) => setFormData({ ...formData, prenomTechnicien: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Nom du technicien" required>
+                <input
+                  type="text"
+                  required
+                  value={formData.nomTechnicien}
+                  onChange={(e) => setFormData({ ...formData, nomTechnicien: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Date de prise de fonction">
+                <input
+                  type="date"
+                  value={formData.datePriseFonction}
+                  onChange={(e) => setFormData({ ...formData, datePriseFonction: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
             </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Prénom du technicien</label>
-              <input
-                type="text"
-                value={formData.prenomTechnicien}
-                onChange={(e) => setFormData({ ...formData, prenomTechnicien: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Nom du technicien</label>
-              <input
-                type="text"
-                value={formData.nomTechnicien}
-                onChange={(e) => setFormData({ ...formData, nomTechnicien: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Fonction exacte</label>
+
+            <FormField label="Fonction exacte">
               <input
                 type="text"
                 value={formData.fonction}
                 onChange={(e) => setFormData({ ...formData, fonction: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
+                className={fieldInputClass}
               />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Département / Service</label>
-              <input
-                type="text"
-                value={formData.departement}
-                onChange={(e) => setFormData({ ...formData, departement: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Nom de l'entreprise</label>
-              <input
-                type="text"
-                value={formData.entreprise}
-                onChange={(e) => setFormData({ ...formData, entreprise: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Nom du responsable (RSI / DSI)</label>
-              <input
-                type="text"
-                value={formData.responsableHierarchique}
-                onChange={(e) => setFormData({ ...formData, responsableHierarchique: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Titre du responsable</label>
-              <input
-                type="text"
-                value={formData.titreResponsable}
-                onChange={(e) => setFormData({ ...formData, titreResponsable: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Date de prise de fonction</label>
-              <input
-                type="date"
-                value={formData.datePriseFonction}
-                onChange={(e) => setFormData({ ...formData, datePriseFonction: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Téléphone pro</label>
-              <input
-                type="text"
-                value={formData.telephonePro}
-                onChange={(e) => setFormData({ ...formData, telephonePro: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Email pro</label>
-              <input
-                type="email"
-                value={formData.emailPro}
-                onChange={(e) => setFormData({ ...formData, emailPro: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Localisation atelier / bureau</label>
-              <input
-                type="text"
-                value={formData.localisationBureau}
-                onChange={(e) => setFormData({ ...formData, localisationBureau: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 text-slate-900"
-              />
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-slate-200">
+          <FormSection title="2. Organisation & Rattachement" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="Nom de l'entreprise">
+                <input
+                  type="text"
+                  value={formData.entreprise}
+                  onChange={(e) => setFormData({ ...formData, entreprise: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Département / Service">
+                <input
+                  type="text"
+                  value={formData.departement}
+                  onChange={(e) => setFormData({ ...formData, departement: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Nom du responsable (RSI / DSI)">
+                <input
+                  type="text"
+                  value={formData.responsableHierarchique}
+                  onChange={(e) =>
+                    setFormData({ ...formData, responsableHierarchique: e.target.value })
+                  }
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Titre du responsable">
+                <input
+                  type="text"
+                  value={formData.titreResponsable}
+                  onChange={(e) => setFormData({ ...formData, titreResponsable: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="3. Coordonnées professionnelles" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <FormField label="Téléphone pro">
+                <input
+                  type="text"
+                  value={formData.telephonePro}
+                  onChange={(e) => setFormData({ ...formData, telephonePro: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Email pro">
+                <input
+                  type="email"
+                  value={formData.emailPro}
+                  onChange={(e) => setFormData({ ...formData, emailPro: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Localisation atelier / bureau">
+                <input
+                  type="text"
+                  value={formData.localisationBureau}
+                  onChange={(e) => setFormData({ ...formData, localisationBureau: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
             <button
               type="button"
               onClick={() => setIsEditing(false)}
-              className="px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded"
+              className={secondaryButtonClass}
             >
               Annuler
             </button>
-            <button
-              type="submit"
-              className="px-4 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded shadow"
-            >
+            <button type="submit" className={primaryButtonClass}>
               Enregistrer les modifications
             </button>
           </div>

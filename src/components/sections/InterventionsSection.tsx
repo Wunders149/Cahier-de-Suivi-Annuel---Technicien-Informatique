@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   FicheIntervention,
   GeneralInfo,
@@ -18,7 +18,6 @@ import {
   FileText,
   Edit3,
   Trash2,
-  X,
   Layers,
   Clock,
   User,
@@ -36,6 +35,15 @@ import {
   formatInterventionStatusLabel,
   getInterventionVocabulary,
 } from '../../utils/interventionLabels';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface InterventionsSectionProps {
   interventions: FicheIntervention[];
@@ -100,17 +108,6 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
 
   const selectedIntervention =
     interventions.find((it) => it.id === selectedId) || interventions[0] || null;
-
-  useEffect(() => {
-    if (!showModal) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowModal(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showModal]);
 
   const notify = (msg: string) => {
     if (onShowToast) onShowToast(msg);
@@ -394,7 +391,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
         <button
           type="button"
           onClick={openCreateModal}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs transition"
+          className={primaryButtonClass}
         >
           <Plus className="w-4 h-4" />
           <span>Nouvelle Fiche d'Intervention</span>
@@ -487,500 +484,465 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       </div>
 
       {/* Modal de création / édition de fiche */}
-      {showModal && (
-        <div
-          onClick={() => setShowModal(false)}
-          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white rounded-2xl max-w-4xl w-full shadow-2xl border border-slate-200 max-h-[92vh] flex flex-col overflow-hidden"
-          >
-            <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-blue-600" />
-                <span>
-                  {editingId
-                    ? `Modifier la Fiche ${formTicket.numeroReference}`
-                    : "Nouvelle Fiche d'Intervention"}
-                </span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition"
-                aria-label="Fermer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleSaveTicket}
-              className="p-6 space-y-5 text-xs overflow-y-auto flex-1"
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={
+          editingId
+            ? `Modifier la Fiche ${formTicket.numeroReference}`
+            : "Nouvelle Fiche d'Intervention"
+        }
+        subtitle="Qualification technique, diagnostic, temps de résolution et détail par unité."
+        icon={<Wrench className="w-4 h-4" />}
+        size="2xl"
+        onSubmit={handleSaveTicket}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowModal(false)}
+              className={secondaryButtonClass}
             >
-              {(() => {
-                const modalVocab = getInterventionVocabulary(
-                  formTicket.natureIntervention
-                );
-                return (
-                  <>
-                    {/* Bloc 1 : Contexte & Identification */}
-                    <div className="space-y-3">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        1. Contexte & Identification
-                      </div>
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              {editingId ? 'Enregistrer les modifications' : 'Créer la fiche'}
+            </button>
+          </>
+        }
+      >
+        {(() => {
+          const modalVocab = getInterventionVocabulary(
+            formTicket.natureIntervention
+          );
+          const parts = splitDurationMinutes(formTicket.tempsConsacreMin ?? 30);
+          const durationPresets = [
+            { label: '15m', minutes: 15 },
+            { label: '30m', minutes: 30 },
+            { label: '1h', minutes: 60 },
+            { label: '2h', minutes: 120 },
+            { label: '1j', minutes: 1440 },
+            { label: '2j', minutes: 2880 },
+          ];
 
-                      {/* Sélecteur de nature d'intervention */}
-                      <div>
-                        <label className="block font-medium text-slate-700 mb-1.5">
-                          Nature de l'intervention
-                        </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                          {NATURE_OPTIONS.map((opt) => {
-                            const active =
-                              (formTicket.natureIntervention ||
-                                'Incident / Dépannage') === opt;
-                            return (
-                              <button
-                                key={opt}
-                                type="button"
-                                onClick={() =>
-                                  setFormTicket({
-                                    ...formTicket,
-                                    natureIntervention: opt,
-                                  })
-                                }
-                                className={`px-3 py-2 rounded-lg border text-left font-semibold transition ${
-                                  active
-                                    ? 'bg-blue-50 border-blue-500 text-blue-900 ring-1 ring-blue-400/50'
-                                    : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
-                                }`}
-                              >
-                                {opt}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Date de l'intervention
-                          </label>
-                          <input
-                            type="date"
-                            required
-                            value={formTicket.dateReception || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                dateReception: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Heure
-                          </label>
-                          <input
-                            type="time"
-                            required
-                            value={formTicket.heureReception || '10:00'}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                heureReception: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Type
-                          </label>
-                          <select
-                            value={
-                              formTicket.type ||
-                              formTicket.typeIntervention ||
-                              'Matériel'
-                            }
-                            onChange={(e) => {
-                              const nextType = e.target.value as InterventionType;
-                              setFormTicket({
-                                ...formTicket,
-                                type: nextType,
-                                typeIntervention: nextType,
-                              });
-                            }}
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          >
-                            {INTERVENTION_TYPES.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Priorité
-                          </label>
-                          <select
-                            value={formTicket.priorite || 'Normale'}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                priorite: e.target
-                                  .value as FicheIntervention['priorite'],
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          >
-                            <option value="Critique">Critique</option>
-                            <option value="Haute">Haute</option>
-                            <option value="Normale">Normale</option>
-                            <option value="Basse">Basse</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Nom du demandeur *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Jean DUPONT, Direction Flotte..."
-                            value={formTicket.nomDemandeur || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                nomDemandeur: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Service / Département concerné
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Opérations Maritimes, Sûreté..."
-                            value={formTicket.serviceDemandeur || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                serviceDemandeur: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            {modalVocab.equipmentsRowLabel}
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="Ex: Navires FANJAVA 7 & 5, PC Portable..."
-                            value={formTicket.equipementConcerne || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                equipementConcerne: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Intitulé du domaine rapport (optionnel)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Ex: GÉOLOCALISATION SATELLITE & SÉCURITÉ FLOTTE"
-                            value={formTicket.domaineTitre || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                domaineTitre: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            Objet / Sous-titre du rapport (optionnel)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Ex: Installation des balises GPS SPOT Trace..."
-                            value={formTicket.titreRapport || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                titreRapport: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Bloc 2 : Détails techniques, Étapes & Recommandations */}
-                    <div className="space-y-3 pt-4 border-t border-slate-200">
-                      <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                        2. {modalVocab.summaryHeading.replace(/^\d+\.\s*/, '')} & Réalisation
-                      </div>
-
-                      <div>
-                        <label className="block font-medium text-slate-700 mb-1">
-                          {modalVocab.descriptionLabel}
-                        </label>
-                        <textarea
-                          rows={2}
-                          required
-                          placeholder={modalVocab.descriptionPlaceholder}
-                          value={formTicket.descriptionPanne || ''}
-                          onChange={(e) =>
+          return (
+            <div className="space-y-6">
+              {/* Bloc 1 : Contexte & Identification */}
+              <FormSection title="1. Contexte & Identification">
+                <FormField label="Nature de l'intervention">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {NATURE_OPTIONS.map((opt) => {
+                      const active =
+                        (formTicket.natureIntervention || 'Incident / Dépannage') === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() =>
                             setFormTicket({
                               ...formTicket,
-                              descriptionPanne: e.target.value,
+                              natureIntervention: opt,
                             })
                           }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
+                          className={`px-3 py-2 rounded-lg border text-left text-xs font-semibold transition-colors ${
+                            active
+                              ? 'bg-blue-50 border-blue-600 text-blue-900 ring-1 ring-blue-500/30'
+                              : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {opt}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </FormField>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            {modalVocab.diagnosticLabel}
-                          </label>
-                          <textarea
-                            rows={2}
-                            placeholder={modalVocab.diagnosticPlaceholder}
-                            value={formTicket.diagnosticTechnique || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                diagnosticTechnique: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <div>
-                          <label className="block font-medium text-slate-700 mb-1">
-                            {modalVocab.causeLabel}
-                          </label>
-                          <textarea
-                            rows={2}
-                            placeholder={modalVocab.causePlaceholder}
-                            value={formTicket.causeIdentifiee || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                causeIdentifiee: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <FormField label="Date de l'intervention" required>
+                    <input
+                      type="date"
+                      required
+                      value={formTicket.dateReception || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          dateReception: e.target.value,
+                        })
+                      }
+                      className={`${fieldInputClass} font-mono`}
+                    />
+                  </FormField>
+                  <FormField label="Heure" required>
+                    <input
+                      type="time"
+                      required
+                      value={formTicket.heureReception || '10:00'}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          heureReception: e.target.value,
+                        })
+                      }
+                      className={`${fieldInputClass} font-mono`}
+                    />
+                  </FormField>
+                  <FormField label="Type">
+                    <select
+                      value={
+                        formTicket.type ||
+                        formTicket.typeIntervention ||
+                        'Matériel'
+                      }
+                      onChange={(e) => {
+                        const nextType = e.target.value as InterventionType;
+                        setFormTicket({
+                          ...formTicket,
+                          type: nextType,
+                          typeIntervention: nextType,
+                        });
+                      }}
+                      className={fieldSelectClass}
+                    >
+                      {INTERVENTION_TYPES.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </FormField>
+                  <FormField label="Priorité">
+                    <select
+                      value={formTicket.priorite || 'Normale'}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          priorite: e.target.value as FicheIntervention['priorite'],
+                        })
+                      }
+                      className={fieldSelectClass}
+                    >
+                      <option value="Critique">Critique</option>
+                      <option value="Haute">Haute</option>
+                      <option value="Normale">Normale</option>
+                      <option value="Basse">Basse</option>
+                    </select>
+                  </FormField>
+                </div>
 
-                      <div>
-                        <label className="block font-medium text-slate-700 mb-1">
-                          {modalVocab.solutionLabel}
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder={modalVocab.solutionPlaceholder}
-                          value={formTicket.solutionAppliquee || ''}
-                          onChange={(e) =>
-                            setFormTicket({
-                              ...formTicket,
-                              solutionAppliquee: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <FormField label="Nom du demandeur" required>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Jean DUPONT, Direction Flotte..."
+                      value={formTicket.nomDemandeur || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          nomDemandeur: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                  <FormField label="Service / Département concerné" required>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Opérations Maritimes, Sûreté..."
+                      value={formTicket.serviceDemandeur || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          serviceDemandeur: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                  <FormField label={modalVocab.equipmentsRowLabel} required>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Ex: Navires FANJAVA 7 & 5, PC Portable..."
+                      value={formTicket.equipementConcerne || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          equipementConcerne: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                </div>
 
-                      <div>
-                        <label className="block font-medium text-slate-700 mb-1">
-                          {modalVocab.analysisFieldLabel}
-                        </label>
-                        <textarea
-                          rows={3}
-                          placeholder={modalVocab.analysisPlaceholder}
-                          value={formTicket.analyseCauseRacine || ''}
-                          onChange={(e) =>
-                            setFormTicket({
-                              ...formTicket,
-                              analyseCauseRacine: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField label="Intitulé du domaine rapport (optionnel)">
+                    <input
+                      type="text"
+                      placeholder="Ex: GÉOLOCALISATION SATELLITE & SÉCURITÉ FLOTTE"
+                      value={formTicket.domaineTitre || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          domaineTitre: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                  <FormField label="Objet / Sous-titre du rapport (optionnel)">
+                    <input
+                      type="text"
+                      placeholder="Ex: Installation des balises GPS SPOT Trace..."
+                      value={formTicket.titreRapport || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          titreRapport: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                </div>
+              </FormSection>
 
-                      <div>
-                        <label className="block font-medium text-slate-700 mb-1">
-                          {modalVocab.recommandationsTitle} (optionnel)
-                        </label>
-                        <textarea
-                          rows={2}
-                          placeholder={modalVocab.recommandationsPlaceholder}
-                          value={formTicket.recommandations || ''}
-                          onChange={(e) =>
-                            setFormTicket({
-                              ...formTicket,
-                              recommandations: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        />
-                      </div>
+              {/* Bloc 2 : Détails techniques, Étapes & Recommandations */}
+              <FormSection
+                title={`2. ${modalVocab.summaryHeading.replace(/^\d+\.\s*/, '')} & Réalisation`}
+                separated
+              >
+                <FormField label={modalVocab.descriptionLabel} required>
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder={modalVocab.descriptionPlaceholder}
+                    value={formTicket.descriptionPanne || ''}
+                    onChange={(e) =>
+                      setFormTicket({
+                        ...formTicket,
+                        descriptionPanne: e.target.value,
+                      })
+                    }
+                    className={fieldTextareaClass}
+                  />
+                </FormField>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                        <div className="sm:col-span-5">
-                          <label className="block font-medium text-slate-700 mb-1">
-                            {modalVocab.materialLabel}
-                          </label>
-                          <input
-                            type="text"
-                            placeholder={modalVocab.materialPlaceholder}
-                            value={formTicket.materielLogicielUtilise || ''}
-                            onChange={(e) =>
-                              setFormTicket({
-                                ...formTicket,
-                                materielLogicielUtilise: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                          />
-                        </div>
-                  <div className="sm:col-span-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block font-medium text-slate-700">
-                        Temps de résolution
-                      </label>
-                      <span className="text-[11px] font-mono font-semibold text-blue-700">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <FormField label={modalVocab.diagnosticLabel}>
+                    <textarea
+                      rows={2}
+                      placeholder={modalVocab.diagnosticPlaceholder}
+                      value={formTicket.diagnosticTechnique || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          diagnosticTechnique: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                  <FormField label={modalVocab.causeLabel}>
+                    <textarea
+                      rows={2}
+                      placeholder={modalVocab.causePlaceholder}
+                      value={formTicket.causeIdentifiee || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          causeIdentifiee: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                </div>
+
+                <FormField label={modalVocab.solutionLabel}>
+                  <textarea
+                    rows={2}
+                    placeholder={modalVocab.solutionPlaceholder}
+                    value={formTicket.solutionAppliquee || ''}
+                    onChange={(e) =>
+                      setFormTicket({
+                        ...formTicket,
+                        solutionAppliquee: e.target.value,
+                      })
+                    }
+                    className={fieldTextareaClass}
+                  />
+                </FormField>
+
+                <FormField label={modalVocab.analysisFieldLabel}>
+                  <textarea
+                    rows={3}
+                    placeholder={modalVocab.analysisPlaceholder}
+                    value={formTicket.analyseCauseRacine || ''}
+                    onChange={(e) =>
+                      setFormTicket({
+                        ...formTicket,
+                        analyseCauseRacine: e.target.value,
+                      })
+                    }
+                    className={fieldTextareaClass}
+                  />
+                </FormField>
+
+                <FormField label={`${modalVocab.recommandationsTitle} (optionnel)`}>
+                  <textarea
+                    rows={2}
+                    placeholder={modalVocab.recommandationsPlaceholder}
+                    value={formTicket.recommandations || ''}
+                    onChange={(e) =>
+                      setFormTicket({
+                        ...formTicket,
+                        recommandations: e.target.value,
+                      })
+                    }
+                    className={fieldTextareaClass}
+                  />
+                </FormField>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start">
+                  <FormField label={modalVocab.materialLabel} className="sm:col-span-5">
+                    <input
+                      type="text"
+                      placeholder={modalVocab.materialPlaceholder}
+                      value={formTicket.materielLogicielUtilise || ''}
+                      onChange={(e) =>
+                        setFormTicket({
+                          ...formTicket,
+                          materielLogicielUtilise: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Temps de résolution"
+                    className="sm:col-span-4"
+                    rightSlot={
+                      <span className="text-[11px] font-mono tabular-nums font-semibold text-blue-700">
                         {formatDuration(formTicket.tempsConsacreMin ?? 30)}
                       </span>
-                    </div>
-                    {(() => {
-                      const parts = splitDurationMinutes(
-                        formTicket.tempsConsacreMin ?? 30
-                      );
-                      return (
-                        <div className="grid grid-cols-3 gap-1.5">
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min={0}
-                              value={parts.days}
-                              onChange={(e) => {
-                                const nextDays = Math.max(
-                                  0,
-                                  parseInt(e.target.value, 10) || 0
-                                );
-                                setFormTicket({
-                                  ...formTicket,
-                                  tempsConsacreMin: combineDurationToMinutes(
-                                    nextDays,
-                                    parts.hours,
-                                    parts.minutes
-                                  ),
-                                });
-                              }}
-                              aria-label="Jours"
-                              className="w-full pl-2.5 pr-6 py-2 rounded-lg border border-slate-300 text-slate-900 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <span className="absolute right-2 top-2 text-[11px] text-slate-400 pointer-events-none">
-                              j
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min={0}
-                              max={23}
-                              value={parts.hours}
-                              onChange={(e) => {
-                                const nextHours = Math.max(
-                                  0,
-                                  parseInt(e.target.value, 10) || 0
-                                );
-                                setFormTicket({
-                                  ...formTicket,
-                                  tempsConsacreMin: combineDurationToMinutes(
-                                    parts.days,
-                                    nextHours,
-                                    parts.minutes
-                                  ),
-                                });
-                              }}
-                              aria-label="Heures"
-                              className="w-full pl-2.5 pr-6 py-2 rounded-lg border border-slate-300 text-slate-900 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <span className="absolute right-2 top-2 text-[11px] text-slate-400 pointer-events-none">
-                              h
-                            </span>
-                          </div>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              min={0}
-                              max={59}
-                              value={parts.minutes}
-                              onChange={(e) => {
-                                const nextMins = Math.max(
-                                  0,
-                                  parseInt(e.target.value, 10) || 0
-                                );
-                                setFormTicket({
-                                  ...formTicket,
-                                  tempsConsacreMin: combineDurationToMinutes(
-                                    parts.days,
-                                    parts.hours,
-                                    nextMins
-                                  ),
-                                });
-                              }}
-                              aria-label="Minutes"
-                              className="w-full pl-2.5 pr-8 py-2 rounded-lg border border-slate-300 text-slate-900 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                            />
-                            <span className="absolute right-2 top-2 text-[11px] text-slate-400 pointer-events-none">
-                              min
-                            </span>
-                          </div>
+                    }
+                  >
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            value={parts.days}
+                            onChange={(e) => {
+                              const nextDays = Math.max(
+                                0,
+                                parseInt(e.target.value, 10) || 0
+                              );
+                              setFormTicket({
+                                ...formTicket,
+                                tempsConsacreMin: combineDurationToMinutes(
+                                  nextDays,
+                                  parts.hours,
+                                  parts.minutes
+                                ),
+                              });
+                            }}
+                            aria-label="Jours"
+                            className={`${fieldInputClass} pl-2.5 pr-6 font-mono tabular-nums`}
+                          />
+                          <span className="absolute right-2 top-2.5 text-[11px] text-slate-400 pointer-events-none">
+                            j
+                          </span>
                         </div>
-                      );
-                    })()}
-                  </div>
-                  <div className="sm:col-span-3">
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Statut / Résultat
-                    </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={23}
+                            value={parts.hours}
+                            onChange={(e) => {
+                              const nextHours = Math.max(
+                                0,
+                                parseInt(e.target.value, 10) || 0
+                              );
+                              setFormTicket({
+                                ...formTicket,
+                                tempsConsacreMin: combineDurationToMinutes(
+                                  parts.days,
+                                  nextHours,
+                                  parts.minutes
+                                ),
+                              });
+                            }}
+                            aria-label="Heures"
+                            className={`${fieldInputClass} pl-2.5 pr-6 font-mono tabular-nums`}
+                          />
+                          <span className="absolute right-2 top-2.5 text-[11px] text-slate-400 pointer-events-none">
+                            h
+                          </span>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            min={0}
+                            max={59}
+                            value={parts.minutes}
+                            onChange={(e) => {
+                              const nextMins = Math.max(
+                                0,
+                                parseInt(e.target.value, 10) || 0
+                              );
+                              setFormTicket({
+                                ...formTicket,
+                                tempsConsacreMin: combineDurationToMinutes(
+                                  parts.days,
+                                  parts.hours,
+                                  nextMins
+                                ),
+                              });
+                            }}
+                            aria-label="Minutes"
+                            className={`${fieldInputClass} pl-2.5 pr-8 font-mono tabular-nums`}
+                          />
+                          <span className="absolute right-2 top-2.5 text-[11px] text-slate-400 pointer-events-none">
+                            min
+                          </span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {durationPresets.map((preset) => {
+                          const isCurrent =
+                            (formTicket.tempsConsacreMin ?? 30) === preset.minutes;
+                          return (
+                            <button
+                              key={preset.label}
+                              type="button"
+                              onClick={() =>
+                                setFormTicket({
+                                  ...formTicket,
+                                  tempsConsacreMin: preset.minutes,
+                                })
+                              }
+                              className={`px-1.5 py-0.5 rounded border text-[10px] font-mono tabular-nums transition-colors ${
+                                isCurrent
+                                  ? 'bg-blue-600 text-white border-blue-600 font-semibold'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </FormField>
+
+                  <FormField label="Statut / Résultat" className="sm:col-span-3">
                     <select
                       value={formTicket.resultat || 'Résolu'}
                       onChange={(e) =>
@@ -989,7 +951,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                           resultat: e.target.value as FicheIntervention['resultat'],
                         })
                       }
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                      className={fieldSelectClass}
                     >
                       <option value="Résolu">
                         {formTicket.natureIntervention ===
@@ -1002,185 +964,164 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       <option value="Escaladé N3">Escaladé N3</option>
                       <option value="Non résolu">Non résolu</option>
                     </select>
-                  </div>
+                  </FormField>
                 </div>
+              </FormSection>
+
+              {/* Bloc 3 : Détail par équipement / unité (Optionnel) */}
+              <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-bold text-slate-900 flex items-center gap-1.5 text-[13px]">
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      <span>
+                        {modalVocab.equipmentsHeading.replace(/^\d+\.\s*/, '')} (optionnel)
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {modalVocab.equipmentsSubtitle}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddEquipementRow}
+                    className={secondaryButtonClass}
+                  >
+                    <Plus className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Ajouter une unité / équipement</span>
+                  </button>
+                </div>
+
+                {(formTicket.detailEquipements || []).map((eq, idx) => (
+                  <div
+                    key={eq.id}
+                    className="bg-white rounded-xl border border-slate-200 p-4 space-y-2.5 shadow-2xs"
+                  >
+                    <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                      <span className="font-bold text-slate-900 text-xs">
+                        {modalVocab.equipmentItemPrefix} #{idx + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveEquipementRow(eq.id)}
+                        className="text-rose-600 hover:text-rose-700 text-[11px] font-medium inline-flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Retirer</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Ex: Navire FANJAVA 7, Caméra 01..."
+                        value={eq.equipement}
+                        onChange={(e) =>
+                          handleUpdateEquipementRow(eq.id, {
+                            equipement: e.target.value,
+                          })
+                        }
+                        className={`${fieldInputClass} font-semibold`}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Équipement installé / Objet sur cette unité"
+                        value={eq.titre}
+                        onChange={(e) =>
+                          handleUpdateEquipementRow(eq.id, { titre: e.target.value })
+                        }
+                        className={`${fieldInputClass} sm:col-span-2`}
+                      />
+                    </div>
+
+                    <textarea
+                      rows={2}
+                      placeholder={modalVocab.equipmentDiagPlaceholder}
+                      value={eq.constatDiagnostic}
+                      onChange={(e) =>
+                        handleUpdateEquipementRow(eq.id, {
+                          constatDiagnostic: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+
+                    <textarea
+                      rows={2}
+                      placeholder={modalVocab.equipmentActionsPlaceholder}
+                      value={(eq.actionsCorrectives || []).join('\n')}
+                      onChange={(e) =>
+                        handleUpdateEquipementRow(eq.id, {
+                          actionsCorrectives: e.target.value.split('\n'),
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Résumé opérations (tableau)"
+                        value={eq.operationsResume || ''}
+                        onChange={(e) =>
+                          handleUpdateEquipementRow(eq.id, {
+                            operationsResume: e.target.value,
+                          })
+                        }
+                        className={fieldInputClass}
+                      />
+                      <input
+                        type="text"
+                        placeholder={modalVocab.comparisonMatCol}
+                        value={eq.materielSpecifique}
+                        onChange={(e) =>
+                          handleUpdateEquipementRow(eq.id, {
+                            materielSpecifique: e.target.value,
+                          })
+                        }
+                        className={fieldInputClass}
+                      />
+                      <select
+                        value={eq.statut}
+                        onChange={(e) =>
+                          handleUpdateEquipementRow(eq.id, {
+                            statut: e.target
+                              .value as InterventionEquipementDetail['statut'],
+                          })
+                        }
+                        className={fieldSelectClass}
+                      >
+                        <option value="Résolu">
+                          {formTicket.natureIntervention ===
+                          'Déploiement / Installation'
+                            ? 'Opérationnel / Validé'
+                            : 'Résolu'}
+                        </option>
+                        <option value="En cours">En cours</option>
+                        <option value="En attente pièce">En attente pièce</option>
+                        <option value="Escaladé N3">Escaladé N3</option>
+                        <option value="Non résolu">Non résolu</option>
+                      </select>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Résultat des tests / validation sur cette unité"
+                      value={eq.resultatDetail || ''}
+                      onChange={(e) =>
+                        handleUpdateEquipementRow(eq.id, {
+                          resultatDetail: e.target.value,
+                        })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </div>
+                ))}
               </div>
-
-                      {/* Bloc 3 : Détail par équipement / unité (Optionnel) */}
-                      <div className="bg-slate-50 rounded-xl border border-slate-200 p-4 space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h4 className="font-bold text-slate-900 flex items-center gap-1.5">
-                              <Layers className="w-4 h-4 text-blue-600" />
-                              <span>
-                                {modalVocab.equipmentsHeading.replace(/^\d+\.\s*/, '')} (optionnel)
-                              </span>
-                            </h4>
-                            <p className="text-[11px] text-slate-500">
-                              {modalVocab.equipmentsSubtitle}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleAddEquipementRow}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 font-semibold transition"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Ajouter une unité / équipement</span>
-                          </button>
-                        </div>
-
-                        {(formTicket.detailEquipements || []).map((eq, idx) => (
-                          <div
-                            key={eq.id}
-                            className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-blue-600 p-3.5 space-y-2.5"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-bold text-blue-900">
-                                {modalVocab.equipmentItemPrefix} #{idx + 1}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveEquipementRow(eq.id)}
-                                className="text-red-600 hover:text-red-700 text-[11px] font-medium inline-flex items-center gap-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                <span>Retirer</span>
-                              </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              <input
-                                type="text"
-                                placeholder="Ex: Navire FANJAVA 7, Caméra 01..."
-                                value={eq.equipement}
-                                onChange={(e) =>
-                                  handleUpdateEquipementRow(eq.id, {
-                                    equipement: e.target.value,
-                                  })
-                                }
-                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900 font-semibold"
-                              />
-                              <input
-                                type="text"
-                                placeholder="Équipement installé / Objet sur cette unité"
-                                value={eq.titre}
-                                onChange={(e) =>
-                                  handleUpdateEquipementRow(eq.id, { titre: e.target.value })
-                                }
-                                className="sm:col-span-2 px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                              />
-                            </div>
-
-                            <textarea
-                              rows={2}
-                              placeholder={modalVocab.equipmentDiagPlaceholder}
-                              value={eq.constatDiagnostic}
-                              onChange={(e) =>
-                                handleUpdateEquipementRow(eq.id, {
-                                  constatDiagnostic: e.target.value,
-                                })
-                              }
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                            />
-
-                            <textarea
-                              rows={2}
-                              placeholder={modalVocab.equipmentActionsPlaceholder}
-                              value={(eq.actionsCorrectives || []).join('\n')}
-                              onChange={(e) =>
-                                handleUpdateEquipementRow(eq.id, {
-                                  actionsCorrectives: e.target.value.split('\n'),
-                                })
-                              }
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                            />
-
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                              <input
-                                type="text"
-                                placeholder="Résumé opérations (tableau)"
-                                value={eq.operationsResume || ''}
-                                onChange={(e) =>
-                                  handleUpdateEquipementRow(eq.id, {
-                                    operationsResume: e.target.value,
-                                  })
-                                }
-                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                              />
-                              <input
-                                type="text"
-                                placeholder={modalVocab.comparisonMatCol}
-                                value={eq.materielSpecifique}
-                                onChange={(e) =>
-                                  handleUpdateEquipementRow(eq.id, {
-                                    materielSpecifique: e.target.value,
-                                  })
-                                }
-                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                              />
-                              <select
-                                value={eq.statut}
-                                onChange={(e) =>
-                                  handleUpdateEquipementRow(eq.id, {
-                                    statut: e.target
-                                      .value as InterventionEquipementDetail['statut'],
-                                  })
-                                }
-                                className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                              >
-                                <option value="Résolu">
-                                  {formTicket.natureIntervention ===
-                                  'Déploiement / Installation'
-                                    ? 'Opérationnel / Validé'
-                                    : 'Résolu'}
-                                </option>
-                                <option value="En cours">En cours</option>
-                                <option value="En attente pièce">En attente pièce</option>
-                                <option value="Escaladé N3">Escaladé N3</option>
-                                <option value="Non résolu">Non résolu</option>
-                              </select>
-                            </div>
-
-                            <input
-                              type="text"
-                              placeholder="Résultat des tests / validation sur cette unité"
-                              value={eq.resultatDetail || ''}
-                              onChange={(e) =>
-                                handleUpdateEquipementRow(eq.id, {
-                                  resultatDetail: e.target.value,
-                                })
-                              }
-                              className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-slate-900"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                  </>
-                );
-              })()}
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold shadow-xs"
-                >
-                  {editingId
-                    ? 'Enregistrer les modifications'
-                    : 'Créer la fiche'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+          );
+        })()}
+      </Modal>
 
       {/* Disposition principale : Liste à gauche + Fiche agréable à droite */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1222,7 +1163,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       {it.numeroReference}
                     </span>
                     <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                         it.resultat === 'Résolu'
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-amber-100 text-amber-800'
@@ -1329,7 +1270,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                   {/* Statut & Priorité */}
                   <div className="flex items-center gap-2 shrink-0">
                     <span
-                      className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold ${
                         selectedIntervention.resultat === 'Résolu'
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                           : 'bg-amber-100 text-amber-800 border border-amber-200'
@@ -1339,7 +1280,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                       {statusDisplay}
                     </span>
                     <span
-                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border ${
                         selectedIntervention.priorite === 'Critique'
                           ? 'bg-red-50 text-red-700 border-red-200'
                           : selectedIntervention.priorite === 'Haute'
@@ -1573,14 +1514,14 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         {selectedIntervention.detailEquipements.map((eq, idx) => (
                           <div
                             key={eq.id}
-                            className="rounded-xl border border-slate-200 border-l-4 border-l-sky-600 p-4 bg-white space-y-2"
+                            className="rounded-xl border border-slate-200 p-4 bg-white space-y-2"
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <h5 className="font-bold text-sky-900 text-xs">
                                 {idx + 1}. {eq.equipement} — {eq.titre}
                               </h5>
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                                   eq.statut === 'Résolu'
                                     ? 'bg-emerald-100 text-emerald-800'
                                     : 'bg-amber-100 text-amber-800'

@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { EquipementReseau, IncidentReseau, TestDebitReseau } from '../../types/it-tracker';
-import { Network, Wifi, Activity, AlertTriangle, Plus, Server, CheckCircle2, ShieldCheck, Gauge } from 'lucide-react';
+import { Network, AlertTriangle, Plus, Server, CheckCircle2, Gauge } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface NetworkSectionProps {
   equipements: EquipementReseau[];
@@ -48,10 +57,18 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
     };
 
     onUpdateIncidents([item, ...incidents]);
-    setShowAddModal(false);
+    setShowAddIncident(false);
+    setNewIncident({
+      dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      equipementOuLiaison: '',
+      typeIncident: 'Coupure Internet',
+      dureeInterruptionMin: 15,
+      impactUtilisateurs: 'Quelques postes',
+      cause: '',
+      actionCorrective: '',
+      statut: 'Résolu',
+    });
   };
-
-  const setShowAddModal = setShowAddIncident;
 
   return (
     <div className="space-y-8">
@@ -111,120 +128,170 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
       </div>
 
       {/* Modal ajout incident */}
-      {showAddIncident && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-600" />
-              <span>Consigner un Incident Réseau</span>
-            </h3>
-            <form onSubmit={handleAddIncident} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date et heure</label>
-                  <input
-                    type="text"
-                    value={newIncident.dateHeure}
-                    onChange={(e) => setNewIncident({ ...newIncident, dateHeure: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Équipement ou liaison</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: Switch SW-ACCES-02 ou Fibre WAN"
-                    value={newIncident.equipementOuLiaison}
-                    onChange={(e) => setNewIncident({ ...newIncident, equipementOuLiaison: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Type d'incident</label>
-                  <select
-                    value={newIncident.typeIncident}
-                    onChange={(e) => setNewIncident({ ...newIncident, typeIncident: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Coupure Internet">Coupure Internet</option>
-                    <option value="Saturation bande passante">Saturation bande passante</option>
-                    <option value="Perte ping switch">Perte ping switch</option>
-                    <option value="Panne Wi-Fi">Panne Wi-Fi</option>
-                    <option value="Conflit IP">Conflit IP</option>
-                    <option value="Câble défectueux">Câble défectueux</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Durée coupure (min)</label>
-                  <input
-                    type="number"
-                    value={newIncident.dureeInterruptionMin}
-                    onChange={(e) => setNewIncident({ ...newIncident, dureeInterruptionMin: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Impact utilisateurs</label>
-                  <select
-                    value={newIncident.impactUtilisateurs}
-                    onChange={(e) => setNewIncident({ ...newIncident, impactUtilisateurs: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Transparent">Transparent</option>
-                    <option value="Quelques postes">Quelques postes</option>
-                    <option value="Service complet">Service complet</option>
-                    <option value="Général">Général</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Cause racine identifiée</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Explication technique de la panne..."
-                  value={newIncident.cause}
-                  onChange={(e) => setNewIncident({ ...newIncident, cause: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+      <Modal
+        isOpen={showAddIncident}
+        onClose={() => setShowAddIncident(false)}
+        title="Consigner un incident réseau"
+        subtitle="Enregistrez une coupure, dégradation de liaison ou anomalie Wi-Fi / LAN."
+        icon={<AlertTriangle className="w-4 h-4" />}
+        tone="amber"
+        size="lg"
+        onSubmit={handleAddIncident}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddIncident(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Enregistrer l'incident
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Contexte & Impact">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <FormField label="Date et heure" hint="Format AAAA-MM-JJ HH:MM">
+                <input
+                  type="text"
+                  value={newIncident.dateHeure || ''}
+                  onChange={(e) =>
+                    setNewIncident({ ...newIncident, dateHeure: e.target.value })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
                 />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Action corrective appliquée</label>
-                <textarea
-                  rows={2}
+              </FormField>
+              <FormField label="Équipement ou liaison concernée" required>
+                <input
+                  type="text"
                   required
-                  placeholder="Réparation, reconfiguration, changement de port..."
-                  value={newIncident.actionCorrective}
-                  onChange={(e) => setNewIncident({ ...newIncident, actionCorrective: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  placeholder="Ex: Switch SW-ACCES-02 ou Fibre WAN"
+                  value={newIncident.equipementOuLiaison || ''}
+                  onChange={(e) =>
+                    setNewIncident({
+                      ...newIncident,
+                      equipementOuLiaison: e.target.value,
+                    })
+                  }
+                  className={fieldInputClass}
                 />
-              </div>
+              </FormField>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddIncident(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <FormField label="Type d'incident">
+                <select
+                  value={newIncident.typeIncident || 'Coupure Internet'}
+                  onChange={(e) =>
+                    setNewIncident({
+                      ...newIncident,
+                      typeIncident: e.target
+                        .value as IncidentReseau['typeIncident'],
+                    })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
+                  <option value="Coupure Internet">Coupure Internet</option>
+                  <option value="Saturation bande passante">
+                    Saturation bande passante
+                  </option>
+                  <option value="Perte ping switch">Perte ping switch</option>
+                  <option value="Panne Wi-Fi">Panne Wi-Fi</option>
+                  <option value="Conflit IP">Conflit IP</option>
+                  <option value="Câble défectueux">Câble défectueux</option>
+                </select>
+              </FormField>
+              <FormField label="Durée coupure (min)">
+                <input
+                  type="number"
+                  min={0}
+                  value={newIncident.dureeInterruptionMin ?? 0}
+                  onChange={(e) =>
+                    setNewIncident({
+                      ...newIncident,
+                      dureeInterruptionMin: Math.max(
+                        0,
+                        parseInt(e.target.value, 10) || 0
+                      ),
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Impact utilisateurs">
+                <select
+                  value={newIncident.impactUtilisateurs || 'Quelques postes'}
+                  onChange={(e) =>
+                    setNewIncident({
+                      ...newIncident,
+                      impactUtilisateurs: e.target
+                        .value as IncidentReseau['impactUtilisateurs'],
+                    })
+                  }
+                  className={fieldSelectClass}
                 >
-                  Enregistrer l'incident
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Transparent">Transparent</option>
+                  <option value="Quelques postes">Quelques postes</option>
+                  <option value="Service complet">Service complet</option>
+                  <option value="Général">Général</option>
+                </select>
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="2. Analyse & Remédiation" separated>
+            <FormField label="Cause racine identifiée" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Explication technique de la panne..."
+                value={newIncident.cause || ''}
+                onChange={(e) =>
+                  setNewIncident({ ...newIncident, cause: e.target.value })
+                }
+                className={fieldTextareaClass}
+              />
+            </FormField>
+
+            <FormField label="Action corrective appliquée" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Réparation, reconfiguration, changement de port..."
+                value={newIncident.actionCorrective || ''}
+                onChange={(e) =>
+                  setNewIncident({
+                    ...newIncident,
+                    actionCorrective: e.target.value,
+                  })
+                }
+                className={fieldTextareaClass}
+              />
+            </FormField>
+
+            <FormField label="Statut actuel de l'incident">
+              <select
+                value={newIncident.statut || 'Résolu'}
+                onChange={(e) =>
+                  setNewIncident({
+                    ...newIncident,
+                    statut: e.target.value as IncidentReseau['statut'],
+                  })
+                }
+                className={fieldSelectClass}
+              >
+                <option value="Résolu">Résolu</option>
+                <option value="Sous surveillance">Sous surveillance</option>
+                <option value="En attente opérateur">En attente opérateur</option>
+              </select>
+            </FormField>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Tableau des équipements réseau */}
       <div className="space-y-3">

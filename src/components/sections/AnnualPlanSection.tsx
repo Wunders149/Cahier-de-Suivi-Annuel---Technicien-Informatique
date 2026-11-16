@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { ObjectifAnnuel, JalonCalendrier } from '../../types/it-tracker';
-import { Target, Calendar, Plus, CheckCircle, Clock, AlertTriangle, CheckSquare, Sparkles } from 'lucide-react';
+import { Target, Calendar, Plus, CheckSquare } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface AnnualPlanSectionProps {
   objectifs: ObjectifAnnuel[];
@@ -106,109 +115,119 @@ export const AnnualPlanSection: React.FC<AnnualPlanSectionProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setShowAddObjective(!showAddObjective)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
+          type="button"
+          onClick={() => setShowAddObjective(true)}
+          className={primaryButtonClass}
         >
           <Plus className="w-4 h-4" />
           <span>Nouvel Objectif Annuel</span>
         </button>
       </div>
 
-      {/* Formulaire ajout objectif */}
-      {showAddObjective && (
-        <form onSubmit={handleAddObjectiveSubmit} className="bg-slate-50 border border-blue-200 rounded-xl p-5 space-y-4">
-          <h3 className="text-sm font-bold text-blue-900">Ajouter un objectif annuel</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div className="md:col-span-2">
-              <label className="block font-medium text-slate-700 mb-1">Intitulé de l'objectif</label>
-              <input
-                type="text"
-                required
-                value={newObj.titre}
-                onChange={(e) => setNewObj({ ...newObj, titre: e.target.value })}
-                placeholder="Ex: Migration du parc vers Windows 11 Entreprise"
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Missions et activités prévues</label>
-              <textarea
-                value={newObj.missionsPrevue}
-                onChange={(e) => setNewObj({ ...newObj, missionsPrevue: e.target.value })}
-                rows={2}
-                placeholder="Étapes clés, actions de terrain..."
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Résultats attendus</label>
-              <textarea
-                value={newObj.resultatsAttendus}
-                onChange={(e) => setNewObj({ ...newObj, resultatsAttendus: e.target.value })}
-                rows={2}
-                placeholder="Livrables concrets, critères de succès..."
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Ressources nécessaires</label>
-              <input
-                type="text"
-                value={newObj.ressourcesNecessaires}
-                onChange={(e) => setNewObj({ ...newObj, ressourcesNecessaires: e.target.value })}
-                placeholder="Matériel, licences, budget..."
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Indicateur de Performance (KPI)</label>
-              <input
-                type="text"
-                value={newObj.kpi}
-                onChange={(e) => setNewObj({ ...newObj, kpi: e.target.value })}
-                placeholder="Ex: Taux de couverture > 98%"
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Échéance</label>
-              <input
-                type="date"
-                value={newObj.echeance}
-                onChange={(e) => setNewObj({ ...newObj, echeance: e.target.value })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              />
-            </div>
-            <div>
-              <label className="block font-medium text-slate-700 mb-1">Priorité</label>
-              <select
-                value={newObj.priorite}
-                onChange={(e) => setNewObj({ ...newObj, priorite: e.target.value as any })}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-              >
-                <option value="Haute">Haute</option>
-                <option value="Moyenne">Moyenne</option>
-                <option value="Basse">Basse</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
+      {/* Modal ajout objectif */}
+      <Modal
+        isOpen={showAddObjective}
+        onClose={() => setShowAddObjective(false)}
+        title="Nouvel Objectif Annuel"
+        subtitle="Définition des missions, livrables attendus, échéance et KPI."
+        icon={<Target className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddObjectiveSubmit}
+        footer={
+          <>
             <button
               type="button"
               onClick={() => setShowAddObjective(false)}
-              className="px-3 py-1 text-xs text-slate-600 hover:bg-slate-200 rounded"
+              className={secondaryButtonClass}
             >
               Annuler
             </button>
-            <button
-              type="submit"
-              className="px-3 py-1 text-xs font-semibold bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
+            <button type="submit" className={primaryButtonClass}>
               Enregistrer l'objectif
             </button>
-          </div>
-        </form>
-      )}
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Définition de l'objectif">
+            <FormField label="Intitulé de l'objectif" required>
+              <input
+                type="text"
+                required
+                value={newObj.titre || ''}
+                onChange={(e) => setNewObj({ ...newObj, titre: e.target.value })}
+                placeholder="Ex: Migration du parc vers Windows 11 Entreprise"
+                className={fieldInputClass}
+              />
+            </FormField>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <FormField label="Missions et activités prévues">
+                <textarea
+                  value={newObj.missionsPrevue || ''}
+                  onChange={(e) => setNewObj({ ...newObj, missionsPrevue: e.target.value })}
+                  rows={2}
+                  placeholder="Étapes clés, actions de terrain..."
+                  className={fieldTextareaClass}
+                />
+              </FormField>
+              <FormField label="Résultats attendus">
+                <textarea
+                  value={newObj.resultatsAttendus || ''}
+                  onChange={(e) => setNewObj({ ...newObj, resultatsAttendus: e.target.value })}
+                  rows={2}
+                  placeholder="Livrables concrets, critères de succès..."
+                  className={fieldTextareaClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="2. Moyens, KPI & Planification" separated>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <FormField label="Ressources nécessaires">
+                <input
+                  type="text"
+                  value={newObj.ressourcesNecessaires || ''}
+                  onChange={(e) =>
+                    setNewObj({ ...newObj, ressourcesNecessaires: e.target.value })
+                  }
+                  placeholder="Matériel, licences, budget..."
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Indicateur de Performance (KPI)">
+                <input
+                  type="text"
+                  value={newObj.kpi || ''}
+                  onChange={(e) => setNewObj({ ...newObj, kpi: e.target.value })}
+                  placeholder="Ex: Taux de couverture > 98%"
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Échéance">
+                <input
+                  type="date"
+                  value={newObj.echeance || ''}
+                  onChange={(e) => setNewObj({ ...newObj, echeance: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
+              <FormField label="Priorité">
+                <select
+                  value={newObj.priorite || 'Haute'}
+                  onChange={(e) => setNewObj({ ...newObj, priorite: e.target.value as any })}
+                  className={fieldSelectClass}
+                >
+                  <option value="Haute">Haute</option>
+                  <option value="Moyenne">Moyenne</option>
+                  <option value="Basse">Basse</option>
+                </select>
+              </FormField>
+            </div>
+          </FormSection>
+        </div>
+      </Modal>
 
       {/* Cartes des objectifs annuels */}
       <div className="space-y-4">

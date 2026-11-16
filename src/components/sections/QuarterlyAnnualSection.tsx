@@ -10,13 +10,18 @@ import {
   DollarSign,
   Check,
   ArrowRight,
-  Clock,
-  Sparkles,
   BarChart3,
   Edit3,
   X,
 } from 'lucide-react';
 import { RoiProjectsSection } from '../roi/RoiProjectsSection';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface QuarterlyAnnualSectionProps {
   bilansTrimestriels: BilanTrimestriel[];
@@ -142,7 +147,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Calculateur ROI Projets</span>
             {roiSummary.count > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100 text-[10px] font-mono">
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-900 text-[10px] font-mono tabular-nums">
                 {roiSummary.count}
               </span>
             )}
@@ -210,14 +215,21 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
           {isEditingAnnual && (
             <form
               onSubmit={handleSaveAnnual}
-              className="mx-6 sm:mx-8 p-5 rounded-xl bg-blue-50/60 border border-blue-200 space-y-4 text-xs"
+              className="mx-6 sm:mx-8 p-6 rounded-2xl bg-slate-50 border border-blue-200 space-y-5 text-xs"
             >
-              <div className="flex items-center justify-between border-b border-blue-200 pb-2">
-                <h4 className="font-bold text-blue-950 text-sm">
-                  Éditer le Bilan Annuel {annualForm.annee}
-                </h4>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-sm">
+                    Éditer le Bilan Annuel {annualForm.annee}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Synthèse globale, retours d'expérience et préconisations budgétaires N+1.
+                  </p>
+                </div>
                 <div className="flex items-center gap-2">
-                  <label className="font-medium text-slate-700">Taux d'objectifs atteints (%) :</label>
+                  <label className="font-semibold text-slate-700">
+                    Objectifs atteints (%) :
+                  </label>
                   <input
                     type="number"
                     min={0}
@@ -229,130 +241,154 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                         objectifsAtteintsTaux: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
                       })
                     }
-                    className="w-20 px-2 py-1 rounded border border-slate-300 bg-white text-slate-900 font-mono"
+                    className={`${fieldInputClass} w-24 font-mono tabular-nums`}
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">1. Synthèse générale de l'année</label>
-                <textarea
-                  rows={2}
-                  value={annualForm.syntheseGenerale}
-                  onChange={(e) => setAnnualForm({ ...annualForm, syntheseGenerale: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">2. Principales réalisations</label>
-                  <textarea
-                    rows={3}
-                    value={annualForm.principalesRealisations}
-                    onChange={(e) => setAnnualForm({ ...annualForm, principalesRealisations: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">3. Incidents majeurs de l'année</label>
-                  <textarea
-                    rows={3}
-                    value={annualForm.incidentsMajeursAnnee}
-                    onChange={(e) => setAnnualForm({ ...annualForm, incidentsMajeursAnnee: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">4. Améliorations apportées au SI</label>
+              <FormSection title="1. Synthèse & Faits marquants">
+                <FormField label="1. Synthèse générale de l'année">
                   <textarea
                     rows={2}
-                    value={annualForm.ameliorationsApportees}
-                    onChange={(e) => setAnnualForm({ ...annualForm, ameliorationsApportees: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                    value={annualForm.syntheseGenerale}
+                    onChange={(e) =>
+                      setAnnualForm({ ...annualForm, syntheseGenerale: e.target.value })
+                    }
+                    className={fieldTextareaClass}
                   />
+                </FormField>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <FormField label="2. Principales réalisations">
+                    <textarea
+                      rows={3}
+                      value={annualForm.principalesRealisations}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, principalesRealisations: e.target.value })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                  <FormField label="3. Incidents majeurs de l'année">
+                    <textarea
+                      rows={3}
+                      value={annualForm.incidentsMajeursAnnee}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, incidentsMajeursAnnee: e.target.value })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                  <FormField label="4. Améliorations apportées au SI">
+                    <textarea
+                      rows={2}
+                      value={annualForm.ameliorationsApportees}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, ameliorationsApportees: e.target.value })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                  <FormField label="5. Difficultés rencontrées">
+                    <textarea
+                      rows={2}
+                      value={annualForm.difficultesOrganisationnelles}
+                      onChange={(e) =>
+                        setAnnualForm({
+                          ...annualForm,
+                          difficultesOrganisationnelles: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
                 </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">5. Difficultés rencontrées</label>
+              </FormSection>
+
+              <FormSection title="2. Compétences, Budget & Perspectives N+1" separated>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <FormField label="6. Formations suivies & besoins">
+                    <textarea
+                      rows={2}
+                      value={annualForm.formationsSuiviesEtBesoinsFuturs}
+                      onChange={(e) =>
+                        setAnnualForm({
+                          ...annualForm,
+                          formationsSuiviesEtBesoinsFuturs: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                  <FormField label="7. Investissements préconisés (N+1)">
+                    <textarea
+                      rows={2}
+                      value={annualForm.investissementsInformatiquesPreconises}
+                      onChange={(e) =>
+                        setAnnualForm({
+                          ...annualForm,
+                          investissementsInformatiquesPreconises: e.target.value,
+                        })
+                      }
+                      className={fieldTextareaClass}
+                    />
+                  </FormField>
+                </div>
+
+                <FormField label="8. Objectifs stratégiques N+1">
                   <textarea
                     rows={2}
-                    value={annualForm.difficultesOrganisationnelles}
-                    onChange={(e) => setAnnualForm({ ...annualForm, difficultesOrganisationnelles: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                    value={annualForm.objectifsAnneeSuivante}
+                    onChange={(e) =>
+                      setAnnualForm({ ...annualForm, objectifsAnneeSuivante: e.target.value })
+                    }
+                    className={fieldTextareaClass}
                   />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">6. Formations suivies & besoins</label>
-                  <textarea
-                    rows={2}
-                    value={annualForm.formationsSuiviesEtBesoinsFuturs}
-                    onChange={(e) => setAnnualForm({ ...annualForm, formationsSuiviesEtBesoinsFuturs: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">7. Investissements préconisés (N+1)</label>
-                  <textarea
-                    rows={2}
-                    value={annualForm.investissementsInformatiquesPreconises}
-                    onChange={(e) => setAnnualForm({ ...annualForm, investissementsInformatiquesPreconises: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-              </div>
+                </FormField>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">8. Objectifs stratégiques N+1</label>
-                <textarea
-                  rows={2}
-                  value={annualForm.objectifsAnneeSuivante}
-                  onChange={(e) => setAnnualForm({ ...annualForm, objectifsAnneeSuivante: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                />
-              </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <FormField label="Appréciation du RSI">
+                    <input
+                      type="text"
+                      value={annualForm.appreciationRsi}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, appreciationRsi: e.target.value })
+                      }
+                      className={fieldInputClass}
+                    />
+                  </FormField>
+                  <FormField label="Date signature Technicien">
+                    <input
+                      type="date"
+                      value={annualForm.signatureTechnicienDate}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, signatureTechnicienDate: e.target.value })
+                      }
+                      className={`${fieldInputClass} font-mono`}
+                    />
+                  </FormField>
+                  <FormField label="Date validation RSI">
+                    <input
+                      type="date"
+                      value={annualForm.signatureRsiDate}
+                      onChange={(e) =>
+                        setAnnualForm({ ...annualForm, signatureRsiDate: e.target.value })
+                      }
+                      className={`${fieldInputClass} font-mono`}
+                    />
+                  </FormField>
+                </div>
+              </FormSection>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Appréciation du RSI</label>
-                  <input
-                    type="text"
-                    value={annualForm.appreciationRsi}
-                    onChange={(e) => setAnnualForm({ ...annualForm, appreciationRsi: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date signature Technicien</label>
-                  <input
-                    type="date"
-                    value={annualForm.signatureTechnicienDate}
-                    onChange={(e) => setAnnualForm({ ...annualForm, signatureTechnicienDate: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date validation RSI</label>
-                  <input
-                    type="date"
-                    value={annualForm.signatureRsiDate}
-                    onChange={(e) => setAnnualForm({ ...annualForm, signatureRsiDate: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-blue-200">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsEditingAnnual(false)}
-                  className="px-3.5 py-1.5 rounded text-slate-600 hover:bg-slate-200 font-medium"
+                  className={secondaryButtonClass}
                 >
                   Annuler
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                >
+                <button type="submit" className={primaryButtonClass}>
                   Enregistrer le Bilan Annuel
                 </button>
               </div>
@@ -649,10 +685,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-3 py-1 rounded-full font-bold border border-emerald-200 dark:border-emerald-800 font-mono tabular-nums">
+                <span className="bg-emerald-50 text-emerald-800 px-3 py-1 rounded-md font-bold border border-emerald-200 font-mono tabular-nums">
                   Satisfaction : {currentTrimestre.tauxSatisfactionUtilisateurs}%
                 </span>
-                <span className="bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 px-3 py-1 rounded-full font-bold border border-blue-200 dark:border-blue-800 font-mono tabular-nums">
+                <span className="bg-blue-50 text-blue-800 px-3 py-1 rounded-md font-bold border border-blue-200 font-mono tabular-nums">
                   Disponibilité SI :{' '}
                   {currentTrimestre.tauxDisponibiliteInfrastructure}%
                 </span>
@@ -662,7 +698,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                     setQuarterForm(currentTrimestre);
                     setIsEditingQuarter((prev) => !prev);
                   }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold transition"
+                  className={secondaryButtonClass}
                 >
                   {isEditingQuarter ? <X className="w-3.5 h-3.5" /> : <Edit3 className="w-3.5 h-3.5" />}
                   <span>{isEditingQuarter ? 'Annuler' : `Modifier ${currentTrimestre.trimestre}`}</span>
@@ -673,13 +709,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             {isEditingQuarter && quarterForm && (
               <form
                 onSubmit={handleSaveQuarter}
-                className="p-4 rounded-xl bg-blue-50/60 border border-blue-200 space-y-3"
+                className="p-5 rounded-xl bg-slate-50 border border-blue-200 space-y-4"
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Satisfaction utilisateurs (%)
-                    </label>
+                  <FormField label="Satisfaction utilisateurs (%)">
                     <input
                       type="number"
                       min={0}
@@ -691,13 +724,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                           tauxSatisfactionUtilisateurs: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
                         })
                       }
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900 font-mono"
+                      className={`${fieldInputClass} font-mono tabular-nums`}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">
-                      Disponibilité infrastructure SI (%)
-                    </label>
+                  </FormField>
+                  <FormField label="Disponibilité infrastructure SI (%)">
                     <input
                       type="number"
                       min={0}
@@ -710,92 +740,82 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                           tauxDisponibiliteInfrastructure: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
                         })
                       }
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900 font-mono"
+                      className={`${fieldInputClass} font-mono tabular-nums`}
                     />
-                  </div>
+                  </FormField>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Objectifs atteints & réalisations</label>
+                  <FormField label="Objectifs atteints & réalisations">
                     <textarea
                       rows={2}
                       value={quarterForm.objectifsAtteints}
                       onChange={(e) => setQuarterForm({ ...quarterForm, objectifsAtteints: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldTextareaClass}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Résumé des performances</label>
+                  </FormField>
+                  <FormField label="Résumé des performances">
                     <textarea
                       rows={2}
                       value={quarterForm.performancesResume}
                       onChange={(e) => setQuarterForm({ ...quarterForm, performancesResume: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldTextareaClass}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Incidents majeurs du trimestre</label>
+                  </FormField>
+                  <FormField label="Incidents majeurs du trimestre">
                     <textarea
                       rows={2}
                       value={quarterForm.incidentsMajeurs}
                       onChange={(e) => setQuarterForm({ ...quarterForm, incidentsMajeurs: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldTextareaClass}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Améliorations concrètes apportées</label>
+                  </FormField>
+                  <FormField label="Améliorations concrètes apportées">
                     <textarea
                       rows={2}
                       value={quarterForm.ameliorationsApportees}
                       onChange={(e) => setQuarterForm({ ...quarterForm, ameliorationsApportees: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldTextareaClass}
                     />
-                  </div>
+                  </FormField>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Difficultés rencontrées</label>
+                  <FormField label="Difficultés rencontrées">
                     <input
                       type="text"
                       value={quarterForm.difficultesRencontrees}
                       onChange={(e) => setQuarterForm({ ...quarterForm, difficultesRencontrees: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldInputClass}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Besoins en formation</label>
+                  </FormField>
+                  <FormField label="Besoins en formation">
                     <input
                       type="text"
                       value={quarterForm.besoinsFormation}
                       onChange={(e) => setQuarterForm({ ...quarterForm, besoinsFormation: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldInputClass}
                     />
-                  </div>
-                  <div>
-                    <label className="block font-medium text-slate-700 mb-1">Investissements préconisés</label>
+                  </FormField>
+                  <FormField label="Investissements préconisés">
                     <input
                       type="text"
                       value={quarterForm.investissementsNecessaires}
                       onChange={(e) => setQuarterForm({ ...quarterForm, investissementsNecessaires: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded border border-slate-300 bg-white text-slate-900"
+                      className={fieldInputClass}
                     />
-                  </div>
+                  </FormField>
                 </div>
 
-                <div className="flex justify-end gap-2 pt-2 border-t border-blue-200">
+                <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => setIsEditingQuarter(false)}
-                    className="px-3 py-1.5 rounded text-slate-600 hover:bg-slate-200 font-medium"
+                    className={secondaryButtonClass}
                   >
                     Annuler
                   </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-                  >
+                  <button type="submit" className={primaryButtonClass}>
                     Enregistrer {quarterForm.trimestre}
                   </button>
                 </div>

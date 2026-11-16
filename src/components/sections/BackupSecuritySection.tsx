@@ -1,6 +1,16 @@
 import React, { useState } from 'react';
 import { SuiviSauvegarde, IncidentSecurite } from '../../types/it-tracker';
-import { ShieldCheck, HardDrive, ShieldAlert, Plus, CheckCircle2, AlertTriangle, RefreshCw, Lock } from 'lucide-react';
+import { ShieldCheck, HardDrive, ShieldAlert, Plus, CheckCircle2 } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  dangerButtonClass,
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface BackupSecuritySectionProps {
   sauvegardes: SuiviSauvegarde[];
@@ -9,6 +19,17 @@ interface BackupSecuritySectionProps {
   onUpdateIncidentsSecurite: (incidents: IncidentSecurite[]) => void;
 }
 
+const DEFAULT_NEW_SECURITY = (): Partial<IncidentSecurite> => ({
+  dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+  typeIncident: 'Tentative Phishing',
+  severite: 'Moyenne',
+  postesConcernes: '',
+  description: '',
+  actionsMenées: '',
+  statut: 'Clôturé',
+  leconsApprises: '',
+});
+
 export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
   sauvegardes,
   incidentsSecurite,
@@ -16,16 +37,12 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
   onUpdateIncidentsSecurite,
 }) => {
   const [showAddIncident, setShowAddIncident] = useState(false);
-  const [newSec, setNewSec] = useState<Partial<IncidentSecurite>>({
-    dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
-    typeIncident: 'Tentative Phishing',
-    severite: 'Moyenne',
-    postesConcernes: '',
-    description: '',
-    actionsMenées: '',
-    statut: 'Clôturé',
-    leconsApprises: '',
-  });
+  const [newSec, setNewSec] = useState<Partial<IncidentSecurite>>(DEFAULT_NEW_SECURITY);
+
+  const openModal = () => {
+    setNewSec(DEFAULT_NEW_SECURITY());
+    setShowAddIncident(true);
+  };
 
   const handleAddIncident = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +61,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
     };
 
     onUpdateIncidentsSecurite([item, ...incidentsSecurite]);
+    setNewSec(DEFAULT_NEW_SECURITY());
     setShowAddIncident(false);
   };
 
@@ -61,8 +79,9 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
           </p>
         </div>
         <button
-          onClick={() => setShowAddIncident(true)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
+          type="button"
+          onClick={openModal}
+          className={primaryButtonClass}
         >
           <Plus className="w-4 h-4" />
           <span>Consigner un Incident de Sécurité</span>
@@ -169,122 +188,128 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
       </div>
 
       {/* Modal ajout incident de sécurité */}
-      {showAddIncident && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <ShieldAlert className="w-5 h-5 text-red-600" />
-              <span>Consigner un Incident de Cybersécurité</span>
-            </h3>
-
-            <form onSubmit={handleAddIncident} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date et heure</label>
-                  <input
-                    type="text"
-                    value={newSec.dateHeure}
-                    onChange={(e) => setNewSec({ ...newSec, dateHeure: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Type d'incident</label>
-                  <select
-                    value={newSec.typeIncident}
-                    onChange={(e) => setNewSec({ ...newSec, typeIncident: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Tentative Phishing">Tentative Phishing</option>
-                    <option value="Alerte EDR / Malware">Alerte EDR / Malware</option>
-                    <option value="Tentative Brute Force">Tentative Brute Force</option>
-                    <option value="Périphérique USB non autorisé">Périphérique USB non autorisé</option>
-                    <option value="Perte / Vol matériel">Perte / Vol matériel</option>
-                    <option value="Faille vulnérabilité critique">Faille vulnérabilité critique</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Sévérité</label>
-                  <select
-                    value={newSec.severite}
-                    onChange={(e) => setNewSec({ ...newSec, severite: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Faible">Faible</option>
-                    <option value="Moyenne">Moyenne</option>
-                    <option value="Élevée">Élevée</option>
-                    <option value="Critique">Critique</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Postes / Comptes concernés</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: PC PARC-PC-023, boîtes mails RH"
-                    value={newSec.postesConcernes}
-                    onChange={(e) => setNewSec({ ...newSec, postesConcernes: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Description de la menace / incident</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Détail de l'événement détecté..."
-                  value={newSec.description}
-                  onChange={(e) => setNewSec({ ...newSec, description: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Actions immédiates menées (Endiguement)</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Isolation réseau, purge, réinitialisation de mot de passe..."
-                  value={newSec.actionsMenées}
-                  onChange={(e) => setNewSec({ ...newSec, actionsMenées: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Leçons apprises & Recommandations</label>
+      <Modal
+        isOpen={showAddIncident}
+        onClose={() => setShowAddIncident(false)}
+        title="Consigner un Incident de Cybersécurité"
+        subtitle="Traçabilité PSSI, mesures d'endiguement et retour d'expérience."
+        icon={<ShieldAlert className="w-4 h-4" />}
+        tone="danger"
+        size="lg"
+        onSubmit={handleAddIncident}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddIncident(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={dangerButtonClass}>
+              Enregistrer l'incident
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Qualification de l'événement">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Date et heure">
                 <input
                   type="text"
-                  placeholder="Sensibilisation utilisateur, durcissement règle EDR..."
-                  value={newSec.leconsApprises}
-                  onChange={(e) => setNewSec({ ...newSec, leconsApprises: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  value={newSec.dateHeure || ''}
+                  onChange={(e) => setNewSec({ ...newSec, dateHeure: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
                 />
-              </div>
+              </FormField>
+              <FormField label="Type d'incident">
+                <select
+                  value={newSec.typeIncident || 'Tentative Phishing'}
+                  onChange={(e) => setNewSec({ ...newSec, typeIncident: e.target.value as any })}
+                  className={fieldSelectClass}
+                >
+                  <option value="Tentative Phishing">Tentative Phishing</option>
+                  <option value="Alerte EDR / Malware">Alerte EDR / Malware</option>
+                  <option value="Tentative Brute Force">Tentative Brute Force</option>
+                  <option value="Périphérique USB non autorisé">Périphérique USB non autorisé</option>
+                  <option value="Perte / Vol matériel">Perte / Vol matériel</option>
+                  <option value="Faille vulnérabilité critique">Faille vulnérabilité critique</option>
+                </select>
+              </FormField>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddIncident(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Sévérité">
+                <select
+                  value={newSec.severite || 'Moyenne'}
+                  onChange={(e) => setNewSec({ ...newSec, severite: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
+                  <option value="Faible">Faible</option>
+                  <option value="Moyenne">Moyenne</option>
+                  <option value="Élevée">Élevée</option>
+                  <option value="Critique">Critique</option>
+                </select>
+              </FormField>
+              <FormField label="Statut">
+                <select
+                  value={newSec.statut || 'Clôturé'}
+                  onChange={(e) => setNewSec({ ...newSec, statut: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Enregistrer l'incident
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="En investigation">En investigation</option>
+                  <option value="Contenu">Contenu</option>
+                  <option value="Clôturé">Clôturé</option>
+                </select>
+              </FormField>
+              <FormField label="Postes / Comptes concernés">
+                <input
+                  type="text"
+                  placeholder="Ex: PARC-PC-023, RH"
+                  value={newSec.postesConcernes || ''}
+                  onChange={(e) => setNewSec({ ...newSec, postesConcernes: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="2. Analyse & Endiguement" separated>
+            <FormField label="Description de la menace / incident" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Détail de l'événement détecté..."
+                value={newSec.description || ''}
+                onChange={(e) => setNewSec({ ...newSec, description: e.target.value })}
+                className={fieldTextareaClass}
+              />
+            </FormField>
+
+            <FormField label="Actions immédiates menées (Endiguement)" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Isolation réseau, purge, réinitialisation de mot de passe..."
+                value={newSec.actionsMenées || ''}
+                onChange={(e) => setNewSec({ ...newSec, actionsMenées: e.target.value })}
+                className={fieldTextareaClass}
+              />
+            </FormField>
+
+            <FormField label="Leçons apprises & Recommandations">
+              <input
+                type="text"
+                placeholder="Sensibilisation utilisateur, durcissement règle EDR..."
+                value={newSec.leconsApprises || ''}
+                onChange={(e) => setNewSec({ ...newSec, leconsApprises: e.target.value })}
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Registre des incidents de cybersécurité */}
       <div className="space-y-3 pt-2">

@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { ArticleConsommable, DemandeAchat } from '../../types/it-tracker';
-import { Package, ShoppingCart, Plus, AlertCircle, CheckCircle2, Clock, Check } from 'lucide-react';
+import { Package, ShoppingCart, Plus, AlertCircle } from 'lucide-react';
+import { Modal } from '../ui/Modal';
+import { FormField, FormSection } from '../ui/FormField';
+import {
+  fieldInputClass,
+  fieldSelectClass,
+  fieldTextareaClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from '../ui/formStyles';
 
 interface ConsumablesSectionProps {
   consommables: ArticleConsommable[];
@@ -8,6 +17,19 @@ interface ConsumablesSectionProps {
   onUpdateConsommables: (consommables: ArticleConsommable[]) => void;
   onUpdateDemandesAchat: (demandes: DemandeAchat[]) => void;
 }
+
+const DEFAULT_NEW_ARTICLE = (): Partial<ArticleConsommable> => ({
+  reference: '',
+  designation: '',
+  categorie: 'Toners & Cartouches',
+  stockActuel: 5,
+  stockMinimumAlerte: 2,
+  quantiteRecommandeeAchat: 5,
+  unite: 'Unité',
+  emplacementStock: 'Armoire Réserve IT',
+  fournisseur: '',
+  statut: 'En stock',
+});
 
 export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   consommables,
@@ -18,18 +40,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   const [showAddArticle, setShowAddArticle] = useState(false);
   const [showAddDA, setShowAddDA] = useState(false);
 
-  const [newArt, setNewArt] = useState<Partial<ArticleConsommable>>({
-    reference: '',
-    designation: '',
-    categorie: 'Toners & Cartouches',
-    stockActuel: 5,
-    stockMinimumAlerte: 2,
-    quantiteRecommandeeAchat: 5,
-    unite: 'Unité',
-    emplacementStock: 'Armoire Réserve IT',
-    fournisseur: '',
-    statut: 'En stock',
-  });
+  const [newArt, setNewArt] = useState<Partial<ArticleConsommable>>(DEFAULT_NEW_ARTICLE);
 
   const getNextDaNumber = () => {
     const year = new Date().getFullYear();
@@ -74,26 +85,30 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
     e.preventDefault();
     if (!newArt.designation) return;
 
+    const currentStock = Number(newArt.stockActuel) || 0;
+    const minAlert = Number(newArt.stockMinimumAlerte) || 2;
+
     const item: ArticleConsommable = {
       id: `CSM-${Date.now()}`,
       reference: newArt.reference || `REF-${Date.now().toString().slice(-4)}`,
       designation: newArt.designation || '',
       categorie: (newArt.categorie as any) || 'Câbles & Connectique',
-      stockActuel: Number(newArt.stockActuel) || 0,
-      stockMinimumAlerte: Number(newArt.stockMinimumAlerte) || 2,
+      stockActuel: currentStock,
+      stockMinimumAlerte: minAlert,
       quantiteRecommandeeAchat: Number(newArt.quantiteRecommandeeAchat) || 5,
       unite: (newArt.unite as any) || 'Unité',
       emplacementStock: newArt.emplacementStock || 'Atelier',
       fournisseur: newArt.fournisseur || 'Fournisseur IT',
       statut:
-        Number(newArt.stockActuel) === 0
+        currentStock === 0
           ? 'Rupture'
-          : Number(newArt.stockActuel) <= Number(newArt.stockMinimumAlerte)
+          : currentStock <= minAlert
           ? 'Stock bas'
           : 'En stock',
     };
 
     onUpdateConsommables([...consommables, item]);
+    setNewArt(DEFAULT_NEW_ARTICLE());
     setShowAddArticle(false);
   };
 
@@ -120,6 +135,14 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   };
 
   const alertes = consommables.filter((c) => c.stockActuel <= c.stockMinimumAlerte);
+  const previewStock = Number(newArt.stockActuel) || 0;
+  const previewMin = Number(newArt.stockMinimumAlerte) || 0;
+  const previewStockStatus =
+    previewStock === 0
+      ? 'Rupture'
+      : previewStock <= previewMin
+      ? 'Stock bas'
+      : 'En stock';
 
   return (
     <div className="space-y-8">
@@ -134,26 +157,36 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
             Suivi des stocks d'atelier (toners, câbles, périphériques, disques) et registre des demandes d'achat (DA).
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setShowAddArticle(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
+            type="button"
+            onClick={() => {
+              setNewArt(DEFAULT_NEW_ARTICLE());
+              setShowAddArticle(true);
+            }}
+            className={primaryButtonClass}
           >
             <Plus className="w-4 h-4" />
             <span>Nouvel Article Consommable</span>
           </button>
           <button
+            type="button"
             onClick={() => {
-              setNewDA((prev) => ({
-                ...prev,
+              setNewDA({
                 numeroCommande: getNextDaNumber(),
                 dateDemande: new Date().toISOString().split('T')[0],
+                demandeur: 'Technicien IT',
                 articlesDemandes: '',
+                quantite: 1,
+                fournisseur: '',
+                montantEstimeTTC: 150,
+                priorite: 'Normale',
+                statut: 'Brouillon',
                 observations: '',
-              }));
+              });
               setShowAddDA(true);
             }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shadow transition"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold shadow-xs transition-colors whitespace-nowrap shrink-0"
           >
             <ShoppingCart className="w-4 h-4" />
             <span>Créer Demande d'Achat (DA)</span>
@@ -178,268 +211,310 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
       )}
 
       {/* Modal Nouvel Article */}
-      {showAddArticle && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <Package className="w-5 h-5 text-blue-600" />
-              <span>Ajouter un Article au Stock de Consommables</span>
-            </h3>
-
-            <form onSubmit={handleAddArticle} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Référence article</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Ex: TON-CAN-BK"
-                    value={newArt.reference}
-                    onChange={(e) => setNewArt({ ...newArt, reference: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Catégorie</label>
-                  <select
-                    value={newArt.categorie}
-                    onChange={(e) => setNewArt({ ...newArt, categorie: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Toners & Cartouches">Toners & Cartouches</option>
-                    <option value="Papier">Papier</option>
-                    <option value="Câbles & Connectique">Câbles & Connectique</option>
-                    <option value="Périphériques d'entrée">Périphériques d'entrée</option>
-                    <option value="Stockage & Accessoires">Stockage & Accessoires</option>
-                    <option value="Pièces de rechange">Pièces de rechange</option>
-                    <option value="Nouveaux équipements">Nouveaux équipements</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Désignation précise</label>
+      <Modal
+        isOpen={showAddArticle}
+        onClose={() => setShowAddArticle(false)}
+        title="Ajouter un Article au Stock de Consommables"
+        subtitle="Référencement atelier, seuil d'alerte et volume de réassort."
+        icon={<Package className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddArticle}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddArticle(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Enregistrer l'article
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Référencement & Catégorie">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Référence article" required>
                 <input
                   type="text"
                   required
-                  placeholder="Ex: Toner Noir Canon C-EXV 49BK pour copieur C3520i"
-                  value={newArt.designation}
-                  onChange={(e) => setNewArt({ ...newArt, designation: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  placeholder="Ex: TON-CAN-BK"
+                  value={newArt.reference || ''}
+                  onChange={(e) => setNewArt({ ...newArt, reference: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
                 />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Stock actuel</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={newArt.stockActuel}
-                    onChange={(e) => setNewArt({ ...newArt, stockActuel: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Seuil mini d'alerte</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={newArt.stockMinimumAlerte}
-                    onChange={(e) => setNewArt({ ...newArt, stockMinimumAlerte: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Qté réassort conseillée</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={newArt.quantiteRecommandeeAchat}
-                    onChange={(e) => setNewArt({ ...newArt, quantiteRecommandeeAchat: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Emplacement en réserve</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Armoire IT - Étagère 2"
-                    value={newArt.emplacementStock}
-                    onChange={(e) => setNewArt({ ...newArt, emplacementStock: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Fournisseur habituel</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Distributeur Bureautique"
-                    value={newArt.fournisseur}
-                    onChange={(e) => setNewArt({ ...newArt, fournisseur: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddArticle(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+              </FormField>
+              <FormField label="Catégorie">
+                <select
+                  value={newArt.categorie || 'Toners & Cartouches'}
+                  onChange={(e) => setNewArt({ ...newArt, categorie: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
+                  <option value="Toners & Cartouches">Toners & Cartouches</option>
+                  <option value="Papier">Papier</option>
+                  <option value="Câbles & Connectique">Câbles & Connectique</option>
+                  <option value="Périphériques d'entrée">Périphériques d'entrée</option>
+                  <option value="Stockage & Accessoires">Stockage & Accessoires</option>
+                  <option value="Pièces de rechange">Pièces de rechange</option>
+                  <option value="Nouveaux équipements">Nouveaux équipements</option>
+                </select>
+              </FormField>
+              <FormField label="Unité de mesure">
+                <select
+                  value={newArt.unite || 'Unité'}
+                  onChange={(e) => setNewArt({ ...newArt, unite: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Enregistrer l'article
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Unité">Unité</option>
+                  <option value="Boîte">Boîte</option>
+                  <option value="Ramette">Ramette</option>
+                  <option value="Carton">Carton</option>
+                  <option value="Lot">Lot</option>
+                  <option value="Mètre">Mètre</option>
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Désignation précise" required>
+              <input
+                type="text"
+                required
+                placeholder="Ex: Toner Noir Canon C-EXV 49BK pour copieur C3520i"
+                value={newArt.designation || ''}
+                onChange={(e) => setNewArt({ ...newArt, designation: e.target.value })}
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection
+            title="2. Niveaux de Stock & Logistique"
+            separated
+            rightSlot={
+              <span
+                className={`text-[11px] font-semibold ${
+                  previewStockStatus === 'En stock'
+                    ? 'text-emerald-700'
+                    : previewStockStatus === 'Stock bas'
+                    ? 'text-amber-700'
+                    : 'text-rose-700'
+                }`}
+              >
+                Statut calculé : {previewStockStatus}
+              </span>
+            }
+          >
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Stock actuel">
+                <input
+                  type="number"
+                  min={0}
+                  value={newArt.stockActuel ?? 0}
+                  onChange={(e) =>
+                    setNewArt({ ...newArt, stockActuel: parseInt(e.target.value, 10) || 0 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Seuil mini d'alerte">
+                <input
+                  type="number"
+                  min={1}
+                  value={newArt.stockMinimumAlerte ?? 2}
+                  onChange={(e) =>
+                    setNewArt({
+                      ...newArt,
+                      stockMinimumAlerte: parseInt(e.target.value, 10) || 1,
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Qté réassort conseillée">
+                <input
+                  type="number"
+                  min={1}
+                  value={newArt.quantiteRecommandeeAchat ?? 5}
+                  onChange={(e) =>
+                    setNewArt({
+                      ...newArt,
+                      quantiteRecommandeeAchat: parseInt(e.target.value, 10) || 1,
+                    })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Emplacement en réserve">
+                <input
+                  type="text"
+                  placeholder="Ex: Armoire IT - Étagère 2"
+                  value={newArt.emplacementStock || ''}
+                  onChange={(e) => setNewArt({ ...newArt, emplacementStock: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Fournisseur habituel">
+                <input
+                  type="text"
+                  placeholder="Ex: Distributeur Bureautique"
+                  value={newArt.fournisseur || ''}
+                  onChange={(e) => setNewArt({ ...newArt, fournisseur: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Modal Nouvelle DA */}
-      {showAddDA && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 text-xs">
-            <h3 className="text-base font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-blue-600" />
-              <span>Émettre une Demande d'Achat (DA)</span>
-            </h3>
-
-            <form onSubmit={handleAddDA} className="mt-4 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">N° Commande / DA</label>
-                  <input
-                    type="text"
-                    required
-                    value={newDA.numeroCommande}
-                    onChange={(e) => setNewDA({ ...newDA, numeroCommande: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Date de la demande</label>
-                  <input
-                    type="date"
-                    required
-                    value={newDA.dateDemande}
-                    onChange={(e) => setNewDA({ ...newDA, dateDemande: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Articles & Références demandées</label>
-                <textarea
-                  rows={2}
-                  required
-                  placeholder="Ex: Lot de 10 cordons RJ45 2m + 2x Toners Noirs..."
-                  value={newDA.articlesDemandes}
-                  onChange={(e) => setNewDA({ ...newDA, articlesDemandes: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Quantité totale</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={newDA.quantite}
-                    onChange={(e) => setNewDA({ ...newDA, quantite: parseInt(e.target.value) || 1 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Fournisseur</label>
-                  <input
-                    type="text"
-                    placeholder="Ex: Dell, Grossiste..."
-                    value={newDA.fournisseur}
-                    onChange={(e) => setNewDA({ ...newDA, fournisseur: e.target.value })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Montant estimé (€ TTC)</label>
-                  <input
-                    type="number"
-                    value={newDA.montantEstimeTTC}
-                    onChange={(e) => setNewDA({ ...newDA, montantEstimeTTC: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Priorité</label>
-                  <select
-                    value={newDA.priorite}
-                    onChange={(e) => setNewDA({ ...newDA, priorite: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Normale">Normale</option>
-                    <option value="Urgente">Urgente</option>
-                    <option value="Basse">Basse</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-medium text-slate-700 mb-1">Statut initial</label>
-                  <select
-                    value={newDA.statut}
-                    onChange={(e) => setNewDA({ ...newDA, statut: e.target.value as any })}
-                    className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
-                  >
-                    <option value="Brouillon">Brouillon</option>
-                    <option value="Validé Direction">Validé Direction</option>
-                    <option value="Commandé">Commandé</option>
-                    <option value="Reçu / Contrôlé">Reçu / Contrôlé</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Observations / Justification</label>
+      <Modal
+        isOpen={showAddDA}
+        onClose={() => setShowAddDA(false)}
+        title="Émettre une Demande d'Achat (DA)"
+        subtitle="Préparation de commande matériel ou consommables et suivi d'approbation."
+        icon={<ShoppingCart className="w-4 h-4" />}
+        size="lg"
+        onSubmit={handleAddDA}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddDA(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" className={primaryButtonClass}>
+              Créer la demande
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-5">
+          <FormSection title="1. Références de la demande">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="N° Commande / DA" required>
                 <input
                   type="text"
-                  placeholder="Justification du besoin..."
-                  value={newDA.observations}
-                  onChange={(e) => setNewDA({ ...newDA, observations: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded border border-slate-300 text-slate-900"
+                  required
+                  value={newDA.numeroCommande || ''}
+                  onChange={(e) => setNewDA({ ...newDA, numeroCommande: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
                 />
-              </div>
+              </FormField>
+              <FormField label="Date de la demande" required>
+                <input
+                  type="date"
+                  required
+                  value={newDA.dateDemande || ''}
+                  onChange={(e) => setNewDA({ ...newDA, dateDemande: e.target.value })}
+                  className={`${fieldInputClass} font-mono`}
+                />
+              </FormField>
+              <FormField label="Demandeur">
+                <input
+                  type="text"
+                  placeholder="Ex: Technicien IT"
+                  value={newDA.demandeur || ''}
+                  onChange={(e) => setNewDA({ ...newDA, demandeur: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddDA(false)}
-                  className="px-3 py-1.5 text-slate-600 hover:bg-slate-100 rounded"
+            <FormField label="Articles & Références demandées" required>
+              <textarea
+                rows={2}
+                required
+                placeholder="Ex: Lot de 10 cordons RJ45 2m + 2x Toners Noirs..."
+                value={newDA.articlesDemandes || ''}
+                onChange={(e) => setNewDA({ ...newDA, articlesDemandes: e.target.value })}
+                className={fieldTextareaClass}
+              />
+            </FormField>
+          </FormSection>
+
+          <FormSection title="2. Budget, Fournisseur & Statut" separated>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <FormField label="Quantité totale">
+                <input
+                  type="number"
+                  min={1}
+                  value={newDA.quantite ?? 1}
+                  onChange={(e) =>
+                    setNewDA({ ...newDA, quantite: parseInt(e.target.value, 10) || 1 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+              <FormField label="Fournisseur">
+                <input
+                  type="text"
+                  placeholder="Ex: Dell, Grossiste..."
+                  value={newDA.fournisseur || ''}
+                  onChange={(e) => setNewDA({ ...newDA, fournisseur: e.target.value })}
+                  className={fieldInputClass}
+                />
+              </FormField>
+              <FormField label="Montant estimé (€ TTC)">
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={newDA.montantEstimeTTC ?? 0}
+                  onChange={(e) =>
+                    setNewDA({ ...newDA, montantEstimeTTC: parseFloat(e.target.value) || 0 })
+                  }
+                  className={`${fieldInputClass} font-mono tabular-nums`}
+                />
+              </FormField>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <FormField label="Priorité">
+                <select
+                  value={newDA.priorite || 'Normale'}
+                  onChange={(e) => setNewDA({ ...newDA, priorite: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
+                  <option value="Normale">Normale</option>
+                  <option value="Urgente">Urgente</option>
+                  <option value="Basse">Basse</option>
+                </select>
+              </FormField>
+              <FormField label="Statut initial">
+                <select
+                  value={newDA.statut || 'Brouillon'}
+                  onChange={(e) => setNewDA({ ...newDA, statut: e.target.value as any })}
+                  className={fieldSelectClass}
                 >
-                  Créer la demande
-                </button>
-              </div>
-            </form>
-          </div>
+                  <option value="Brouillon">Brouillon</option>
+                  <option value="Validé Direction">Validé Direction</option>
+                  <option value="Commandé">Commandé</option>
+                  <option value="Reçu / Contrôlé">Reçu / Contrôlé</option>
+                </select>
+              </FormField>
+            </div>
+
+            <FormField label="Observations / Justification">
+              <input
+                type="text"
+                placeholder="Justification du besoin..."
+                value={newDA.observations || ''}
+                onChange={(e) => setNewDA({ ...newDA, observations: e.target.value })}
+                className={fieldInputClass}
+              />
+            </FormField>
+          </FormSection>
         </div>
-      )}
+      </Modal>
 
       {/* Tableau des consommables */}
       <div className="space-y-3">

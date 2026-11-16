@@ -1,5 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { Search, X, Wrench, Laptop, Package, CheckSquare, KeyRound, ArrowRight, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Search,
+  X,
+  Wrench,
+  Laptop,
+  Package,
+  CheckSquare,
+  ArrowRight,
+  TrendingUp,
+  FileBadge,
+  CalendarRange,
+  ShieldCheck,
+} from 'lucide-react';
 import { CahierSuiviData } from '../types/it-tracker';
 
 interface CommandPaletteProps {
@@ -9,6 +21,66 @@ interface CommandPaletteProps {
   onNavigate: (tab: string) => void;
 }
 
+interface PaletteItem {
+  id: string;
+  tab: string;
+  group: string;
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+}
+
+const QUICK_NAV_ITEMS: PaletteItem[] = [
+  {
+    id: 'nav-general',
+    tab: 'general',
+    group: 'Accès rapide aux modules',
+    title: 'Tableau de Bord & Page de Garde',
+    subtitle: 'Indicateurs clés et informations générales',
+    icon: <FileBadge className="w-4 h-4 text-blue-600 shrink-0" />,
+  },
+  {
+    id: 'nav-interventions',
+    tab: 'interventions',
+    group: 'Accès rapide aux modules',
+    title: 'Registre des Interventions IT',
+    subtitle: 'Tickets, diagnostics et rapports PDF / Word',
+    icon: <Wrench className="w-4 h-4 text-blue-600 shrink-0" />,
+  },
+  {
+    id: 'nav-journal',
+    tab: 'journal',
+    group: 'Accès rapide aux modules',
+    title: 'Journal Quotidien des Tâches',
+    subtitle: 'Suivi journalier des activités et temps passé',
+    icon: <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />,
+  },
+  {
+    id: 'nav-parc',
+    tab: 'parc',
+    group: 'Accès rapide aux modules',
+    title: 'Parc Matériel (CMDB)',
+    subtitle: 'Postes, serveurs, garanties et numéros de série',
+    icon: <Laptop className="w-4 h-4 text-indigo-600 shrink-0" />,
+  },
+  {
+    id: 'nav-securite',
+    tab: 'securite',
+    group: 'Accès rapide aux modules',
+    title: 'Sauvegardes & Sécurité (PRA)',
+    subtitle: 'Règle 3-2-1 et registre cybersécurité',
+    icon: <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />,
+  },
+  {
+    id: 'nav-rapports',
+    tab: 'rapports',
+    group: 'Accès rapide aux modules',
+    title: 'Rapports Mensuels & Livraison',
+    subtitle: 'Cahiers mensuels Janvier – Décembre',
+    icon: <CalendarRange className="w-4 h-4 text-sky-600 shrink-0" />,
+  },
+];
+
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
   isOpen,
   onClose,
@@ -16,322 +88,323 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onNavigate,
 }) => {
   const [query, setQuery] = useState('');
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    setQuery('');
+    setActiveIndex(0);
+
+    const timer = window.setTimeout(() => {
+      inputRef.current?.focus({ preventScroll: true });
+    }, 10);
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        e.preventDefault();
         onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = prevOverflow;
+      if (
+        previousFocusRef.current &&
+        typeof previousFocusRef.current.focus === 'function' &&
+        document.contains(previousFocusRef.current)
+      ) {
+        previousFocusRef.current.focus({ preventScroll: true });
+      }
+    };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  const items = useMemo<PaletteItem[]>(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return QUICK_NAV_ITEMS;
 
-  const q = query.toLowerCase().trim();
+    const list: PaletteItem[] = [];
 
-  // Recherche dans les tâches quotidiennes
-  const matchingTasks = q
-    ? data.journalTaches.filter(
-        (t) =>
-          t.tache.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q) ||
-          t.observations.toLowerCase().includes(q)
-      ).slice(0, 3)
-    : [];
-
-  // Recherche dans les interventions
-  const matchingInterventions = q
-    ? data.interventions.filter(
+    data.interventions
+      .filter(
         (i) =>
           i.numeroReference.toLowerCase().includes(q) ||
           i.nomDemandeur.toLowerCase().includes(q) ||
           i.descriptionPanne.toLowerCase().includes(q) ||
-          i.equipementConcerne.toLowerCase().includes(q)
-      ).slice(0, 3)
-    : [];
+          i.equipementConcerne.toLowerCase().includes(q) ||
+          (i.type || i.typeIntervention || '').toLowerCase().includes(q)
+      )
+      .slice(0, 4)
+      .forEach((it) => {
+        list.push({
+          id: `int-${it.id}`,
+          tab: 'interventions',
+          group: 'Interventions IT',
+          title: `${it.numeroReference} · ${it.equipementConcerne}`,
+          subtitle: `${it.nomDemandeur} — ${it.descriptionPanne}`,
+          icon: <Wrench className="w-4 h-4 text-blue-600 shrink-0" />,
+        });
+      });
 
-  // Recherche dans le parc matériel
-  const matchingParc = q
-    ? data.parcEquipements.filter(
+    data.journalTaches
+      .filter(
+        (t) =>
+          t.tache.toLowerCase().includes(q) ||
+          t.description.toLowerCase().includes(q) ||
+          t.observations.toLowerCase().includes(q)
+      )
+      .slice(0, 4)
+      .forEach((t) => {
+        list.push({
+          id: `tsk-${t.id}`,
+          tab: 'journal',
+          group: 'Journal Quotidien',
+          title: t.tache,
+          subtitle: `${t.date} · ${t.statut}`,
+          icon: <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />,
+        });
+      });
+
+    data.parcEquipements
+      .filter(
         (p) =>
           p.numeroInventaire.toLowerCase().includes(q) ||
           p.designation.toLowerCase().includes(q) ||
           p.marqueModele.toLowerCase().includes(q) ||
           p.numeroSerie.toLowerCase().includes(q) ||
           p.utilisateurResponsable.toLowerCase().includes(q)
-      ).slice(0, 3)
-    : [];
+      )
+      .slice(0, 4)
+      .forEach((p) => {
+        list.push({
+          id: `prc-${p.id}`,
+          tab: 'parc',
+          group: 'Parc Matériel & CMDB',
+          title: `${p.numeroInventaire} · ${p.designation}`,
+          subtitle: `${p.marqueModele} (${p.utilisateurResponsable})`,
+          icon: <Laptop className="w-4 h-4 text-indigo-600 shrink-0" />,
+        });
+      });
 
-  // Recherche dans les consommables
-  const matchingConsommables = q
-    ? data.consommables.filter(
+    data.consommables
+      .filter(
         (c) =>
           c.reference.toLowerCase().includes(q) ||
           c.designation.toLowerCase().includes(q) ||
           c.fournisseur.toLowerCase().includes(q)
-      ).slice(0, 3)
-    : [];
+      )
+      .slice(0, 4)
+      .forEach((c) => {
+        list.push({
+          id: `csm-${c.id}`,
+          tab: 'consommables',
+          group: 'Consommables & Stocks',
+          title: `${c.reference} · ${c.designation}`,
+          subtitle: `Stock : ${c.stockActuel} ${c.unite}`,
+          icon: <Package className="w-4 h-4 text-amber-600 shrink-0" />,
+        });
+      });
 
-  // Recherche dans les projets ROI
-  const matchingRoiProjects = q
-    ? (data.bilanAnnuel.projetsRoi || []).filter(
+    (data.bilanAnnuel.projetsRoi || [])
+      .filter(
         (r) =>
           r.nomProjet.toLowerCase().includes(q) ||
           r.description.toLowerCase().includes(q) ||
           r.categorie.toLowerCase().includes(q) ||
           'roi retour sur investissement rentabilité amortissement gain économie'.includes(q)
-      ).slice(0, 3)
-    : [];
+      )
+      .slice(0, 4)
+      .forEach((r) => {
+        list.push({
+          id: `roi-${r.id}`,
+          tab: 'bilans',
+          group: 'Projets & Retour sur Investissement',
+          title: r.nomProjet,
+          subtitle: `${r.categorie} · +${r.economiesFinancieresAnnuellesEuros} €/an · ${r.gainTempsEstimeHeuresParAn} h/an`,
+          icon: <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />,
+        });
+      });
 
-  const hasResults =
-    matchingTasks.length > 0 ||
-    matchingInterventions.length > 0 ||
-    matchingParc.length > 0 ||
-    matchingConsommables.length > 0 ||
-    matchingRoiProjects.length > 0;
+    return list;
+  }, [query, data]);
 
-  const firstMatchedTab =
-    matchingInterventions.length > 0
-      ? 'interventions'
-      : matchingTasks.length > 0
-      ? 'journal'
-      : matchingParc.length > 0
-      ? 'parc'
-      : matchingConsommables.length > 0
-      ? 'consommables'
-      : matchingRoiProjects.length > 0
-      ? 'bilans'
-      : null;
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  useEffect(() => {
+    if (!isOpen || !listRef.current) return;
+    const activeEl = listRef.current.querySelector<HTMLElement>(
+      `[data-palette-index="${activeIndex}"]`
+    );
+    activeEl?.scrollIntoView({ block: 'nearest' });
+  }, [activeIndex, isOpen]);
+
+  if (!isOpen) return null;
+
+  const grouped = items.reduce<Record<string, { item: PaletteItem; index: number }[]>>(
+    (acc, item, index) => {
+      if (!acc[item.group]) acc[item.group] = [];
+      acc[item.group].push({ item, index });
+      return acc;
+    },
+    {}
+  );
+
+  const handleSelectItem = (item: PaletteItem) => {
+    onNavigate(item.tab);
+    onClose();
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev + 1) % items.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex((prev) => (prev - 1 + items.length) % items.length);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = items[activeIndex] || items[0];
+      if (target) handleSelectItem(target);
+    }
+  };
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-start justify-center pt-20 px-4"
+      className="fixed inset-0 z-50 bg-slate-950/55 backdrop-blur-[2px] flex items-start justify-center pt-12 sm:pt-20 px-4 animate-modal-backdrop no-print"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-150"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Recherche globale dans le cahier"
+        className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-hidden text-slate-900 animate-modal-panel"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Barre de recherche */}
-        <div className="flex items-center px-4 py-3.5 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center px-4 py-3.5 border-b border-slate-200 bg-slate-50/60">
           <Search className="w-5 h-5 text-slate-400 shrink-0 mr-3" />
           <input
+            ref={inputRef}
             type="text"
-            autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && firstMatchedTab) {
-                onNavigate(firstMatchedTab);
-                onClose();
-              }
-            }}
+            onKeyDown={handleInputKeyDown}
             placeholder="Rechercher une tâche, intervention, machine, ticket, référence..."
-            className="w-full bg-transparent text-sm focus:outline-none placeholder:text-slate-400"
+            className="w-full bg-transparent text-sm text-slate-900 focus:outline-none placeholder:text-slate-400"
           />
           {query && (
             <button
-              onClick={() => setQuery('')}
-              className="text-slate-400 hover:text-slate-600 p-1"
+              type="button"
+              onClick={() => {
+                setQuery('');
+                inputRef.current?.focus();
+              }}
+              aria-label="Effacer la recherche"
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors shrink-0 mr-1"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-          <span className="text-[11px] font-mono text-slate-400 ml-2 px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            ESC
-          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[11px] font-mono text-slate-500 ml-1 px-2 py-1 rounded-md bg-white border border-slate-200 hover:bg-slate-100 transition-colors shrink-0"
+          >
+            Échap
+          </button>
         </div>
 
         {/* Résultats */}
-        <div className="max-h-96 overflow-y-auto p-3 space-y-4 text-xs">
-          {!q ? (
-            <div className="py-8 text-center text-slate-400">
-              <p className="font-medium">Tapez votre recherche...</p>
-              <p className="text-[11px] text-slate-500 mt-1">
-                Ex: "Windows 11", "Toner", "Dell Latitude", "INT-2026", "VPN"
+        <div ref={listRef} className="max-h-96 overflow-y-auto p-3 space-y-4 text-xs">
+          {items.length === 0 ? (
+            <div className="py-10 text-center text-slate-500 space-y-1">
+              <p className="font-semibold text-slate-700">
+                Aucun résultat pour « {query} »
+              </p>
+              <p className="text-[11px] text-slate-400">
+                Essayez un numéro de ticket, un nom d'équipement, un consommable ou un mot-clé.
               </p>
             </div>
-          ) : !hasResults ? (
-            <div className="py-8 text-center text-slate-400">
-              <p className="font-medium">Aucun résultat trouvé pour "{query}"</p>
-            </div>
           ) : (
-            <>
-              {matchingInterventions.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
-                    Interventions IT ({matchingInterventions.length})
-                  </span>
-                  <div className="space-y-1">
-                    {matchingInterventions.map((it) => (
+            Object.entries(grouped).map(([groupName, groupItems]) => (
+              <div key={groupName}>
+                <div className="text-[11px] font-semibold text-slate-500 px-2.5 pb-1.5">
+                  {groupName}
+                </div>
+                <div className="space-y-0.5">
+                  {groupItems.map(({ item, index }) => {
+                    const isActive = index === activeIndex;
+                    return (
                       <button
-                        key={it.id}
-                        onClick={() => {
-                          onNavigate('interventions');
-                          onClose();
-                        }}
-                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
+                        key={item.id}
+                        type="button"
+                        data-palette-index={index}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        onClick={() => handleSelectItem(item)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 transition-colors ${
+                          isActive
+                            ? 'bg-blue-50 text-blue-950 ring-1 ring-blue-200'
+                            : 'hover:bg-slate-50 text-slate-800'
+                        }`}
                       >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <Wrench className="w-4 h-4 text-blue-600 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 dark:text-white mr-2">
-                              {it.numeroReference}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {it.nomDemandeur} — {it.descriptionPanne}
-                            </span>
+                        <div className="flex items-center gap-3 min-w-0">
+                          {item.icon}
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 truncate">
+                              {item.title}
+                            </div>
+                            {item.subtitle && (
+                              <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {item.subtitle}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                        <ArrowRight
+                          className={`w-3.5 h-3.5 shrink-0 transition-opacity ${
+                            isActive ? 'text-blue-600 opacity-100' : 'text-slate-400 opacity-0'
+                          }`}
+                        />
                       </button>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
-              )}
-
-              {matchingTasks.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
-                    Journal Quotidien ({matchingTasks.length})
-                  </span>
-                  <div className="space-y-1">
-                    {matchingTasks.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          onNavigate('journal');
-                          onClose();
-                        }}
-                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <CheckSquare className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 dark:text-white mr-2">
-                              {t.tache}
-                            </span>
-                            <span className="text-slate-500">
-                              {t.date} · {t.statut}
-                            </span>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {matchingParc.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
-                    Parc Matériel & CMDB ({matchingParc.length})
-                  </span>
-                  <div className="space-y-1">
-                    {matchingParc.map((p) => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          onNavigate('parc');
-                          onClose();
-                        }}
-                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <Laptop className="w-4 h-4 text-indigo-600 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 dark:text-white mr-2">
-                              {p.numeroInventaire}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {p.designation} ({p.utilisateurResponsable})
-                            </span>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {matchingConsommables.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
-                    Consommables & Stocks ({matchingConsommables.length})
-                  </span>
-                  <div className="space-y-1">
-                    {matchingConsommables.map((c) => (
-                      <button
-                        key={c.id}
-                        onClick={() => {
-                          onNavigate('consommables');
-                          onClose();
-                        }}
-                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <Package className="w-4 h-4 text-amber-600 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 dark:text-white mr-2">
-                              {c.reference}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {c.designation} — Stock: {c.stockActuel}
-                            </span>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {matchingRoiProjects.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-2 block mb-1">
-                    Projets & Retour sur Investissement ({matchingRoiProjects.length})
-                  </span>
-                  <div className="space-y-1">
-                    {matchingRoiProjects.map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => {
-                          onNavigate('bilans');
-                          onClose();
-                        }}
-                        className="w-full text-left p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between group transition"
-                      >
-                        <div className="flex items-center gap-2.5 truncate">
-                          <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <div className="truncate">
-                            <span className="font-bold text-slate-900 dark:text-white mr-2">
-                              {r.nomProjet}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              [{r.categorie}] · Éco: +{r.economiesFinancieresAnnuellesEuros}€ · Gain: {r.gainTempsEstimeHeuresParAn}h
-                            </span>
-                          </div>
-                        </div>
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
+              </div>
+            ))
           )}
         </div>
 
         {/* Pied de la palette */}
-        <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-          <span>Recherche globale instantanée</span>
-          <span>Appuyez sur Entrée pour naviguer</span>
+        <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+          <div className="flex items-center gap-3">
+            <span>
+              <kbd className="font-mono bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[10px]">
+                ↑↓
+              </kbd>{' '}
+              Naviguer
+            </span>
+            <span>
+              <kbd className="font-mono bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[10px]">
+                Entrée
+              </kbd>{' '}
+              Ouvrir
+            </span>
+          </div>
+          <span>Recherche instantanée</span>
         </div>
       </div>
     </div>

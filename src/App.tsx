@@ -18,9 +18,12 @@ import { MonthlyReportsSection } from './components/sections/MonthlyReportsSecti
 import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSection';
 import { PrintBooklet } from './components/PrintBooklet';
 import { DataManagementModal } from './components/DataManagementModal';
-import { CheckCircle2, AlertTriangle, Cloud, X, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Cloud, X, RotateCcw } from 'lucide-react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
 import { normalizeWorkbookData } from './utils/backupService';
+import { Modal } from './components/ui/Modal';
+import { Toast } from './components/ui/Toast';
+import { dangerButtonClass, secondaryButtonClass } from './components/ui/formStyles';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
 
@@ -239,6 +242,7 @@ function CahierContent({
                 <DailyLogSection
                   taches={data.journalTaches}
                   onUpdateTaches={(taches) => setData({ ...data, journalTaches: taches })}
+                  onShowToast={showToast}
                 />
               )}
 
@@ -396,6 +400,32 @@ export default function App() {
     };
   }, []);
 
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToastMessage(null);
+  }, []);
+
+  const pauseToastTimer = useCallback(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+  }, []);
+
+  const resumeToastTimer = useCallback(() => {
+    if (!toastMessage) return;
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 2500);
+  }, [toastMessage]);
+
   const showToast = useCallback((msg: string) => {
     setToastMessage(msg);
     if (toastTimerRef.current) {
@@ -404,7 +434,7 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => {
       setToastMessage(null);
       toastTimerRef.current = null;
-    }, 4000);
+    }, 4500);
   }, []);
 
   const handleCloudDataReceived = useCallback((cloudData: CahierSuiviData) => {
@@ -461,56 +491,51 @@ export default function App() {
       onCloudDataReceived={handleCloudDataReceived}
       currentLocalData={data}
     >
-      {/* Modal de confirmation de réinitialisation (sans window.confirm) */}
-      {resetConfirmOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 no-print"
-          onClick={() => setResetConfirmOpen(false)}
-        >
-          <div
-            className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200 p-6 space-y-4 text-xs"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-xl bg-red-100 text-red-700 shrink-0">
-                <RotateCcw className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">
-                  Réinitialiser le cahier sur la base vierge ?
-                </h3>
-                <p className="text-slate-600 mt-1 leading-relaxed">
-                  Toutes les saisies locales actuelles seront effacées pour repartir d'un cahier de production vierge. Pensez à exporter une sauvegarde JSON préalable si nécessaire.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">
-              <button
-                type="button"
-                onClick={() => setResetConfirmOpen(false)}
-                className="px-3.5 py-2 rounded-lg text-slate-600 hover:bg-slate-100 font-medium transition"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={confirmResetData}
-                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold transition"
-              >
-                Confirmer la réinitialisation
-              </button>
-            </div>
+      {/* Modal de confirmation de réinitialisation */}
+      <Modal
+        isOpen={resetConfirmOpen}
+        onClose={() => setResetConfirmOpen(false)}
+        title="Réinitialiser le cahier sur la base vierge ?"
+        subtitle="Action irréversible sur les données locales non sauvegardées."
+        icon={<RotateCcw className="w-4 h-4" />}
+        tone="danger"
+        size="sm"
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setResetConfirmOpen(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={confirmResetData}
+              className={dangerButtonClass}
+            >
+              Confirmer la réinitialisation
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-xs leading-relaxed text-slate-600">
+          <p>
+            Toutes les saisies locales actuelles seront effacées pour repartir d'un cahier de production vierge.
+          </p>
+          <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+            Pensez à exporter une sauvegarde JSON depuis <strong className="font-semibold">Données &amp; Sauvegarde</strong> si vous souhaitez archiver vos données avant réinitialisation.
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* Toast de notification global */}
-      {toastMessage && (
-        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 text-xs font-semibold animate-fade-in no-print">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+      <Toast
+        message={toastMessage}
+        onDismiss={dismissToast}
+        onPause={pauseToastTimer}
+        onResume={resumeToastTimer}
+      />
 
       <CahierContent
         data={data}
