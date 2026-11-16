@@ -213,24 +213,24 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* En-tête de section */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+            <span className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
               <TrendingUp className="w-5 h-5" />
             </span>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+            <h3 className="text-xl font-bold text-slate-900">
               Calcul du Retour sur Investissement (ROI) des Projets IT
             </h3>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Valorisation économique des chantiers réalisés, économies directes récurrentes et gains de productivité opérationnels.
           </p>
         </div>
 
         <button
           onClick={handleOpenAddModal}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition shrink-0"
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition shrink-0 whitespace-nowrap"
         >
           <Plus className="w-4 h-4" />
           <span>Ajouter un Projet au Bilan ROI</span>
@@ -240,12 +240,12 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       {/* Cartes KPI Consolidées du Retour sur Investissement */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
         {/* Investissement engagé */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Investissement Total</span>
             <DollarSign className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white font-mono">
+          <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono tabular-nums">
             {summary.totalInvestissement.toLocaleString('fr-FR')} €
           </div>
           <span className="text-[10px] text-slate-400 block mt-1">
@@ -254,12 +254,12 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
         </div>
 
         {/* Économies financières directes */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 mb-1">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-emerald-600 mb-1">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Économies Directes</span>
             <ArrowUpRight className="w-4 h-4" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
+          <div className="text-xl sm:text-2xl font-black text-emerald-600 font-mono tabular-nums">
             +{summary.totalEconomiesDirectes.toLocaleString('fr-FR')} €/an
           </div>
           <span className="text-[10px] text-slate-400 block mt-1">
@@ -268,15 +268,15 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
         </div>
 
         {/* Gain de temps valorisé */}
-        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between text-blue-600 dark:text-blue-400 mb-1">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center justify-between text-blue-600 mb-1">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Temps Économisé</span>
             <Clock className="w-4 h-4" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 font-mono">
+          <div className="text-xl sm:text-2xl font-black text-blue-600 font-mono tabular-nums">
             {summary.totalHeuresGagnees} h/an
           </div>
-          <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-1">
+          <span className="text-[10px] text-slate-500 block mt-1">
             Valorisé à <strong>+{summary.totalValorisationTemps.toLocaleString('fr-FR')} €/an</strong>
           </span>
         </div>
@@ -306,10 +306,10 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
 
       {/* Graphique de rentabilité comparative Recharts */}
       {projets.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <BarChart2 className="w-4 h-4 text-emerald-600" />
                 Comparatif Financier : Investissement initial vs Gains générés (€)
               </h4>
@@ -366,13 +366,13 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       )}
 
       {/* Liste détaillée des Projets et de leur ROI unitaire */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-2xs">
-        <div className="p-4 bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-2">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-2">
             <Layers className="w-4 h-4 text-slate-500" />
             Fiches Détaillées des Projets & Amortissement
           </h4>
-          <span className="text-xs text-slate-500 font-mono">
+          <span className="text-xs text-slate-500 font-mono tabular-nums">
             {projets.length} {projets.length > 1 ? 'projets analysés' : 'projet analysé'}
           </span>
         </div>
@@ -382,7 +382,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             Aucun projet informatique n'est pour l'instant consigné. Cliquez sur "Ajouter un Projet au Bilan ROI" pour commencer.
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          <div className="divide-y divide-slate-100">
             {projets.map((proj) => {
               const invest = Number(proj.coutInvestissementEuros) || 0;
               const eco = Number(proj.economiesFinancieresAnnuellesEuros) || 0;
@@ -396,34 +396,34 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               return (
                 <div
                   key={proj.id}
-                  className="p-5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-xs"
+                  className="p-5 hover:bg-slate-50/70 transition flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 text-xs"
                 >
                   {/* Titre & Description */}
                   <div className="space-y-1.5 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium text-[10px]">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[10px]">
                         {proj.categorie}
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
                           proj.statut === 'En production'
-                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            ? 'bg-emerald-100 text-emerald-800'
                             : proj.statut === 'Clôturé avec succès'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
-                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-amber-100 text-amber-800'
                         }`}
                       >
                         {proj.statut}
                       </span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-400 font-mono tabular-nums">
                         Mise en service : {proj.dateMiseEnService}
                       </span>
                     </div>
 
-                    <h5 className="text-sm font-bold text-slate-900 dark:text-white truncate">
+                    <h5 className="text-sm font-bold text-slate-900 truncate">
                       {proj.nomProjet}
                     </h5>
-                    <p className="text-slate-600 dark:text-slate-400 text-xs leading-relaxed">
+                    <p className="text-slate-600 text-xs leading-relaxed">
                       {proj.description}
                     </p>
 
@@ -436,27 +436,27 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                   </div>
 
                   {/* Indicateurs chiffrés du projet */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 dark:bg-slate-850 p-3 rounded-xl border border-slate-200 dark:border-slate-800 text-center shrink-0">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-3 rounded-xl border border-slate-200 text-center shrink-0">
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Investissement</span>
-                      <strong className="text-slate-900 dark:text-white font-mono text-xs font-bold">
+                      <strong className="text-slate-900 font-mono tabular-nums text-xs font-bold">
                         {invest.toLocaleString('fr-FR')} €
                       </strong>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Économies directes</span>
-                      <strong className="text-emerald-600 font-mono text-xs font-bold">
+                      <strong className="text-emerald-600 font-mono tabular-nums text-xs font-bold">
                         +{eco.toLocaleString('fr-FR')} €/an
                       </strong>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Temps gagné</span>
-                      <strong className="text-blue-600 font-mono text-xs font-bold">
+                      <strong className="text-blue-600 font-mono tabular-nums text-xs font-bold">
                         {heures} h/an
                       </strong>
-                      <span className="text-[9px] text-slate-400 block">
+                      <span className="text-[9px] text-slate-400 block font-mono tabular-nums">
                         (+{valTemps.toLocaleString('fr-FR')} €)
                       </span>
                     </div>
@@ -464,11 +464,11 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">ROI An 1 / Délai</span>
                       <div className="flex items-center justify-center gap-1">
-                        <strong className="text-emerald-700 dark:text-emerald-300 font-mono text-xs font-extrabold">
+                        <strong className="text-emerald-700 font-mono tabular-nums text-xs font-extrabold">
                           {roiProjet > 0 ? `+${roiProjet}%` : `${roiProjet}%`}
                         </strong>
                       </div>
-                      <span className="text-[9px] text-slate-500 block">
+                      <span className="text-[9px] text-slate-500 block font-mono tabular-nums">
                         Amorti en {paybackProjet} mois
                       </span>
                     </div>
@@ -499,7 +499,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => handleOpenEditModal(proj)}
-                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                          className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded transition"
                           title="Modifier le projet"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -507,7 +507,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(proj.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-slate-100 rounded transition"
                           title="Supprimer le projet"
                         >
                           <Trash2 className="w-4 h-4" />

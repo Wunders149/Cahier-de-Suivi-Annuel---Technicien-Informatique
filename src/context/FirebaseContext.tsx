@@ -1,9 +1,16 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+} from 'react';
 import {
   User,
   signInWithPopup,
   signOut as fbSignOut,
-  onAuthStateChanged
+  onAuthStateChanged,
 } from 'firebase/auth';
 import { auth, googleProvider, testFirestoreConnection } from '../firebase/config';
 import {
@@ -11,11 +18,12 @@ import {
   syncUserProfile,
   saveWorkbookToFirestore,
   subscribeToWorkbook,
-  ADMIN_EMAIL
+  ADMIN_EMAIL,
+  CloudWorkbookSnapshot,
 } from '../firebase/firestoreService';
 import { CahierSuiviData } from '../types/it-tracker';
 
-export type SyncStatus = 'synced' | 'saving' | 'local' | 'error';
+export type SyncStatus = 'synced' | 'saving' | 'local' | 'error' | 'conflict';
 
 interface FirebaseContextType {
   user: User | null;
@@ -29,6 +37,7 @@ interface FirebaseContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   saveDataToCloud: (data: CahierSuiviData) => Promise<void>;
+  setSyncStatusDirect: (status: SyncStatus) => void;
   dismissError: () => void;
 }
 
@@ -36,14 +45,19 @@ const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined
 
 interface FirebaseProviderProps {
   children: React.ReactNode;
-  onCloudDataReceived?: (data: CahierSuiviData) => void;
+  onCloudSnapshotReceived?: (
+    snapshot: CloudWorkbookSnapshot,
+    isInitialLoad: boolean
+  ) => void;
+  onCloudSynced?: (data: CahierSuiviData) => void;
   currentLocalData: CahierSuiviData;
 }
 
 export function FirebaseProvider({
   children,
-  onCloudDataReceived,
-  currentLocalData
+  onCloudSnapshotReceived,
+  onCloudSynced,
+  currentLocalData,
 }: FirebaseProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -53,10 +67,15 @@ export function FirebaseProvider({
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Pour éviter des boucles d'écoutes
   const isSavingRef = useRef(false);
   const currentLocalDataRef = useRef(currentLocalData);
   currentLocalDataRef.current = currentLocalData;
+
+  const onSnapshotRef = useRef(onCloudSnapshotReceived);
+  onSnapshotRef.current = onCloudSnapshotReceived;
+
+  const onCloudSyncedRef = useRef(onCloudSynced);
+  onCloudSyncedRef.current = onCloudSynced;
 
   // 1. Tester la connexion Firestore au montage
   useEffect(() => {
@@ -95,18 +114,16 @@ export function FirebaseProvider({
 
     const unsubscribeDoc = subscribeToWorkbook(
       user.uid,
-      async (cloudData) => {
+      async (snapshot) => {
         if (!initialLoadDone) {
           initialLoadDone = true;
-          if (cloudData) {
-            // Document distant existant -> mise à jour locale
-            if (onCloudDataReceived) {
-              onCloudDataReceived(cloudData);
+          if (snapshot) {
+            if (onSnapshotRef.current) {
+              onSnapshotRef.current(snapshot, true);
             }
-            setSyncStatus('synced');
             setLastSyncTime(new Date());
           } else {
-            // Aucun document dans le cloud -> sauvegarde automatique des données locales actuelles
+            // Aucun document dans le Cloud -> premier envoi des données locales
             try {
               isSavingRef.current = true;
               setSyncStatus('saving');
@@ -115,6 +132,9 @@ export function FirebaseProvider({
                 user.email || '',
                 currentLocalDataRef.current
               );
+              if (onCloudSyncedRef.current) {
+                onCloudSyncedRef.current(currentLocalDataRef.current);
+              }
               setSyncStatus('synced');
               setLastSyncTime(new Date());
             } catch (err) {
@@ -130,11 +150,10 @@ export function FirebaseProvider({
         }
 
         // Mises à jour distantes ultérieures (multi-onglets / multi-appareils)
-        if (cloudData && !isSavingRef.current) {
-          if (onCloudDataReceived) {
-            onCloudDataReceived(cloudData);
+        if (snapshot && !isSavingRef.current) {
+          if (onSnapshotRef.current) {
+            onSnapshotRef.current(snapshot, false);
           }
-          setSyncStatus('synced');
           setLastSyncTime(new Date());
         }
       },
@@ -146,31 +165,40 @@ export function FirebaseProvider({
     );
 
     return () => unsubscribeDoc();
-  }, [user, onCloudDataReceived]);
+  }, [user]);
 
   // Sauvegarde explicite ou programmée dans le Cloud
-  const saveDataToCloud = useCallback(async (dataToSave: CahierSuiviData) => {
-    if (!user) {
-      setSyncStatus('local');
-      return;
-    }
+  const saveDataToCloud = useCallback(
+    async (dataToSave: CahierSuiviData) => {
+      if (!user) {
+        setSyncStatus('local');
+        return;
+      }
 
-    try {
-      isSavingRef.current = true;
-      setSyncStatus('saving');
-      await saveWorkbookToFirestore(user.uid, user.email || '', dataToSave);
-      setSyncStatus('synced');
-      setLastSyncTime(new Date());
-    } catch (err) {
-      console.error('Erreur sauvegarde Cloud:', err);
-      setSyncStatus('error');
-      setErrorMessage('Impossible d\'enregistrer dans le Cloud. Vérifiez votre connexion.');
-    } finally {
-      setTimeout(() => {
-        isSavingRef.current = false;
-      }, 500);
-    }
-  }, [user]);
+      try {
+        isSavingRef.current = true;
+        setSyncStatus('saving');
+        await saveWorkbookToFirestore(user.uid, user.email || '', dataToSave);
+        if (onCloudSyncedRef.current) {
+          onCloudSyncedRef.current(dataToSave);
+        }
+        setSyncStatus('synced');
+        setLastSyncTime(new Date());
+      } catch (err) {
+        console.error('Erreur sauvegarde Cloud:', err);
+        setSyncStatus('error');
+        setErrorMessage(
+          "Impossible d'enregistrer dans le Cloud. Vérifiez votre connexion."
+        );
+        throw err;
+      } finally {
+        setTimeout(() => {
+          isSavingRef.current = false;
+        }, 500);
+      }
+    },
+    [user]
+  );
 
   // Connexion Google
   const signInWithGoogle = async () => {
@@ -214,6 +242,7 @@ export function FirebaseProvider({
         signInWithGoogle,
         signOut,
         saveDataToCloud,
+        setSyncStatusDirect: setSyncStatus,
         dismissError: () => setErrorMessage(null),
       }}
     >

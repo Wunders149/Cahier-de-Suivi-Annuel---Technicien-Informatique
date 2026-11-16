@@ -2,8 +2,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 160 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
     function isAuthenticated() {
       return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isAuthenticated() && request.auth.token.email_verified == true;
     }
 
     function isOwner(userId) {
@@ -11,51 +27,187 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        request.auth.token.email == 'razafimahefaphilibert7@gmail.com' &&
-        request.auth.token.email_verified == true;
+      return isVerifiedUser() &&
+        request.auth.token.email == 'razafimahefaphilibert7@gmail.com';
     }
 
-    // Profils utilisateurs
-    match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isOwner(userId) &&
-        request.resource.data.userId == userId &&
-        (request.resource.data.role != 'admin' || isAdmin());
-      allow update: if (
-        isOwner(userId) &&
-        request.resource.data.userId == userId &&
-        (request.resource.data.role == resource.data.role || isAdmin())
-      ) || isAdmin();
-      allow delete: if isAdmin();
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['userId', 'email', 'role']) &&
+        data.keys().hasOnly([
+          'userId', 'email', 'displayName', 'photoURL',
+          'role', 'createdAt', 'updatedAt',
+          'serverCreatedAt', 'serverUpdatedAt'
+        ]) &&
+        data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+        data.email is string && data.email.size() <= 254 &&
+        data.role in ['admin', 'technician', 'viewer'] &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 150)) &&
+        (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 1000)) &&
+        (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64)) &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64));
     }
 
-    // Cahiers de suivi annuel
-    match /workbooks/{workbookId} {
-      allow read: if isAuthenticated() && (
-        resource == null ||
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
-      allow create: if isAuthenticated() && (
-        (request.resource.data.userId == request.auth.uid &&
-          workbookId == ('workbook_' + request.auth.uid)) ||
-        isAdmin()
-      );
-      allow update: if isAuthenticated() && (
-        (resource.data.userId == request.auth.uid &&
-          request.resource.data.userId == resource.data.userId) ||
-        isAdmin()
-      );
-      allow delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid ||
-        isAdmin()
-      );
+    function isValidWorkbook(data) {
+      return data.keys().hasAll(['id', 'userId', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'userEmail', 'annee', 'generalInfo',
+          'objectifsAnnuels', 'jalonsCalendrier', 'journalTaches', 'interventions',
+          'maintenances', 'reseauEquipements', 'reseauIncidents', 'reseauTestsDebit',
+          'parcEquipements', 'logicielsLicences', 'sauvegardes', 'incidentsSecurite',
+          'consommables', 'demandesAchat', 'rapportsMensuels', 'bilansTrimestriels',
+          'bilanAnnuel', 'updatedAt', 'createdAt', 'serverUpdatedAt', 'serverCreatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.userId) &&
+        data.updatedAt is string && data.updatedAt.size() <= 64 &&
+        (!('userEmail' in data) || (data.userEmail is string && data.userEmail.size() <= 254)) &&
+        (!('annee' in data) || (data.annee is number && data.annee >= 2000 && data.annee <= 2100)) &&
+        (!('generalInfo' in data) || data.generalInfo is map) &&
+        (!('bilanAnnuel' in data) || data.bilanAnnuel is map) &&
+        (!('objectifsAnnuels' in data) || (data.objectifsAnnuels is list && data.objectifsAnnuels.size() <= 500)) &&
+        (!('jalonsCalendrier' in data) || (data.jalonsCalendrier is list && data.jalonsCalendrier.size() <= 500)) &&
+        (!('journalTaches' in data) || (data.journalTaches is list && data.journalTaches.size() <= 5000)) &&
+        (!('interventions' in data) || (data.interventions is list && data.interventions.size() <= 5000)) &&
+        (!('maintenances' in data) || (data.maintenances is list && data.maintenances.size() <= 1000)) &&
+        (!('reseauEquipements' in data) || (data.reseauEquipements is list && data.reseauEquipements.size() <= 1000)) &&
+        (!('reseauIncidents' in data) || (data.reseauIncidents is list && data.reseauIncidents.size() <= 2000)) &&
+        (!('reseauTestsDebit' in data) || (data.reseauTestsDebit is list && data.reseauTestsDebit.size() <= 2000)) &&
+        (!('parcEquipements' in data) || (data.parcEquipements is list && data.parcEquipements.size() <= 5000)) &&
+        (!('logicielsLicences' in data) || (data.logicielsLicences is list && data.logicielsLicences.size() <= 2000)) &&
+        (!('sauvegardes' in data) || (data.sauvegardes is list && data.sauvegardes.size() <= 1000)) &&
+        (!('incidentsSecurite' in data) || (data.incidentsSecurite is list && data.incidentsSecurite.size() <= 2000)) &&
+        (!('consommables' in data) || (data.consommables is list && data.consommables.size() <= 2000)) &&
+        (!('demandesAchat' in data) || (data.demandesAchat is list && data.demandesAchat.size() <= 2000)) &&
+        (!('rapportsMensuels' in data) || (data.rapportsMensuels is list && data.rapportsMensuels.size() <= 24)) &&
+        (!('bilansTrimestriels' in data) || (data.bilansTrimestriels is list && data.bilansTrimestriels.size() <= 8));
+    }
+
+    function isValidArchive(data, workbookId, archiveYear) {
+      return data.keys().hasAll(['id', 'workbookId', 'userId', 'annee', 'archivedAt', 'data']) &&
+        data.keys().hasOnly([
+          'id', 'workbookId', 'userId', 'annee', 'archivedAt',
+          'summaryStats', 'data', 'serverArchivedAt'
+        ]) &&
+        isValidId(data.id) && data.id == archiveYear &&
+        isValidId(data.workbookId) && data.workbookId == workbookId &&
+        isValidId(data.userId) &&
+        data.annee is number && data.annee >= 2000 && data.annee <= 2100 &&
+        data.archivedAt is string && data.archivedAt.size() <= 64 &&
+        data.data is map &&
+        (!('summaryStats' in data) || data.summaryStats is map);
     }
 
     // Refus par défaut pour tout autre document
     match /{document=**} {
       allow read, write: if false;
+    }
+
+    // Profils utilisateurs
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isOwner(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        (incoming().role != 'admin' || isAdmin());
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming(), userId) &&
+        (
+          (
+            isOwner(userId) &&
+            incoming().userId == existing().userId &&
+            (incoming().role == existing().role || isAdmin()) &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'email', 'displayName', 'photoURL', 'role',
+              'createdAt', 'updatedAt', 'serverUpdatedAt', 'serverCreatedAt'
+            ])
+          ) || isAdmin()
+        );
+      allow delete: if isAdmin();
+    }
+
+    // Cahiers de suivi annuel
+    match /workbooks/{workbookId} {
+      allow get: if isAuthenticated() && isValidId(workbookId) && (
+        resource == null ||
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(workbookId) &&
+        isValidWorkbook(incoming()) &&
+        (
+          (incoming().userId == request.auth.uid &&
+            workbookId == ('workbook_' + request.auth.uid)) ||
+          isAdmin()
+        );
+      allow update: if isVerifiedUser() &&
+        isValidId(workbookId) &&
+        isValidWorkbook(incoming()) &&
+        (
+          (
+            existing().userId == request.auth.uid &&
+            incoming().userId == existing().userId &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'id', 'userId', 'userEmail', 'annee', 'generalInfo',
+              'objectifsAnnuels', 'jalonsCalendrier', 'journalTaches', 'interventions',
+              'maintenances', 'reseauEquipements', 'reseauIncidents', 'reseauTestsDebit',
+              'parcEquipements', 'logicielsLicences', 'sauvegardes', 'incidentsSecurite',
+              'consommables', 'demandesAchat', 'rapportsMensuels', 'bilansTrimestriels',
+              'bilanAnnuel', 'updatedAt', 'createdAt', 'serverUpdatedAt', 'serverCreatedAt'
+            ])
+          ) || isAdmin()
+        );
+      allow delete: if isVerifiedUser() && isValidId(workbookId) && (
+        existing().userId == request.auth.uid ||
+        isAdmin()
+      );
+
+      // Sous-collection Archives Annuelles (Multi-année)
+      match /archives/{archiveYear} {
+        allow get: if isAuthenticated() &&
+          isValidId(workbookId) &&
+          isValidId(archiveYear) &&
+          (
+            get(/databases/$(database)/documents/workbooks/$(workbookId)).data.userId == request.auth.uid ||
+            isAdmin()
+          );
+        allow list: if isAuthenticated() && (
+          resource.data.userId == request.auth.uid ||
+          isAdmin()
+        );
+        allow create: if isVerifiedUser() &&
+          isValidId(workbookId) &&
+          isValidId(archiveYear) &&
+          isValidArchive(incoming(), workbookId, archiveYear) &&
+          incoming().userId == request.auth.uid &&
+          (
+            get(/databases/$(database)/documents/workbooks/$(workbookId)).data.userId == request.auth.uid ||
+            isAdmin()
+          );
+        allow update: if isVerifiedUser() &&
+          isValidId(workbookId) &&
+          isValidId(archiveYear) &&
+          isValidArchive(incoming(), workbookId, archiveYear) &&
+          incoming().userId == existing().userId &&
+          (
+            get(/databases/$(database)/documents/workbooks/$(workbookId)).data.userId == request.auth.uid ||
+            isAdmin()
+          );
+        allow delete: if isVerifiedUser() &&
+          isValidId(workbookId) &&
+          isValidId(archiveYear) &&
+          (
+            get(/databases/$(database)/documents/workbooks/$(workbookId)).data.userId == request.auth.uid ||
+            isAdmin()
+          );
+      }
     }
   }
 }

@@ -92,27 +92,27 @@ export const Header: React.FC<HeaderProps> = ({
   const currentTitle = TAB_TITLES[activeTab] || 'Tableau de Bord';
 
   return (
-    <header className="h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header className="h-16 bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6 lg:px-8">
       {/* 1. GAUCHE : Menu hamburger (mobile) & Titre de section épuré */}
       <div className="flex items-center gap-3 min-w-0">
         <button
           onClick={onOpenSidebar}
-          className="lg:hidden p-2 -ml-1 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          className="lg:hidden p-2 -ml-1 rounded-lg text-slate-600 hover:bg-slate-100 transition"
           aria-label="Ouvrir le menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 min-w-0">
+        <div className="flex items-center gap-2 text-xs text-slate-500 min-w-0">
           {generalInfo.entreprise?.trim() && (
             <>
-              <span className="font-semibold text-slate-900 dark:text-white hidden sm:inline truncate max-w-[150px]">
+              <span className="font-semibold text-slate-900 hidden sm:inline truncate max-w-[150px]">
                 {generalInfo.entreprise}
               </span>
-              <span className="hidden sm:inline text-slate-300 dark:text-slate-700" aria-hidden="true">/</span>
+              <span className="hidden sm:inline text-slate-300" aria-hidden="true">/</span>
             </>
           )}
-          <span className="font-bold text-blue-600 dark:text-blue-400 truncate text-sm">
+          <span className="font-bold text-blue-600 truncate text-sm">
             {currentTitle}
           </span>
         </div>
@@ -122,14 +122,14 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="hidden md:flex items-center justify-center flex-1 max-w-sm px-4">
         <button
           onClick={onOpenSearch}
-          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 text-xs transition"
+          className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 text-slate-500 border border-slate-200 text-xs transition"
           title="Rechercher (⌘K)"
         >
           <div className="flex items-center gap-2">
             <Search className="w-3.5 h-3.5 text-slate-400" />
             <span>Rechercher...</span>
           </div>
-          <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-400">
+          <kbd className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-400">
             ⌘K
           </kbd>
         </button>
@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Recherche sur mobile */}
         <button
           onClick={onOpenSearch}
-          className="md:hidden p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          className="md:hidden p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition"
           title="Rechercher"
         >
           <Search className="w-4 h-4" />
@@ -152,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
             {syncStatus === 'synced' && (
               <button
                 onClick={() => saveDataToCloud(data)}
-                className="p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition relative group"
+                className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition relative group"
                 title={lastSyncTime ? `Cloud synchronisé à ${lastSyncTime.toLocaleTimeString()}` : 'Cloud synchronisé'}
               >
                 <Cloud className="w-4 h-4" />
@@ -203,8 +203,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           {exportMenuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-1.5 z-50 text-xs space-y-0.5 animate-in fade-in duration-100">
-              <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 mb-1">
+            <div className="absolute right-0 top-full mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-slate-200 p-1.5 z-50 text-xs space-y-0.5 animate-in fade-in duration-100">
+              <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
                 Formats d'exportation
               </div>
 
@@ -214,13 +214,13 @@ export const Header: React.FC<HeaderProps> = ({
                   setExportMenuOpen(false);
                 }}
                 disabled={isGeneratingDocx}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-blue-50 dark:hover:bg-blue-950/60 text-slate-700 dark:text-slate-200 font-medium transition disabled:opacity-50"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-blue-50 text-slate-700 font-medium transition disabled:opacity-50"
               >
-                <span className="w-6 h-6 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
                   <FileText className="w-3.5 h-3.5" />
                 </span>
                 <div>
-                  <strong className="block text-slate-900 dark:text-white">Document Word (.docx)</strong>
+                  <strong className="block text-slate-900">Document Word (.docx)</strong>
                   <span className="text-[10px] text-slate-500">Document complet modifiable</span>
                 </div>
               </button>
@@ -230,13 +230,13 @@ export const Header: React.FC<HeaderProps> = ({
                   onDownloadPdf();
                   setExportMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-emerald-50 dark:hover:bg-emerald-950/60 text-slate-700 dark:text-slate-200 font-medium transition"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-emerald-50 text-slate-700 font-medium transition"
               >
-                <span className="w-6 h-6 rounded bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                   <Download className="w-3.5 h-3.5" />
                 </span>
                 <div>
-                  <strong className="block text-slate-900 dark:text-white">Document PDF (.pdf)</strong>
+                  <strong className="block text-slate-900">Document PDF (.pdf)</strong>
                   <span className="text-[10px] text-slate-500">Fichier prêt pour la direction</span>
                 </div>
               </button>
@@ -246,13 +246,13 @@ export const Header: React.FC<HeaderProps> = ({
                   onPrintPreview();
                   setExportMenuOpen(false);
                 }}
-                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium transition"
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-slate-100 text-slate-700 font-medium transition"
               >
-                <span className="w-6 h-6 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 flex items-center justify-center shrink-0">
+                <span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
                   <Printer className="w-3.5 h-3.5" />
                 </span>
                 <div>
-                  <strong className="block text-slate-900 dark:text-white">Format Livret A4</strong>
+                  <strong className="block text-slate-900">Format Livret A4</strong>
                   <span className="text-[10px] text-slate-500">Aperçu et impression officielle</span>
                 </div>
               </button>
@@ -261,19 +261,20 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Profil Utilisateur / Connexion Google */}
-        <div className="relative pl-1 border-l border-slate-200 dark:border-slate-800" ref={userMenuRef}>
+        <div className="relative pl-1 border-l border-slate-200" ref={userMenuRef}>
           {user ? (
             <div>
               <button
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
+                className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 transition focus:outline-none"
                 title={`${user.displayName || user.email} (${isAdmin ? 'Admin' : 'Technicien'})`}
               >
                 {user.photoURL ? (
                   <img
                     src={user.photoURL}
                     alt={user.displayName || 'Utilisateur'}
-                    className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200 dark:ring-slate-700"
+                    referrerPolicy="no-referrer"
+                    className="w-7 h-7 rounded-full object-cover ring-1 ring-slate-200"
                   />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center">
@@ -284,9 +285,9 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-60 bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 p-2.5 z-50 text-xs space-y-2 animate-in fade-in duration-100">
-                  <div className="pb-2 border-b border-slate-100 dark:border-slate-800">
-                    <span className="font-bold text-slate-900 dark:text-white block truncate">
+                <div className="absolute right-0 top-full mt-1.5 w-60 bg-white rounded-xl shadow-xl border border-slate-200 p-2.5 z-50 text-xs space-y-2 animate-in fade-in duration-100">
+                  <div className="pb-2 border-b border-slate-100">
+                    <span className="font-bold text-slate-900 block truncate">
                       {user.displayName || 'Technicien IT'}
                     </span>
                     <span className="text-[11px] text-slate-500 truncate block">
@@ -295,8 +296,8 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="mt-1">
                       <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${
                         isAdmin
-                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-blue-100 text-blue-800'
                       }`}>
                         {isAdmin ? 'Super Administrateur DSI' : (profile?.role || 'Technicien')}
                       </span>
@@ -308,7 +309,7 @@ export const Header: React.FC<HeaderProps> = ({
                       signOut();
                       setUserMenuOpen(false);
                     }}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 font-medium transition"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-red-600 hover:bg-red-50 font-medium transition"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Se déconnecter</span>
@@ -319,7 +320,7 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <button
               onClick={signInWithGoogle}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white text-xs font-medium transition"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition"
               title="Connexion Google"
             >
               <LogIn className="w-3.5 h-3.5" />

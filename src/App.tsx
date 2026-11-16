@@ -18,14 +18,56 @@ import { MonthlyReportsSection } from './components/sections/MonthlyReportsSecti
 import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSection';
 import { PrintBooklet } from './components/PrintBooklet';
 import { DataManagementModal } from './components/DataManagementModal';
+import { CloudConflictModal, CloudConflictState } from './components/CloudConflictModal';
 import { AlertTriangle, Cloud, X, RotateCcw } from 'lucide-react';
 import { FirebaseProvider, useFirebase } from './context/FirebaseContext';
-import { normalizeWorkbookData } from './utils/backupService';
+import { CloudWorkbookSnapshot } from './firebase/firestoreService';
+import {
+  normalizeWorkbookData,
+  mergeWorkbookData,
+  estimateWorkbookSizeBytes,
+} from './utils/backupService';
 import { Modal } from './components/ui/Modal';
 import { Toast } from './components/ui/Toast';
 import { dangerButtonClass, secondaryButtonClass } from './components/ui/formStyles';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
+const SYNC_META_KEY = 'cahier_suivi_sync_meta_v1';
+
+interface SyncMeta {
+  localDirty: boolean;
+  lastLocalModifiedAt: string | null;
+  lastSyncedHash: string | null;
+}
+
+function readSyncMeta(): SyncMeta {
+  try {
+    const raw = localStorage.getItem(SYNC_META_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        localDirty: Boolean(parsed.localDirty),
+        lastLocalModifiedAt: parsed.lastLocalModifiedAt || null,
+        lastSyncedHash: parsed.lastSyncedHash || null,
+      };
+    }
+  } catch {
+    // Ignorer erreur lecture meta
+  }
+  return {
+    localDirty: false,
+    lastLocalModifiedAt: null,
+    lastSyncedHash: null,
+  };
+}
+
+function writeSyncMeta(meta: SyncMeta): void {
+  try {
+    localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta));
+  } catch {
+    // Ignorer erreur écriture meta
+  }
+}
 
 function CahierContent({
   data,
@@ -37,6 +79,10 @@ function CahierContent({
   handlePrintPreview,
   handleResetData,
   lastCloudSnapshotRef,
+  conflict,
+  onResolveMerge,
+  onResolveKeepLocal,
+  onResolveLoadCloud,
 }: {
   data: CahierSuiviData;
   setData: React.Dispatch<React.SetStateAction<CahierSuiviData>>;
@@ -47,19 +93,17 @@ function CahierContent({
   handlePrintPreview: () => void;
   handleResetData: () => void;
   lastCloudSnapshotRef: React.MutableRefObject<string | null>;
+  conflict: CloudConflictState | null;
+  onResolveMerge: (saveFn: (d: CahierSuiviData) => Promise<void>) => void;
+  onResolveKeepLocal: (saveFn: (d: CahierSuiviData) => Promise<void>) => void;
+  onResolveLoadCloud: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<string>('general');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
 
-  const {
-    user,
-    isAdmin,
-    errorMessage,
-    dismissError,
-    saveDataToCloud
-  } = useFirebase();
+  const { user, isAdmin, errorMessage, dismissError, saveDataToCloud } = useFirebase();
 
   // Raccourci clavier global Cmd+K / Ctrl+K pour ouvrir la palette de recherche
   useEffect(() => {
@@ -73,7 +117,7 @@ function CahierContent({
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, []);
 
-  // Débouncing de la sauvegarde Cloud automatique (sans boucle sur réception Cloud)
+  // Débouncing de la sauvegarde Cloud automatique (suspendu tant qu'un conflit est actif)
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevUserIdRef = useRef<string | null>(null);
 
@@ -84,7 +128,7 @@ function CahierContent({
       return;
     }
 
-    if (!user) return;
+    if (!user || conflict) return;
 
     const serialized = JSON.stringify(data);
     if (lastCloudSnapshotRef.current === serialized) {
@@ -107,12 +151,19 @@ function CahierContent({
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [data, user, saveDataToCloud, lastCloudSnapshotRef]);
+  }, [data, user, conflict, saveDataToCloud, lastCloudSnapshotRef]);
 
   // Badges calculés
-  const pendingTasks = data.journalTaches.filter((t) => t.statut === 'En cours' || t.statut === 'À faire').length;
-  const activeInterventions = data.interventions.filter((i) => i.resultat !== 'Résolu').length;
-  const lowStock = data.consommables.filter((c) => c.stockActuel <= c.stockMinimumAlerte).length;
+  const pendingTasks = data.journalTaches.filter(
+    (t) => t.statut === 'En cours' || t.statut === 'À faire'
+  ).length;
+  const activeInterventions = data.interventions.filter(
+    (i) => i.resultat !== 'Résolu'
+  ).length;
+  const lowStock = data.consommables.filter(
+    (c) => c.stockActuel <= c.stockMinimumAlerte
+  ).length;
+  const sizeKo = Math.max(1, Math.round(estimateWorkbookSizeBytes(data) / 1024));
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex flex-col antialiased">
@@ -124,6 +175,7 @@ function CahierContent({
             <span>{errorMessage}</span>
           </div>
           <button
+            type="button"
             onClick={dismissError}
             className="p-1 hover:bg-red-700 rounded transition"
             aria-label="Fermer"
@@ -132,6 +184,15 @@ function CahierContent({
           </button>
         </div>
       )}
+
+      {/* Modale de résolution de conflit Cloud */}
+      <CloudConflictModal
+        conflict={conflict}
+        onResolveMerge={() => onResolveMerge(saveDataToCloud)}
+        onResolveKeepLocal={() => onResolveKeepLocal(saveDataToCloud)}
+        onResolveLoadCloud={onResolveLoadCloud}
+        onShowToast={showToast}
+      />
 
       {/* Palette de commande rapide (Cmd+K) */}
       <CommandPalette
@@ -191,25 +252,34 @@ function CahierContent({
               isGeneratingDocx={isGeneratingDocx}
             />
 
-            {/* Notification persistante discrète si connecté */}
+            {/* Notification persistante discrète si connecté (Thème Clair unifié) */}
             {user && (
-              <div className="bg-blue-50/70 dark:bg-slate-900 border-b border-blue-100 dark:border-slate-800 px-4 py-1.5 flex items-center justify-between text-[11px] text-blue-900 dark:text-blue-300 no-print">
+              <div className="bg-blue-50/80 border-b border-blue-200/80 px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-blue-950 no-print">
                 <div className="flex items-center gap-2">
-                  <Cloud className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  <Cloud className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   <span>
-                    Synchronisation automatique active sur Firestore Cloud ({user.email})
+                    Synchronisation active sur Firestore Cloud ({user.email})
+                  </span>
+                  <span className="text-slate-400" aria-hidden="true">·</span>
+                  <span className="font-mono tabular-nums text-slate-600">
+                    {sizeKo} / 1 024 Ko
                   </span>
                   {isAdmin && (
-                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                    <span className="font-semibold text-amber-700">
                       · Privilèges Administrateur DSI
                     </span>
                   )}
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
-                    saveDataToCloud(data).then(() => showToast('Cahier synchronisé avec succès dans Firestore !'));
+                    saveDataToCloud(data)
+                      .then(() =>
+                        showToast('Cahier synchronisé avec succès dans Firestore !')
+                      )
+                      .catch(() => {});
                   }}
-                  className="font-medium hover:underline text-blue-700 dark:text-blue-300"
+                  className="font-semibold hover:underline text-blue-700 whitespace-nowrap shrink-0"
                 >
                   Forcer la synchronisation
                 </button>
@@ -233,15 +303,22 @@ function CahierContent({
                 <AnnualPlanSection
                   objectifs={data.objectifsAnnuels}
                   jalons={data.jalonsCalendrier}
-                  onUpdateObjectifs={(objectifs) => setData({ ...data, objectifsAnnuels: objectifs })}
-                  onUpdateJalons={(jalons) => setData({ ...data, jalonsCalendrier: jalons })}
+                  onUpdateObjectifs={(objectifs) =>
+                    setData({ ...data, objectifsAnnuels: objectifs })
+                  }
+                  onUpdateJalons={(jalons) =>
+                    setData({ ...data, jalonsCalendrier: jalons })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
               {activeTab === 'journal' && (
                 <DailyLogSection
                   taches={data.journalTaches}
-                  onUpdateTaches={(taches) => setData({ ...data, journalTaches: taches })}
+                  onUpdateTaches={(taches) =>
+                    setData({ ...data, journalTaches: taches })
+                  }
                   onShowToast={showToast}
                 />
               )}
@@ -249,7 +326,9 @@ function CahierContent({
               {activeTab === 'interventions' && (
                 <InterventionsSection
                   interventions={data.interventions}
-                  onUpdateInterventions={(interventions) => setData({ ...data, interventions })}
+                  onUpdateInterventions={(interventions) =>
+                    setData({ ...data, interventions })
+                  }
                   generalInfo={data.generalInfo}
                   onShowToast={showToast}
                 />
@@ -258,7 +337,10 @@ function CahierContent({
               {activeTab === 'maintenance' && (
                 <MaintenanceSection
                   maintenances={data.maintenances}
-                  onUpdateMaintenances={(maintenances) => setData({ ...data, maintenances })}
+                  onUpdateMaintenances={(maintenances) =>
+                    setData({ ...data, maintenances })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
@@ -267,23 +349,36 @@ function CahierContent({
                   equipements={data.reseauEquipements}
                   incidents={data.reseauIncidents}
                   testsDebit={data.reseauTestsDebit}
-                  onUpdateEquipements={(reseauEquipements) => setData({ ...data, reseauEquipements })}
-                  onUpdateIncidents={(reseauIncidents) => setData({ ...data, reseauIncidents })}
-                  onUpdateTestsDebit={(reseauTestsDebit) => setData({ ...data, reseauTestsDebit })}
+                  onUpdateEquipements={(reseauEquipements) =>
+                    setData({ ...data, reseauEquipements })
+                  }
+                  onUpdateIncidents={(reseauIncidents) =>
+                    setData({ ...data, reseauIncidents })
+                  }
+                  onUpdateTestsDebit={(reseauTestsDebit) =>
+                    setData({ ...data, reseauTestsDebit })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
               {activeTab === 'parc' && (
                 <InventorySection
                   parc={data.parcEquipements}
-                  onUpdateParc={(parcEquipements) => setData({ ...data, parcEquipements })}
+                  onUpdateParc={(parcEquipements) =>
+                    setData({ ...data, parcEquipements })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
               {activeTab === 'logiciels' && (
                 <SoftwareLicensesSection
                   licences={data.logicielsLicences}
-                  onUpdateLicences={(logicielsLicences) => setData({ ...data, logicielsLicences })}
+                  onUpdateLicences={(logicielsLicences) =>
+                    setData({ ...data, logicielsLicences })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
@@ -291,8 +386,13 @@ function CahierContent({
                 <BackupSecuritySection
                   sauvegardes={data.sauvegardes}
                   incidentsSecurite={data.incidentsSecurite}
-                  onUpdateSauvegardes={(sauvegardes) => setData({ ...data, sauvegardes })}
-                  onUpdateIncidentsSecurite={(incidentsSecurite) => setData({ ...data, incidentsSecurite })}
+                  onUpdateSauvegardes={(sauvegardes) =>
+                    setData({ ...data, sauvegardes })
+                  }
+                  onUpdateIncidentsSecurite={(incidentsSecurite) =>
+                    setData({ ...data, incidentsSecurite })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
@@ -300,8 +400,13 @@ function CahierContent({
                 <ConsumablesSection
                   consommables={data.consommables}
                   demandesAchat={data.demandesAchat}
-                  onUpdateConsommables={(consommables) => setData({ ...data, consommables })}
-                  onUpdateDemandesAchat={(demandesAchat) => setData({ ...data, demandesAchat })}
+                  onUpdateConsommables={(consommables) =>
+                    setData({ ...data, consommables })
+                  }
+                  onUpdateDemandesAchat={(demandesAchat) =>
+                    setData({ ...data, demandesAchat })
+                  }
+                  onShowToast={showToast}
                 />
               )}
 
@@ -309,7 +414,9 @@ function CahierContent({
                 <MonthlyReportsSection
                   data={data}
                   rapports={data.rapportsMensuels}
-                  onUpdateRapports={(rapportsMensuels) => setData({ ...data, rapportsMensuels })}
+                  onUpdateRapports={(rapportsMensuels) =>
+                    setData({ ...data, rapportsMensuels })
+                  }
                   onShowToast={showToast}
                 />
               )}
@@ -319,8 +426,12 @@ function CahierContent({
                   bilansTrimestriels={data.bilansTrimestriels}
                   bilanAnnuel={data.bilanAnnuel}
                   generalInfo={data.generalInfo}
-                  onUpdateTrimestriels={(bilansTrimestriels) => setData({ ...data, bilansTrimestriels })}
-                  onUpdateBilanAnnuel={(bilanAnnuel) => setData({ ...data, bilanAnnuel })}
+                  onUpdateTrimestriels={(bilansTrimestriels) =>
+                    setData({ ...data, bilansTrimestriels })
+                  }
+                  onUpdateBilanAnnuel={(bilanAnnuel) =>
+                    setData({ ...data, bilanAnnuel })
+                  }
                 />
               )}
             </main>
@@ -331,10 +442,11 @@ function CahierContent({
                 <strong className="text-slate-800 font-semibold">
                   {data.generalInfo.entreprise || 'Cahier de Suivi IT'}
                 </strong>{' '}
-                · Direction des Systèmes d'Information
+                · Direction des Systèmes d&apos;Information
               </div>
               <div className="flex items-center gap-3 text-slate-500 text-[11px]">
                 <button
+                  type="button"
                   onClick={handleDownloadDocx}
                   disabled={isGeneratingDocx}
                   className="hover:text-blue-600 transition"
@@ -343,6 +455,7 @@ function CahierContent({
                 </button>
                 <span>·</span>
                 <button
+                  type="button"
                   onClick={handleDownloadPdf}
                   className="hover:text-emerald-600 transition"
                 >
@@ -350,6 +463,7 @@ function CahierContent({
                 </button>
                 <span>·</span>
                 <button
+                  type="button"
                   onClick={handlePrintPreview}
                   className="hover:text-slate-900 transition"
                 >
@@ -380,16 +494,45 @@ export default function App() {
   const [isGeneratingDocx, setIsGeneratingDocx] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [conflict, setConflict] = useState<CloudConflictState | null>(null);
+
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCloudSnapshotRef = useRef<string | null>(null);
+  const syncMetaRef = useRef<SyncMeta>(readSyncMeta());
+  const dataRef = useRef<CahierSuiviData>(data);
+  dataRef.current = data;
 
-  // Synchronisation continue avec localStorage (mode hors ligne et cache local)
+  const isApplyingCloudRef = useRef(false);
+
+  // Synchronisation continue avec localStorage + suivi des modifications locales non synchronisées
   useEffect(() => {
+    const serialized = JSON.stringify(data);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(STORAGE_KEY, serialized);
     } catch (e) {
       console.error('Erreur sauvegarde localStorage', e);
     }
+
+    if (isApplyingCloudRef.current) {
+      isApplyingCloudRef.current = false;
+      return;
+    }
+
+    if (
+      syncMetaRef.current.lastSyncedHash &&
+      syncMetaRef.current.lastSyncedHash === serialized
+    ) {
+      return;
+    }
+
+    // Marquer le cahier comme modifié localement s'il diffère de la dernière synchro connue
+    const nextMeta: SyncMeta = {
+      localDirty: true,
+      lastLocalModifiedAt: new Date().toISOString(),
+      lastSyncedHash: syncMetaRef.current.lastSyncedHash,
+    };
+    syncMetaRef.current = nextMeta;
+    writeSyncMeta(nextMeta);
   }, [data]);
 
   useEffect(() => {
@@ -437,12 +580,99 @@ export default function App() {
     }, 4500);
   }, []);
 
-  const handleCloudDataReceived = useCallback((cloudData: CahierSuiviData) => {
-    const normalized = normalizeWorkbookData(cloudData);
-    lastCloudSnapshotRef.current = JSON.stringify(normalized);
-    setData(normalized);
-    showToast('Données synchronisées depuis le Cloud Firestore.');
-  }, [showToast]);
+  const markSynced = useCallback((syncedData: CahierSuiviData) => {
+    const serialized = JSON.stringify(syncedData);
+    lastCloudSnapshotRef.current = serialized;
+    const nextMeta: SyncMeta = {
+      localDirty: false,
+      lastLocalModifiedAt: new Date().toISOString(),
+      lastSyncedHash: serialized,
+    };
+    syncMetaRef.current = nextMeta;
+    writeSyncMeta(nextMeta);
+  }, []);
+
+  const handleCloudSnapshotReceived = useCallback(
+    (snapshot: CloudWorkbookSnapshot, isInitialLoad: boolean) => {
+      const normalizedCloud = normalizeWorkbookData(snapshot.data);
+      const cloudSerialized = JSON.stringify(normalizedCloud);
+      const localSerialized = JSON.stringify(dataRef.current);
+
+      if (cloudSerialized === localSerialized) {
+        markSynced(normalizedCloud);
+        return;
+      }
+
+      // Vérifier s'il y a des modifications locales non synchronisées
+      const meta = syncMetaRef.current;
+      const hasUnsyncedLocalEdits =
+        meta.localDirty &&
+        meta.lastSyncedHash !== localSerialized;
+
+      if (hasUnsyncedLocalEdits) {
+        setConflict({
+          localData: dataRef.current,
+          cloudData: normalizedCloud,
+          localUpdatedAt: meta.lastLocalModifiedAt,
+          cloudUpdatedAt: snapshot.updatedAt,
+        });
+        return;
+      }
+
+      // Pas de modification locale en conflit -> mise à jour transparente depuis le Cloud
+      isApplyingCloudRef.current = true;
+      markSynced(normalizedCloud);
+      setData(normalizedCloud);
+      if (isInitialLoad) {
+        showToast('Données synchronisées depuis le Cloud Firestore.');
+      }
+    },
+    [markSynced, showToast]
+  );
+
+  const handleResolveMerge = useCallback(
+    async (saveFn: (d: CahierSuiviData) => Promise<void>) => {
+      if (!conflict) return;
+      const merged = mergeWorkbookData(conflict.localData, conflict.cloudData);
+      setConflict(null);
+      isApplyingCloudRef.current = true;
+      setData(merged);
+      try {
+        await saveFn(merged);
+        markSynced(merged);
+        showToast('Versions locale et Cloud fusionnées et synchronisées.');
+      } catch {
+        showToast('Fusion appliquée localement. Nouvelle tentative Cloud requise.');
+      }
+    },
+    [conflict, markSynced, showToast]
+  );
+
+  const handleResolveKeepLocal = useCallback(
+    async (saveFn: (d: CahierSuiviData) => Promise<void>) => {
+      if (!conflict) return;
+      const localVersion = conflict.localData;
+      setConflict(null);
+      try {
+        await saveFn(localVersion);
+        markSynced(localVersion);
+        showToast('Version locale conservée et envoyée vers Firestore.');
+      } catch {
+        showToast('Version locale conservée. Échec de l’envoi vers Firestore.');
+      }
+    },
+    [conflict, markSynced, showToast]
+  );
+
+  const handleResolveLoadCloud = useCallback(() => {
+    if (!conflict) return;
+    const cloudVersion = normalizeWorkbookData(conflict.cloudData);
+    setConflict(null);
+    isApplyingCloudRef.current = true;
+    markSynced(cloudVersion);
+    setData(cloudVersion);
+    showToast('Version Cloud chargée dans votre cahier.');
+  }, [conflict, markSynced, showToast]);
 
   const handleDownloadDocx = async () => {
     try {
@@ -482,13 +712,20 @@ export default function App() {
   const confirmResetData = () => {
     setData(initialCahierData);
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(SYNC_META_KEY);
+    syncMetaRef.current = {
+      localDirty: false,
+      lastLocalModifiedAt: null,
+      lastSyncedHash: null,
+    };
     setResetConfirmOpen(false);
     showToast('Cahier réinitialisé sur la base vierge de production.');
   };
 
   return (
     <FirebaseProvider
-      onCloudDataReceived={handleCloudDataReceived}
+      onCloudSnapshotReceived={handleCloudSnapshotReceived}
+      onCloudSynced={markSynced}
       currentLocalData={data}
     >
       {/* Modal de confirmation de réinitialisation */}
@@ -521,7 +758,7 @@ export default function App() {
       >
         <div className="space-y-3 text-xs leading-relaxed text-slate-600">
           <p>
-            Toutes les saisies locales actuelles seront effacées pour repartir d'un cahier de production vierge.
+            Toutes les saisies locales actuelles seront effacées pour repartir d&apos;un cahier de production vierge.
           </p>
           <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
             Pensez à exporter une sauvegarde JSON depuis <strong className="font-semibold">Données &amp; Sauvegarde</strong> si vous souhaitez archiver vos données avant réinitialisation.
@@ -547,6 +784,10 @@ export default function App() {
         handlePrintPreview={handlePrintPreview}
         handleResetData={handleResetData}
         lastCloudSnapshotRef={lastCloudSnapshotRef}
+        conflict={conflict}
+        onResolveMerge={handleResolveMerge}
+        onResolveKeepLocal={handleResolveKeepLocal}
+        onResolveLoadCloud={handleResolveLoadCloud}
       />
     </FirebaseProvider>
   );

@@ -76,33 +76,33 @@ const CATEGORY_CONFIG: Record<
 > = {
   Ordinateurs: {
     color: '#2563eb', // Bleu Roi
-    lightBg: 'bg-blue-50 dark:bg-blue-950/40',
-    borderColor: 'border-blue-200 dark:border-blue-800',
-    textColor: 'text-blue-700 dark:text-blue-300',
+    lightBg: 'bg-blue-50',
+    borderColor: 'border-blue-200',
+    textColor: 'text-blue-700',
     icon: Laptop,
     description: 'Postes de travail (PC Portables, Postes fixes, Stations CAO)',
   },
   Écrans: {
     color: '#0284c7', // Sky / Cyan
-    lightBg: 'bg-sky-50 dark:bg-sky-950/40',
-    borderColor: 'border-sky-200 dark:border-sky-800',
-    textColor: 'text-sky-700 dark:text-sky-300',
+    lightBg: 'bg-sky-50',
+    borderColor: 'border-sky-200',
+    textColor: 'text-sky-700',
     icon: Monitor,
     description: 'Moniteurs bureautiques, dalles 4K USB-C et configurations doubles',
   },
   Serveurs: {
     color: '#7c3aed', // Violet
-    lightBg: 'bg-purple-50 dark:bg-purple-950/40',
-    borderColor: 'border-purple-200 dark:border-purple-800',
-    textColor: 'text-purple-700 dark:text-purple-300',
+    lightBg: 'bg-purple-50',
+    borderColor: 'border-purple-200',
+    textColor: 'text-purple-700',
     icon: Server,
     description: 'Hyperviseurs de virtualisation, stockage NAS et contrôleurs AD',
   },
   Périphériques: {
     color: '#059669', // Emeraude
-    lightBg: 'bg-emerald-50 dark:bg-emerald-950/40',
-    borderColor: 'border-emerald-200 dark:border-emerald-800',
-    textColor: 'text-emerald-700 dark:text-emerald-300',
+    lightBg: 'bg-emerald-50',
+    borderColor: 'border-emerald-200',
+    textColor: 'text-emerald-700',
     icon: Cpu,
     description: 'Imprimantes, copieurs, onduleurs, docks et scanners de production',
   },
@@ -261,30 +261,30 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-xs space-y-5">
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-5">
       {/* Barre de titre et commutateur de vue */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300">
+            <span className="p-1.5 rounded-lg bg-blue-100 text-blue-700">
               <PieIcon className="w-4 h-4" />
             </span>
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+            <h3 className="text-sm font-bold text-slate-900">
               Visualisation & Répartition du Parc Informatique
             </h3>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 mt-0.5">
             Répartition analytique des actifs par familles : ordinateurs, écrans, serveurs et périphériques.
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg text-xs self-start sm:self-auto">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg text-xs self-start sm:self-auto">
           <button
             onClick={() => setActiveChartTab('donut')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
               activeChartTab === 'donut'
-                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white text-blue-600 shadow-xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <PieIcon className="w-3.5 h-3.5" />
@@ -294,8 +294,8 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
             onClick={() => setActiveChartTab('bar')}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md font-medium transition ${
               activeChartTab === 'bar'
-                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs font-semibold'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                ? 'bg-white text-blue-600 shadow-xs font-semibold'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -319,13 +319,13 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
               onClick={() => onSelectCategory(isSelected ? null : cat)}
               className={`text-left p-3.5 rounded-xl border transition duration-150 flex flex-col justify-between relative overflow-hidden group ${
                 isSelected
-                  ? 'ring-2 ring-blue-600 bg-blue-50/50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 shadow-xs'
-                  : 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 hover:bg-slate-100/60'
+                  ? 'ring-2 ring-blue-600 bg-blue-50/50 border-blue-300 shadow-xs'
+                  : 'bg-slate-50/70 border-slate-200 hover:border-slate-300 hover:bg-slate-100/60'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
-                <span className="p-2 rounded-lg bg-white dark:bg-slate-800 shadow-2xs border border-slate-100 dark:border-slate-700">
-                  <Icon className="w-4 h-4 text-slate-700 dark:text-slate-200" />
+                <span className="p-2 rounded-lg bg-white shadow-2xs border border-slate-100">
+                  <Icon className="w-4 h-4 text-slate-700" />
                 </span>
                 <span
                   className="text-xs font-mono font-bold px-2 py-0.5 rounded-full"
@@ -339,11 +339,11 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
               </div>
 
               <div>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block truncate">
+                <span className="text-[11px] font-semibold text-slate-500 block truncate">
                   {cat}
                 </span>
                 <div className="flex items-baseline gap-1.5 mt-0.5">
-                  <span className="text-xl font-extrabold text-slate-900 dark:text-white font-mono">
+                  <span className="text-xl font-extrabold text-slate-900 font-mono tabular-nums">
                     {count}
                   </span>
                   <span className="text-[10px] text-slate-400">
@@ -354,7 +354,7 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
 
               {/* Indicateur de filtre actif */}
               {isSelected && (
-                <div className="mt-2 pt-1.5 border-t border-blue-200 dark:border-blue-800 flex items-center justify-between text-[10px] text-blue-700 dark:text-blue-300 font-semibold">
+                <div className="mt-2 pt-1.5 border-t border-blue-200 flex items-center justify-between text-[10px] text-blue-700 font-semibold">
                   <span>Filtre actif</span>
                   <span>✕ Réinitialiser</span>
                 </div>
@@ -435,8 +435,8 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
         </div>
 
         {/* Légende analytique & Indicateurs clés d'exploitation */}
-        <div className="lg:col-span-5 space-y-3.5 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 lg:pl-6">
-          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[10px]">
+        <div className="lg:col-span-5 space-y-3.5 border-t lg:border-t-0 lg:border-l border-slate-100 lg:pl-6">
+          <div className="text-xs font-bold text-slate-800 uppercase tracking-wider text-[10px]">
             Synthèse d'exploitation du Parc
           </div>
 
@@ -453,8 +453,8 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
                   onClick={() => onSelectCategory(isSelected ? null : cat)}
                   className={`p-2 rounded-lg cursor-pointer transition flex items-center justify-between text-xs ${
                     isSelected
-                      ? 'bg-blue-50 dark:bg-blue-950/60 font-semibold text-blue-900 dark:text-blue-200'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50 text-slate-700 dark:text-slate-300'
+                      ? 'bg-blue-50 font-semibold text-blue-900'
+                      : 'hover:bg-slate-50 text-slate-700'
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
@@ -465,11 +465,11 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
                     <span className="truncate">{cat}</span>
                   </div>
 
-                  <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                    <span className="text-slate-500 dark:text-slate-400">
+                  <div className="flex items-center gap-3 shrink-0 font-mono tabular-nums text-[11px]">
+                    <span className="text-slate-500">
                       {count} {count > 1 ? 'actifs' : 'actif'}
                     </span>
-                    <span className="font-bold text-slate-800 dark:text-slate-100 min-w-[32px] text-right">
+                    <span className="font-bold text-slate-800 min-w-[32px] text-right">
                       {percentage}%
                     </span>
                   </div>
@@ -479,26 +479,26 @@ export const InventoryDataViz: React.FC<InventoryDataVizProps> = ({
           </div>
 
           {/* Cartouche informatif KPI santé globale */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2 text-[11px]">
-            <div className="p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-800/60 flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-[11px]">
+            <div className="p-2.5 rounded-lg bg-emerald-50/60 border border-emerald-100 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                <span className="text-slate-500 block text-[10px]">
                   Sous garantie
                 </span>
-                <span className="font-bold text-emerald-700 dark:text-emerald-300 font-mono">
+                <span className="font-bold text-emerald-700 font-mono tabular-nums">
                   {inWarrantyCount} / {totalItems}
                 </span>
               </div>
             </div>
 
-            <div className="p-2.5 rounded-lg bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/60 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <div className="p-2.5 rounded-lg bg-blue-50/60 border border-blue-100 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
               <div>
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">
+                <span className="text-slate-500 block text-[10px]">
                   Actifs gérés
                 </span>
-                <span className="font-bold text-blue-700 dark:text-blue-300 font-mono">
+                <span className="font-bold text-blue-700 font-mono tabular-nums">
                   {totalItems} équipements
                 </span>
               </div>

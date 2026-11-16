@@ -5,13 +5,13 @@
       "description": "Profil de l'utilisateur ou du technicien informatique",
       "type": "object",
       "properties": {
-        "userId": { "type": "string" },
-        "email": { "type": "string", "format": "email" },
-        "displayName": { "type": "string" },
-        "photoURL": { "type": "string" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "maxLength": 254 },
+        "displayName": { "type": "string", "maxLength": 150 },
+        "photoURL": { "type": "string", "maxLength": 1000 },
         "role": { "type": "string", "enum": ["admin", "technician", "viewer"] },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "updatedAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["userId", "email", "role"]
     },
@@ -20,9 +20,9 @@
       "description": "Cahier de suivi annuel complet du technicien informatique",
       "type": "object",
       "properties": {
-        "id": { "type": "string" },
-        "userId": { "type": "string" },
-        "userEmail": { "type": "string", "format": "email" },
+        "id": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userEmail": { "type": "string", "format": "email", "maxLength": 254 },
         "annee": { "type": "number" },
         "generalInfo": { "type": "object" },
         "objectifsAnnuels": { "type": "array" },
@@ -42,20 +42,39 @@
         "rapportsMensuels": { "type": "array" },
         "bilansTrimestriels": { "type": "array" },
         "bilanAnnuel": { "type": "object" },
-        "updatedAt": { "type": "string" },
-        "createdAt": { "type": "string" }
+        "updatedAt": { "type": "string", "maxLength": 64 },
+        "createdAt": { "type": "string", "maxLength": 64 }
       },
       "required": ["id", "userId", "updatedAt"]
+    },
+    "WorkbookArchive": {
+      "title": "WorkbookArchive",
+      "description": "Snapshot figé d'un exercice annuel clôturé (multi-année)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workbookId": { "type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "annee": { "type": "number" },
+        "archivedAt": { "type": "string", "maxLength": 64 },
+        "summaryStats": { "type": "object" },
+        "data": { "type": "object" }
+      },
+      "required": ["id", "workbookId", "userId", "annee", "archivedAt", "data"]
     }
   },
   "firestore": {
     "users/{userId}": {
-      "entity": "UserProfile",
+      "schema": "UserProfile",
       "description": "Données de profil utilisateur"
     },
     "workbooks/{workbookId}": {
-      "entity": "Workbook",
-      "description": "Cahiers de suivi annuel informatiques"
+      "schema": "Workbook",
+      "description": "Cahiers de suivi annuel informatiques actifs"
+    },
+    "workbooks/{workbookId}/archives/{archiveYear}": {
+      "schema": "WorkbookArchive",
+      "description": "Archives annuelles clôturées par exercice pour support multi-année"
     }
   }
 }

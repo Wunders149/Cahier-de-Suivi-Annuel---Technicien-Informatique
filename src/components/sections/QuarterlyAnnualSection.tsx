@@ -110,27 +110,27 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center justify-center text-sm font-bold">
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">
               12
             </span>
-            Bilans Trimestriels, Bilan Annuel & Calculateur ROI
+            <span>Bilans Trimestriels, Bilan Annuel & Calculateur ROI</span>
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             Évaluation des objectifs, retour sur investissement des projets IT réalisés, gains de temps et trajectoire N+1.
           </p>
         </div>
 
         {/* Sélecteur de vue (3 onglets) */}
-        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs self-start sm:self-auto overflow-x-auto">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs self-start sm:self-auto overflow-x-auto">
           <button
             onClick={() => setActiveTab('annuel')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
               activeTab === 'annuel'
                 ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-700 dark:text-slate-300 hover:text-slate-900'
+                : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Bilan Annuel {bilanAnnuel.annee}
@@ -141,7 +141,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
               activeTab === 'roi'
                 ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                : 'text-emerald-700 hover:bg-emerald-50'
             }`}
           >
             <TrendingUp className="w-3.5 h-3.5" />
@@ -158,7 +158,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
               activeTab === 'trimestres'
                 ? 'bg-blue-600 text-white shadow-xs'
-                : 'text-slate-700 dark:text-slate-300 hover:text-slate-900'
+                : 'text-slate-700 hover:text-slate-900'
             }`}
           >
             Synthèses Trimestrielles (T1-T4)
@@ -168,7 +168,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
       {/* Onglet 1 : VUE BILAN ANNUEL GLOBAL */}
       {activeTab === 'annuel' && (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-300 dark:border-slate-700 shadow-xl overflow-hidden space-y-6">
+        <div className="bg-white rounded-2xl border-2 border-slate-300 shadow-xl overflow-hidden space-y-6">
           {/* Bannière solennelle */}
           <div className="bg-slate-900 text-white p-6 sm:p-8 border-b-2 border-slate-800">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -398,11 +398,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
           <div className="p-6 sm:p-8 space-y-6 text-xs">
             {/* Synthèse générale */}
             <div className="space-y-2">
-              <strong className="text-blue-950 dark:text-blue-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+              <strong className="text-blue-950 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                 <Award className="w-4 h-4 text-amber-500" />
                 1. Synthèse Générale de l'Année Écoulée :
               </strong>
-              <p className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-sm leading-relaxed">
+              <p className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-slate-800 text-sm leading-relaxed">
                 {bilanAnnuel.syntheseGenerale || (
                   <span className="text-slate-400 italic text-xs">
                     Non renseigné — cliquez sur « Modifier le Bilan » pour rédiger la synthèse annuelle.
@@ -412,17 +412,17 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             </div>
 
             {/* Encadré d'impact : Retour sur Investissement (ROI) des Projets Clôturés */}
-            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-slate-900 p-5 rounded-2xl border-2 border-emerald-300 dark:border-emerald-700/60 shadow-xs space-y-3">
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 p-5 rounded-2xl border-2 border-emerald-300 shadow-xs space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <span className="p-2 rounded-xl bg-emerald-600 text-white shadow-2xs">
                     <TrendingUp className="w-5 h-5" />
                   </span>
                   <div>
-                    <h4 className="text-sm font-black text-emerald-950 dark:text-emerald-200 uppercase tracking-wide">
+                    <h4 className="text-sm font-black text-emerald-950 uppercase tracking-wide">
                       Bénéfices Économiques & Retour sur Investissement (ROI)
                     </h4>
-                    <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                    <span className="text-xs text-emerald-700">
                       Gains tangibles mesurés sur les projets informatiques déployés en {bilanAnnuel.annee}
                     </span>
                   </div>
@@ -430,7 +430,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
                 <button
                   onClick={() => setActiveTab('roi')}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition self-start sm:self-auto"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition self-start sm:self-auto whitespace-nowrap"
                 >
                   <span>Accéder au Calculateur ROI Détaillé</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -438,29 +438,29 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
-                <div className="bg-white/80 dark:bg-slate-850 p-3 rounded-xl border border-emerald-200/80 dark:border-slate-700">
+                <div className="bg-white/80 p-3 rounded-xl border border-emerald-200/80">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase block">
                     Investissement Engagé
                   </span>
-                  <strong className="text-slate-900 dark:text-white font-mono text-base font-bold">
+                  <strong className="text-slate-900 font-mono tabular-nums text-base font-bold">
                     {roiSummary.investTotal.toLocaleString('fr-FR')} €
                   </strong>
                 </div>
 
-                <div className="bg-white/80 dark:bg-slate-850 p-3 rounded-xl border border-emerald-200/80 dark:border-slate-700">
-                  <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase block">
+                <div className="bg-white/80 p-3 rounded-xl border border-emerald-200/80">
+                  <span className="text-[10px] font-semibold text-emerald-700 uppercase block">
                     Économies Directes
                   </span>
-                  <strong className="text-emerald-700 dark:text-emerald-300 font-mono text-base font-bold">
+                  <strong className="text-emerald-700 font-mono tabular-nums text-base font-bold">
                     +{roiSummary.ecoDirectes.toLocaleString('fr-FR')} €/an
                   </strong>
                 </div>
 
-                <div className="bg-white/80 dark:bg-slate-850 p-3 rounded-xl border border-emerald-200/80 dark:border-slate-700">
-                  <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400 uppercase block">
+                <div className="bg-white/80 p-3 rounded-xl border border-emerald-200/80">
+                  <span className="text-[10px] font-semibold text-blue-700 uppercase block">
                     Temps Gagné
                   </span>
-                  <strong className="text-blue-700 dark:text-blue-300 font-mono text-base font-bold">
+                  <strong className="text-blue-700 font-mono tabular-nums text-base font-bold">
                     {roiSummary.heuresTotal} h/an
                   </strong>
                 </div>
@@ -469,7 +469,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   <span className="text-[10px] font-semibold text-emerald-100 uppercase block">
                     Bénéfice Annuel Net
                   </span>
-                  <strong className="font-mono text-base font-black">
+                  <strong className="font-mono tabular-nums text-base font-black">
                     +{roiSummary.beneficeTotal.toLocaleString('fr-FR')} €/an
                   </strong>
                 </div>
@@ -479,11 +479,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             {/* Réalisations & Incidents majeurs */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <strong className="text-emerald-900 dark:text-emerald-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-emerald-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   2. Principales Réalisations & Chantiers Clôturés :
                 </strong>
-                <div className="bg-emerald-50/50 dark:bg-emerald-950/30 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed min-h-[60px]">
+                <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200 text-slate-800 whitespace-pre-line leading-relaxed min-h-[60px]">
                   {bilanAnnuel.principalesRealisations || (
                     <span className="text-slate-400 italic">Aucune réalisation renseignée.</span>
                   )}
@@ -491,11 +491,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="space-y-2">
-                <strong className="text-amber-900 dark:text-amber-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-amber-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
                   3. Incidents Majeurs de l'Année (Retours d'Expérience) :
                 </strong>
-                <div className="bg-amber-50/50 dark:bg-amber-950/30 p-4 rounded-xl border border-amber-200 dark:border-amber-800 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed min-h-[60px]">
+                <div className="bg-amber-50/50 p-4 rounded-xl border border-amber-200 text-slate-800 whitespace-pre-line leading-relaxed min-h-[60px]">
                   {bilanAnnuel.incidentsMajeursAnnee || (
                     <span className="text-slate-400 italic">Aucun incident majeur consigné.</span>
                   )}
@@ -506,11 +506,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             {/* Améliorations & Difficultés */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <strong className="text-blue-900 dark:text-blue-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-blue-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-blue-600" />
                   4. Améliorations Apportées au Système d'Information :
                 </strong>
-                <div className="bg-blue-50/40 dark:bg-blue-950/30 p-4 rounded-xl border border-blue-200 dark:border-blue-800 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed min-h-[60px]">
+                <div className="bg-blue-50/40 p-4 rounded-xl border border-blue-200 text-slate-800 whitespace-pre-line leading-relaxed min-h-[60px]">
                   {bilanAnnuel.ameliorationsApportees || (
                     <span className="text-slate-400 italic">Non renseigné.</span>
                   )}
@@ -518,11 +518,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="space-y-2">
-                <strong className="text-slate-900 dark:text-slate-200 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-slate-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <BarChart3 className="w-4 h-4 text-slate-600" />
                   5. Difficultés Organisationnelles ou Techniques :
                 </strong>
-                <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed min-h-[60px]">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-slate-800 whitespace-pre-line leading-relaxed min-h-[60px]">
                   {bilanAnnuel.difficultesOrganisationnelles || (
                     <span className="text-slate-400 italic">Aucune difficulté signalée.</span>
                   )}
@@ -533,11 +533,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             {/* Formation & Investissements N+1 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <strong className="text-indigo-900 dark:text-indigo-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-indigo-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <GraduationCap className="w-4 h-4 text-indigo-600" />
                   6. Formations Suivies & Besoins de Montée en Compétences :
                 </strong>
-                <div className="bg-indigo-50/40 dark:bg-indigo-950/30 p-4 rounded-xl border border-indigo-200 dark:border-indigo-800 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed min-h-[60px]">
+                <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-200 text-slate-800 whitespace-pre-line leading-relaxed min-h-[60px]">
                   {bilanAnnuel.formationsSuiviesEtBesoinsFuturs || (
                     <span className="text-slate-400 italic">Non renseigné.</span>
                   )}
@@ -545,11 +545,11 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="space-y-2">
-                <strong className="text-emerald-900 dark:text-emerald-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+                <strong className="text-emerald-900 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-emerald-600" />
                   7. Investissements Informatiques Préconisés (Budget N+1) :
                 </strong>
-                <div className="bg-emerald-50/40 dark:bg-emerald-950/30 p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed font-medium min-h-[60px]">
+                <div className="bg-emerald-50/40 p-4 rounded-xl border border-emerald-200 text-slate-800 whitespace-pre-line leading-relaxed font-medium min-h-[60px]">
                   {bilanAnnuel.investissementsInformatiquesPreconises || (
                     <span className="text-slate-400 italic font-normal">Non renseigné.</span>
                   )}
@@ -559,7 +559,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
             {/* Objectifs Année Suivante */}
             <div className="space-y-2">
-              <strong className="text-blue-950 dark:text-blue-300 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+              <strong className="text-blue-950 font-bold text-sm uppercase tracking-wide flex items-center gap-2">
                 <Check className="w-4 h-4 text-blue-600" />
                 8. Objectifs Stratégiques pour l'Année Suivante (N+1) :
               </strong>
@@ -573,42 +573,42 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
             </div>
 
             {/* Appréciation hiérarchique RSI & Signatures */}
-            <div className="bg-slate-50 dark:bg-slate-850 p-6 rounded-2xl border-2 border-slate-300 dark:border-slate-700 space-y-4">
+            <div className="bg-slate-50 p-6 rounded-2xl border-2 border-slate-300 space-y-4">
               <div>
-                <strong className="text-slate-900 dark:text-white font-bold text-sm uppercase tracking-wide block mb-1">
+                <strong className="text-slate-900 font-bold text-sm uppercase tracking-wide block mb-1">
                   Appréciation Officielle du Responsable des Systèmes d'Information (RSI) :
                 </strong>
-                <p className="text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 text-sm leading-relaxed">
+                <p className="text-slate-700 italic bg-white p-3.5 rounded-xl border border-slate-200 text-sm leading-relaxed">
                   {bilanAnnuel.appreciationRsi
                     ? `« ${bilanAnnuel.appreciationRsi} »`
                     : 'Appréciation hiérarchique en attente de rédaction.'}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-200 dark:border-slate-700 text-xs">
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-200 text-xs">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
                   <span className="text-slate-400 block font-medium">
                     Visa & Signature du Technicien IT :
                   </span>
-                  <strong className="text-slate-900 dark:text-white text-sm block mt-1">
+                  <strong className="text-slate-900 text-sm block mt-1">
                     {generalInfo && `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
                       ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
                       : 'Technicien IT'}
                   </strong>
-                  <span className={`font-semibold block mt-1 ${bilanAnnuel.signatureTechnicienDate ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                  <span className={`font-semibold block mt-1 ${bilanAnnuel.signatureTechnicienDate ? 'text-emerald-700' : 'text-slate-400'}`}>
                     {bilanAnnuel.signatureTechnicienDate
                       ? `✓ Signé électroniquement le ${bilanAnnuel.signatureTechnicienDate}`
                       : 'En attente de signature'}
                   </span>
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                <div className="bg-white p-4 rounded-xl border border-slate-200">
                   <span className="text-slate-400 block font-medium">
                     Validation Hiérarchique du RSI :
                   </span>
-                  <strong className="text-slate-900 dark:text-white text-sm block mt-1">
+                  <strong className="text-slate-900 text-sm block mt-1">
                     {generalInfo?.responsableHierarchique?.trim() || 'Responsable Hiérarchique (RSI)'}
                   </strong>
-                  <span className={`font-semibold block mt-1 ${bilanAnnuel.signatureRsiDate ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-400'}`}>
+                  <span className={`font-semibold block mt-1 ${bilanAnnuel.signatureRsiDate ? 'text-emerald-700' : 'text-slate-400'}`}>
                     {bilanAnnuel.signatureRsiDate
                       ? `✓ Approuvé et visé le ${bilanAnnuel.signatureRsiDate}`
                       : 'En attente de validation RSI'}
@@ -648,7 +648,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   className={`p-4 rounded-xl border text-left transition ${
                     isSelected
                       ? 'bg-blue-600 text-white shadow-md border-blue-700'
-                      : 'bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200'
+                      : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-800'
                   }`}
                 >
                   <span className="text-base font-extrabold block">
@@ -658,7 +658,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                     className={`text-xs block ${
                       isSelected
                         ? 'text-blue-100'
-                        : 'text-slate-500 dark:text-slate-400'
+                        : 'text-slate-500'
                     }`}
                   >
                     {bt.periode}
@@ -673,14 +673,14 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
           </div>
 
           {/* Fiche du trimestre sélectionné */}
-          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-6 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 gap-2">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6 text-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
               <div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                <h3 className="text-xl font-bold text-slate-900">
                   Bilan Synthétique du {currentTrimestre.trimestre} (
                   {currentTrimestre.periode})
                 </h3>
-                <span className="text-slate-500 dark:text-slate-400">
+                <span className="text-slate-500">
                   Revue trimestrielle des engagements et résultats.
                 </span>
               </div>
@@ -824,10 +824,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <strong className="text-blue-900 dark:text-blue-300 font-bold block text-sm">
+                <strong className="text-blue-900 font-bold block text-sm">
                   Objectifs atteints & Réalisations :
                 </strong>
-                <p className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 leading-relaxed min-h-[54px]">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-800 leading-relaxed min-h-[54px]">
                   {currentTrimestre.objectifsAtteints || (
                     <span className="text-slate-400 italic">Non renseigné.</span>
                   )}
@@ -835,10 +835,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <strong className="text-slate-900 dark:text-white font-bold block text-sm">
+                <strong className="text-slate-900 font-bold block text-sm">
                   Résumé des performances du technicien :
                 </strong>
-                <p className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 leading-relaxed min-h-[54px]">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-800 leading-relaxed min-h-[54px]">
                   {currentTrimestre.performancesResume || (
                     <span className="text-slate-400 italic">Non renseigné.</span>
                   )}
@@ -848,10 +848,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <strong className="text-amber-900 dark:text-amber-300 font-bold block text-sm">
+                <strong className="text-amber-900 font-bold block text-sm">
                   Incidents majeurs du trimestre :
                 </strong>
-                <p className="bg-amber-50/50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200 dark:border-amber-800 text-slate-800 dark:text-slate-200 leading-relaxed min-h-[54px]">
+                <p className="bg-amber-50/50 p-3 rounded-xl border border-amber-200 text-slate-800 leading-relaxed min-h-[54px]">
                   {currentTrimestre.incidentsMajeurs || (
                     <span className="text-slate-400 italic">Aucun incident majeur signalé.</span>
                   )}
@@ -859,10 +859,10 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
               </div>
 
               <div className="space-y-1.5">
-                <strong className="text-emerald-900 dark:text-emerald-300 font-bold block text-sm">
+                <strong className="text-emerald-900 font-bold block text-sm">
                   Améliorations concrètes apportées :
                 </strong>
-                <p className="bg-emerald-50/50 dark:bg-emerald-950/30 p-3 rounded-xl border border-emerald-200 dark:border-emerald-800 text-slate-800 dark:text-slate-200 leading-relaxed min-h-[54px]">
+                <p className="bg-emerald-50/50 p-3 rounded-xl border border-emerald-200 text-slate-800 leading-relaxed min-h-[54px]">
                   {currentTrimestre.ameliorationsApportees || (
                     <span className="text-slate-400 italic">Non renseigné.</span>
                   )}
@@ -872,30 +872,30 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1.5">
-                <strong className="text-slate-900 dark:text-white font-bold block">
+                <strong className="text-slate-900 font-bold block">
                   Difficultés rencontrées :
                 </strong>
-                <p className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 min-h-[44px]">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700 min-h-[44px]">
                   {currentTrimestre.difficultesRencontrees || (
                     <span className="text-slate-400 italic">Aucune.</span>
                   )}
                 </p>
               </div>
               <div className="space-y-1.5">
-                <strong className="text-slate-900 dark:text-white font-bold block">
+                <strong className="text-slate-900 font-bold block">
                   Besoins en formation :
                 </strong>
-                <p className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 min-h-[44px]">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700 min-h-[44px]">
                   {currentTrimestre.besoinsFormation || (
                     <span className="text-slate-400 italic">Aucun.</span>
                   )}
                 </p>
               </div>
               <div className="space-y-1.5">
-                <strong className="text-slate-900 dark:text-white font-bold block">
+                <strong className="text-slate-900 font-bold block">
                   Investissements préconisés :
                 </strong>
-                <p className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-medium min-h-[44px]">
+                <p className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-slate-700 font-medium min-h-[44px]">
                   {currentTrimestre.investissementsNecessaires || (
                     <span className="text-slate-400 italic font-normal">Non renseigné.</span>
                   )}

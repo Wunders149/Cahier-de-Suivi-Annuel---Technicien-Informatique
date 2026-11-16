@@ -197,16 +197,16 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <button
           type="button"
           onClick={() => onNavigateTab('interventions')}
-          className="text-left bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 transition group"
+          className="text-left bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition group"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
             <span className="font-medium">Interventions terminées</span>
-            <Wrench className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <Wrench className="w-4 h-4 text-blue-600 shrink-0" />
           </div>
-          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900">
             {totalCompletedInterventions}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
             <span className="font-mono tabular-nums">
               Sur {totalInterventionsCount} en {annee}
             </span>
@@ -214,15 +214,15 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           </div>
         </button>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+        <div className="bg-white rounded-xl border border-slate-200 p-4">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
             <span className="font-medium">Taux de résolution</span>
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           </div>
-          <div className="text-2xl font-bold font-mono tabular-nums text-emerald-600 dark:text-emerald-400">
+          <div className="text-2xl font-bold font-mono tabular-nums text-emerald-600">
             {resolutionRate}%
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono tabular-nums">
+          <div className="text-[11px] text-slate-500 mt-1 font-mono tabular-nums">
             {totalInterventionsCount - totalCompletedInterventions} ouverte(s)
           </div>
         </div>
@@ -230,16 +230,16 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <button
           type="button"
           onClick={() => onNavigateTab('journal')}
-          className="text-left bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 transition group"
+          className="text-left bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition group"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
             <span className="font-medium">Tâches journal terminées</span>
-            <ListTodo className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <ListTodo className="w-4 h-4 text-indigo-600 shrink-0" />
           </div>
-          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900">
             {completedTasksCount}
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
             <span className="font-mono tabular-nums">
               {totalTaskHours} h consignées
             </span>
@@ -250,16 +250,16 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         <button
           type="button"
           onClick={() => onNavigateTab('rapports')}
-          className="text-left bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 hover:border-blue-300 dark:hover:border-blue-700 transition group"
+          className="text-left bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-300 transition group"
         >
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 mb-1.5">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
             <span className="font-medium">Cahiers mensuels livrés</span>
-            <CalendarRange className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <CalendarRange className="w-4 h-4 text-amber-600 shrink-0" />
           </div>
-          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+          <div className="text-2xl font-bold font-mono tabular-nums text-slate-900">
             {deliveredReportsCount} / 12
           </div>
-          <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
             <span>Générer & livrer</span>
             <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
           </div>
@@ -267,14 +267,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       </div>
 
       {/* Graphique linéaire Recharts : Interventions terminées par mois */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 sm:p-6 space-y-4">
+      <div className="bg-white rounded-xl border border-slate-200 p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Évolution Mensuelle des Interventions Terminées ({annee})</span>
             </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            <p className="text-xs text-slate-500 mt-0.5">
               Graphique linéaire basé en temps réel sur les fiches clôturées du registre des interventions.
             </p>
           </div>
@@ -282,12 +282,12 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
         <div className="relative h-72 w-full">
           {!hasAnyInterventions && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-50/85 dark:bg-slate-900/85 backdrop-blur-[1px] rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-6 text-center">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-50/85 backdrop-blur-[1px] rounded-xl border border-dashed border-slate-300 p-6 text-center">
               <Wrench className="w-8 h-8 text-slate-400 mb-2" />
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+              <p className="text-xs font-semibold text-slate-800">
                 Aucune intervention enregistrée pour {annee}
               </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 max-w-md">
+              <p className="text-[11px] text-slate-500 mt-1 max-w-md">
                 La courbe mensuelle se tracera automatiquement dès que vous consignerez des fiches d'intervention résolues.
               </p>
               <button

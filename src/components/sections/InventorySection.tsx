@@ -1,12 +1,15 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { EquipementParc } from '../../types/it-tracker';
 import { Laptop, Plus, Search, X } from 'lucide-react';
 import { InventoryDataViz, categorizeEquipment } from '../inventory/InventoryDataViz';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
+import { CrudRowActions } from '../ui/CrudRowActions';
+import { ConfirmDeleteModal } from '../ui/ConfirmDeleteModal';
 import {
   fieldInputClass,
   fieldSelectClass,
+  fieldTextareaClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from '../ui/formStyles';
@@ -14,13 +17,28 @@ import {
 interface InventorySectionProps {
   parc: EquipementParc[];
   onUpdateParc: (parc: EquipementParc[]) => void;
+  onShowToast?: (msg: string) => void;
 }
 
-export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpdateParc }) => {
+export const InventorySection: React.FC<InventorySectionProps> = ({
+  parc,
+  onUpdateParc,
+  onShowToast,
+}) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('Tous');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
+
+  // États CRUD
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [inspectingId, setInspectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const notify = (msg: string) => {
+    if (onShowToast) onShowToast(msg);
+  };
 
   const getNextInventoryRef = () => {
     const maxNum = parc.reduce((max, p) => {
@@ -32,7 +50,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
     return `PARC-PC-${String(nextNum).padStart(2, '0')}`;
   };
 
-  const [newItem, setNewItem] = useState<Partial<EquipementParc>>({
+  const createDefaultForm = (): Partial<EquipementParc> => ({
     numeroInventaire: getNextInventoryRef(),
     designation: '',
     type: 'PC Portable',
@@ -49,46 +67,93 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
     historiqueInterventions: 'Mise en service initiale.',
   });
 
-  const handleAddEquipment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newItem.designation || !newItem.marqueModele) return;
+  const [formItem, setFormItem] = useState<Partial<EquipementParc>>(createDefaultForm);
 
-    const item: EquipementParc = {
-      id: `PARC-${Date.now()}`,
-      numeroInventaire: newItem.numeroInventaire?.trim() || getNextInventoryRef(),
-      designation: newItem.designation || '',
-      type: (newItem.type as any) || 'PC Portable',
-      marqueModele: newItem.marqueModele || '',
-      numeroSerie: newItem.numeroSerie || 'N/A',
-      configurationTechnique: newItem.configurationTechnique || 'Standard',
-      dateAcquisition: newItem.dateAcquisition || new Date().toISOString().split('T')[0],
-      etatMateriel: (newItem.etatMateriel as any) || 'Bon état',
-      utilisateurResponsable: newItem.utilisateurResponsable || 'Non attribué',
-      service: newItem.service || 'Stock DSI',
-      localisation: newItem.localisation || 'Atelier',
-      finGarantie: newItem.finGarantie || '1 an',
-      dureeVieEstimeeAns: Number(newItem.dureeVieEstimeeAns) || 4,
-      historiqueInterventions: newItem.historiqueInterventions || 'Neuf',
+  const inspectingItem = useMemo(
+    () => parc.find((p) => p.id === inspectingId) || null,
+    [parc, inspectingId]
+  );
+
+  const deletingItem = useMemo(
+    () => parc.find((p) => p.id === deletingId) || null,
+    [parc, deletingId]
+  );
+
+  const openCreateModal = () => {
+    setEditingId(null);
+    setIsDuplicating(false);
+    setFormItem(createDefaultForm());
+    setModalOpen(true);
+  };
+
+  const openEditModal = (item: EquipementParc) => {
+    setEditingId(item.id);
+    setIsDuplicating(false);
+    setFormItem({ ...item });
+    setModalOpen(true);
+  };
+
+  const openDuplicateModal = (item: EquipementParc) => {
+    setEditingId(null);
+    setIsDuplicating(true);
+    setFormItem({
+      ...item,
+      id: undefined,
+      numeroInventaire: getNextInventoryRef(),
+      numeroSerie: '',
+      utilisateurResponsable: 'Stock DSI',
+      historiqueInterventions: 'Dupliqué depuis équipement de référence.',
+    });
+    setModalOpen(true);
+  };
+
+  const handleSaveEquipment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formItem.designation?.trim() || !formItem.marqueModele?.trim()) return;
+
+    const payload: EquipementParc = {
+      id: editingId || `PARC-${Date.now()}`,
+      numeroInventaire: formItem.numeroInventaire?.trim() || getNextInventoryRef(),
+      designation: formItem.designation.trim(),
+      type: (formItem.type as EquipementParc['type']) || 'PC Portable',
+      marqueModele: formItem.marqueModele.trim(),
+      numeroSerie: formItem.numeroSerie?.trim() || 'N/A',
+      configurationTechnique: formItem.configurationTechnique?.trim() || 'Standard',
+      dateAcquisition:
+        formItem.dateAcquisition || new Date().toISOString().split('T')[0],
+      etatMateriel:
+        (formItem.etatMateriel as EquipementParc['etatMateriel']) || 'Bon état',
+      utilisateurResponsable: formItem.utilisateurResponsable?.trim() || 'Non attribué',
+      service: formItem.service?.trim() || 'Stock DSI',
+      localisation: formItem.localisation?.trim() || 'Atelier',
+      finGarantie: formItem.finGarantie?.trim() || '1 an',
+      dureeVieEstimeeAns: Math.max(1, Number(formItem.dureeVieEstimeeAns) || 4),
+      historiqueInterventions: formItem.historiqueInterventions?.trim() || 'Neuf',
     };
 
-    onUpdateParc([item, ...parc]);
-    setShowAddModal(false);
-    setNewItem({
-      numeroInventaire: getNextInventoryRef(),
-      designation: '',
-      type: 'PC Portable',
-      marqueModele: '',
-      numeroSerie: '',
-      configurationTechnique: '',
-      dateAcquisition: new Date().toISOString().split('T')[0],
-      etatMateriel: 'Bon état',
-      utilisateurResponsable: '',
-      service: '',
-      localisation: '',
-      finGarantie: '3 ans constructeur',
-      dureeVieEstimeeAns: 4,
-      historiqueInterventions: 'Mise en service initiale.',
-    });
+    if (editingId) {
+      onUpdateParc(parc.map((p) => (p.id === editingId ? payload : p)));
+      notify(`Fiche actif ${payload.numeroInventaire} mise à jour.`);
+    } else {
+      onUpdateParc([payload, ...parc]);
+      notify(
+        isDuplicating
+          ? `Actif dupliqué (${payload.numeroInventaire}).`
+          : `Équipement ${payload.numeroInventaire} ajouté au parc.`
+      );
+    }
+
+    setModalOpen(false);
+    setEditingId(null);
+    setIsDuplicating(false);
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deletingId) return;
+    onUpdateParc(parc.filter((p) => p.id !== deletingId));
+    if (inspectingId === deletingId) setInspectingId(null);
+    setDeletingId(null);
+    notify('Équipement supprimé du parc CMDB.');
   };
 
   const filtered = parc.filter((p) => {
@@ -102,40 +167,39 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
       p.localisation.toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchType = typeFilter === 'Tous' || p.type === typeFilter;
-    const matchCategory = !selectedCategory || categorizeEquipment(p) === selectedCategory;
+    const matchCategory =
+      !selectedCategory || categorizeEquipment(p) === selectedCategory;
 
     return matchSearch && matchType && matchCategory;
   });
 
-  const typesList = ['Tous', 'PC Portable', 'PC Fixe', 'Serveur', 'Imprimante', 'Écran', 'Périphérique', 'Switch/Réseau'];
+  const typesList = [
+    'Tous',
+    'PC Portable',
+    'PC Fixe',
+    'Serveur',
+    'Imprimante',
+    'Écran',
+    'Périphérique',
+    'Switch/Réseau',
+  ];
 
   return (
     <div className="space-y-6">
       {/* En-tête */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 flex items-center justify-center text-sm font-bold">7</span>
-            Gestion du Parc Informatique (CMDB & Inventaire Matériel)
+          <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <span className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-bold shrink-0">
+              7
+            </span>
+            <span>Gestion du Parc Informatique (CMDB &amp; Inventaire Matériel)</span>
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          <p className="text-sm text-slate-500 mt-1">
             Recensement exhaustif des actifs informatiques, numéros de série, caractéristiques, garanties et affectations.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setNewItem((prev) => ({
-              ...prev,
-              numeroInventaire: getNextInventoryRef(),
-              designation: '',
-              marqueModele: '',
-              numeroSerie: '',
-              configurationTechnique: '',
-            }));
-            setShowAddModal(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow transition"
-        >
+        <button type="button" onClick={openCreateModal} className={primaryButtonClass}>
           <Plus className="w-4 h-4" />
           <span>Ajouter un Équipement</span>
         </button>
@@ -149,7 +213,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
       />
 
       {/* Filtres et recherche */}
-      <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between text-xs">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between text-xs">
         <div className="flex-1 flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -158,14 +222,15 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Rechercher par N° inventaire, utilisateur, marque, numéro de série..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           {selectedCategory && (
             <button
+              type="button"
               onClick={() => setSelectedCategory(null)}
-              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-200 text-xs font-semibold whitespace-nowrap transition"
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-blue-100 text-blue-700 border border-blue-200 hover:bg-blue-200 text-xs font-semibold whitespace-nowrap transition"
               title="Réinitialiser le filtre de famille"
             >
               <span>{selectedCategory}</span>
@@ -178,11 +243,12 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
           {typesList.map((t) => (
             <button
               key={t}
+              type="button"
               onClick={() => setTypeFilter(t)}
               className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition ${
                 typeFilter === t
                   ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
               }`}
             >
               {t}
@@ -191,26 +257,32 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
         </div>
       </div>
 
-      {/* Modal ajout matériel */}
+      {/* Modal Création / Édition / Duplication matériel */}
       <Modal
-        isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        title="Enregistrer un nouvel équipement"
-        subtitle="Ajoutez un actif informatique au référentiel CMDB du parc."
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={
+          editingId
+            ? `Modifier l'équipement (${formItem.numeroInventaire || ''})`
+            : isDuplicating
+            ? 'Dupliquer un équipement du parc'
+            : 'Enregistrer un nouvel équipement'
+        }
+        subtitle="Gérez la fiche complète de l'actif informatique dans le référentiel CMDB."
         icon={<Laptop className="w-4 h-4" />}
         size="lg"
-        onSubmit={handleAddEquipment}
+        onSubmit={handleSaveEquipment}
         footer={
           <>
             <button
               type="button"
-              onClick={() => setShowAddModal(false)}
+              onClick={() => setModalOpen(false)}
               className={secondaryButtonClass}
             >
               Annuler
             </button>
             <button type="submit" className={primaryButtonClass}>
-              Ajouter à l'inventaire
+              {editingId ? 'Enregistrer les modifications' : "Ajouter à l'inventaire"}
             </button>
           </>
         }
@@ -222,18 +294,21 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                 <input
                   type="text"
                   required
-                  value={newItem.numeroInventaire || ''}
+                  value={formItem.numeroInventaire || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, numeroInventaire: e.target.value })
+                    setFormItem({ ...formItem, numeroInventaire: e.target.value })
                   }
                   className={`${fieldInputClass} font-mono tabular-nums`}
                 />
               </FormField>
               <FormField label="Type de matériel" required>
                 <select
-                  value={newItem.type || 'PC Portable'}
+                  value={formItem.type || 'PC Portable'}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, type: e.target.value as EquipementParc['type'] })
+                    setFormItem({
+                      ...formItem,
+                      type: e.target.value as EquipementParc['type'],
+                    })
                   }
                   className={fieldSelectClass}
                 >
@@ -247,6 +322,7 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                   <option value="Imprimante">Imprimante</option>
                   <option value="Switch/Réseau">Switch/Réseau</option>
                   <option value="Smartphone">Smartphone</option>
+                  <option value="Tablette">Tablette</option>
                 </select>
               </FormField>
             </div>
@@ -257,9 +333,9 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                   type="text"
                   required
                   placeholder="Ex: PC Portable Dell Latitude 5540"
-                  value={newItem.designation || ''}
+                  value={formItem.designation || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, designation: e.target.value })
+                    setFormItem({ ...formItem, designation: e.target.value })
                   }
                   className={fieldInputClass}
                 />
@@ -269,9 +345,9 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                   type="text"
                   required
                   placeholder="Ex: Dell Latitude 5540 15 pouces"
-                  value={newItem.marqueModele || ''}
+                  value={formItem.marqueModele || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, marqueModele: e.target.value })
+                    setFormItem({ ...formItem, marqueModele: e.target.value })
                   }
                   className={fieldInputClass}
                 />
@@ -284,19 +360,19 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                   type="text"
                   required
                   placeholder="Ex: 8XYZ123"
-                  value={newItem.numeroSerie || ''}
+                  value={formItem.numeroSerie || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, numeroSerie: e.target.value })
+                    setFormItem({ ...formItem, numeroSerie: e.target.value })
                   }
                   className={`${fieldInputClass} font-mono`}
                 />
               </FormField>
               <FormField label="État du matériel">
                 <select
-                  value={newItem.etatMateriel || 'Bon état'}
+                  value={formItem.etatMateriel || 'Bon état'}
                   onChange={(e) =>
-                    setNewItem({
-                      ...newItem,
+                    setFormItem({
+                      ...formItem,
                       etatMateriel: e.target.value as EquipementParc['etatMateriel'],
                     })
                   }
@@ -319,10 +395,10 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
               <input
                 type="text"
                 placeholder="Ex: i7-1365U, 32 Go RAM, 1 To NVMe, Windows 11 Pro"
-                value={newItem.configurationTechnique || ''}
+                value={formItem.configurationTechnique || ''}
                 onChange={(e) =>
-                  setNewItem({
-                    ...newItem,
+                  setFormItem({
+                    ...formItem,
                     configurationTechnique: e.target.value,
                   })
                 }
@@ -331,16 +407,16 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
             </FormField>
           </FormSection>
 
-          <FormSection title="2. Affectation & Cycle de vie" separated>
+          <FormSection title="2. Affectation, Garantie & Historique" separated>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
               <FormField label="Utilisateur responsable">
                 <input
                   type="text"
                   placeholder="Ex: Nom Prénom"
-                  value={newItem.utilisateurResponsable || ''}
+                  value={formItem.utilisateurResponsable || ''}
                   onChange={(e) =>
-                    setNewItem({
-                      ...newItem,
+                    setFormItem({
+                      ...formItem,
                       utilisateurResponsable: e.target.value,
                     })
                   }
@@ -351,9 +427,9 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                 <input
                   type="text"
                   placeholder="Ex: RH, Finance, R&D"
-                  value={newItem.service || ''}
+                  value={formItem.service || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, service: e.target.value })
+                    setFormItem({ ...formItem, service: e.target.value })
                   }
                   className={fieldInputClass}
                 />
@@ -362,9 +438,9 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                 <input
                   type="text"
                   placeholder="Ex: Bât A - Bureau 102"
-                  value={newItem.localisation || ''}
+                  value={formItem.localisation || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, localisation: e.target.value })
+                    setFormItem({ ...formItem, localisation: e.target.value })
                   }
                   className={fieldInputClass}
                 />
@@ -375,20 +451,20 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
               <FormField label="Date d'acquisition">
                 <input
                   type="date"
-                  value={newItem.dateAcquisition || ''}
+                  value={formItem.dateAcquisition || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, dateAcquisition: e.target.value })
+                    setFormItem({ ...formItem, dateAcquisition: e.target.value })
                   }
-                  className={fieldInputClass}
+                  className={`${fieldInputClass} font-mono tabular-nums`}
                 />
               </FormField>
               <FormField label="Fin de garantie constructeur">
                 <input
                   type="text"
                   placeholder="Ex: 2027-05-15 (J+1)"
-                  value={newItem.finGarantie || ''}
+                  value={formItem.finGarantie || ''}
                   onChange={(e) =>
-                    setNewItem({ ...newItem, finGarantie: e.target.value })
+                    setFormItem({ ...formItem, finGarantie: e.target.value })
                   }
                   className={fieldInputClass}
                 />
@@ -398,10 +474,10 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                   type="number"
                   min={1}
                   max={15}
-                  value={newItem.dureeVieEstimeeAns ?? 4}
+                  value={formItem.dureeVieEstimeeAns ?? 4}
                   onChange={(e) =>
-                    setNewItem({
-                      ...newItem,
+                    setFormItem({
+                      ...formItem,
                       dureeVieEstimeeAns: Math.max(1, parseInt(e.target.value, 10) || 4),
                     })
                   }
@@ -409,79 +485,257 @@ export const InventorySection: React.FC<InventorySectionProps> = ({ parc, onUpda
                 />
               </FormField>
             </div>
+
+            <FormField label="Historique des interventions & notes CMDB">
+              <textarea
+                rows={2}
+                placeholder="Opérations réalisées, upgrades RAM/SSD, tickets associés..."
+                value={formItem.historiqueInterventions || ''}
+                onChange={(e) =>
+                  setFormItem({ ...formItem, historiqueInterventions: e.target.value })
+                }
+                className={fieldTextareaClass}
+              />
+            </FormField>
           </FormSection>
         </div>
       </Modal>
 
+      {/* Modal Fiche Détail Actif CMDB (READ) */}
+      <Modal
+        isOpen={Boolean(inspectingItem)}
+        onClose={() => setInspectingId(null)}
+        title={inspectingItem?.designation || 'Fiche Actif CMDB'}
+        subtitle={
+          inspectingItem
+            ? `${inspectingItem.numeroInventaire} · ${inspectingItem.type} · ${inspectingItem.marqueModele}`
+            : undefined
+        }
+        icon={<Laptop className="w-4 h-4" />}
+        size="md"
+        footer={
+          inspectingItem && (
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingId(inspectingItem.id)}
+                className="px-3 py-2 rounded-lg text-red-700 hover:bg-red-50 text-xs font-semibold"
+              >
+                Supprimer
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = inspectingItem;
+                    setInspectingId(null);
+                    openDuplicateModal(target);
+                  }}
+                  className={secondaryButtonClass}
+                >
+                  Dupliquer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = inspectingItem;
+                    setInspectingId(null);
+                    openEditModal(target);
+                  }}
+                  className={primaryButtonClass}
+                >
+                  Modifier
+                </button>
+              </div>
+            </div>
+          )
+        }
+      >
+        {inspectingItem && (
+          <div className="space-y-4 text-xs">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <div>
+                <div className="text-[11px] text-slate-500">N° Série</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">
+                  {inspectingItem.numeroSerie}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">État</div>
+                <div className="font-semibold text-slate-900 mt-0.5">
+                  {inspectingItem.etatMateriel}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">Fin de garantie</div>
+                <div className="font-mono tabular-nums font-semibold text-slate-900 mt-0.5">
+                  {inspectingItem.finGarantie}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">Utilisateur</div>
+                <div className="font-semibold text-slate-900 mt-0.5">
+                  {inspectingItem.utilisateurResponsable}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">Service / Lieu</div>
+                <div className="text-slate-800 mt-0.5">
+                  {inspectingItem.service} · {inspectingItem.localisation}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] text-slate-500">Acquisition / Vie</div>
+                <div className="font-mono tabular-nums text-slate-800 mt-0.5">
+                  {inspectingItem.dateAcquisition} ({inspectingItem.dureeVieEstimeeAns} ans)
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Configuration technique
+              </h4>
+              <p className="text-slate-800 leading-relaxed">
+                {inspectingItem.configurationTechnique}
+              </p>
+            </div>
+
+            <div>
+              <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">
+                Historique des interventions
+              </h4>
+              <p className="text-slate-700 p-3 rounded-lg bg-slate-50 border border-slate-200 whitespace-pre-line">
+                {inspectingItem.historiqueInterventions || 'Aucune intervention enregistrée.'}
+              </p>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingItem)}
+        onClose={() => setDeletingId(null)}
+        onConfirm={handleConfirmDelete}
+        title="Supprimer cet équipement du parc ?"
+        itemLabel={deletingItem ? `${deletingItem.numeroInventaire} — ${deletingItem.designation}` : ''}
+        itemMeta={
+          deletingItem
+            ? `S/N ${deletingItem.numeroSerie} · ${deletingItem.utilisateurResponsable}`
+            : undefined
+        }
+      />
+
       {/* Tableau d'inventaire */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-900 text-white">
-                <th className="p-3 font-semibold">N° Inv. / Type</th>
-                <th className="p-3 font-semibold">Désignation & Modèle</th>
-                <th className="p-3 font-semibold">N° Série (S/N)</th>
+                <th className="p-3 font-semibold whitespace-nowrap">N° Inv. / Type</th>
+                <th className="p-3 font-semibold">Désignation &amp; Modèle</th>
+                <th className="p-3 font-semibold whitespace-nowrap">N° Série (S/N)</th>
                 <th className="p-3 font-semibold">Configuration Technique</th>
-                <th className="p-3 font-semibold">Affectation & Lieu</th>
-                <th className="p-3 font-semibold">Garantie & État</th>
+                <th className="p-3 font-semibold">Affectation &amp; Lieu</th>
+                <th className="p-3 font-semibold whitespace-nowrap">Garantie &amp; État</th>
                 <th className="p-3 font-semibold">Historique Interventions</th>
+                <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 text-slate-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500 italic">
-                    {parc.length === 0
-                      ? "Aucun équipement enregistré dans le parc. Cliquez sur « Ajouter un Équipement » pour débuter l'inventaire CMDB."
-                      : "Aucun équipement ne correspond à votre recherche."}
+                  <td colSpan={8} className="p-8 text-center">
+                    <div className="space-y-2">
+                      <p className="text-slate-600 font-medium">
+                        {parc.length === 0
+                          ? "Aucun équipement enregistré dans le parc CMDB."
+                          : 'Aucun équipement ne correspond à votre recherche.'}
+                      </p>
+                      {parc.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={openCreateModal}
+                          className={primaryButtonClass}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Ajouter le premier équipement</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (
                 filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50 transition border-b border-slate-100">
+                  <tr
+                    key={item.id}
+                    className="hover:bg-slate-50 transition border-b border-slate-100"
+                  >
                     <td className="p-3 align-top whitespace-nowrap">
-                      <strong className="font-mono tabular-nums text-blue-900 font-bold block text-xs">
-                      {item.numeroInventaire}
-                    </strong>
-                    <span className="text-[11px] text-slate-500 font-medium">
-                      {item.type}
-                    </span>
-                  </td>
-                  <td className="p-3 align-top">
-                    <strong className="text-slate-900 block font-bold text-xs">{item.designation}</strong>
-                    <span className="text-[11px] text-slate-500">{item.marqueModele}</span>
-                  </td>
-                  <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-xs text-slate-800 font-bold">
-                    {item.numeroSerie}
-                  </td>
-                  <td className="p-3 align-top text-xs max-w-xs text-slate-700 leading-snug">
-                    {item.configurationTechnique}
-                  </td>
-                  <td className="p-3 align-top text-xs">
-                    <strong className="text-slate-900 block font-bold">{item.utilisateurResponsable}</strong>
-                    <span className="text-slate-500 block text-[11px]">{item.service}</span>
-                    <span className="text-slate-400 block text-[10px]">{item.localisation}</span>
-                  </td>
-                  <td className="p-3 align-top whitespace-nowrap text-xs">
-                    <span
-                      className={`font-semibold block mb-0.5 ${
-                        item.etatMateriel.includes('bon') || item.etatMateriel === 'Neuf'
-                          ? 'text-emerald-700'
-                          : 'text-amber-700'
-                      }`}
-                    >
-                      {item.etatMateriel}
-                    </span>
-                    <span className="text-slate-500 text-[10px] block font-mono tabular-nums">
-                      Garantie : {item.finGarantie}
-                    </span>
-                  </td>
-                  <td className="p-3 align-top text-xs text-slate-600 max-w-xs italic leading-snug">
-                    {item.historiqueInterventions || 'N/A'}
-                  </td>
-                </tr>
-              )))}
+                      <button
+                        type="button"
+                        onClick={() => setInspectingId(item.id)}
+                        className="font-mono tabular-nums text-blue-900 hover:text-blue-700 font-bold block text-xs"
+                      >
+                        {item.numeroInventaire}
+                      </button>
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {item.type}
+                      </span>
+                    </td>
+                    <td className="p-3 align-top">
+                      <button
+                        type="button"
+                        onClick={() => setInspectingId(item.id)}
+                        className="text-left text-slate-900 hover:text-blue-700 block font-bold text-xs"
+                      >
+                        {item.designation}
+                      </button>
+                      <span className="text-[11px] text-slate-500">{item.marqueModele}</span>
+                    </td>
+                    <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-xs text-slate-800 font-bold">
+                      {item.numeroSerie}
+                    </td>
+                    <td className="p-3 align-top text-xs max-w-xs text-slate-700 leading-snug">
+                      {item.configurationTechnique}
+                    </td>
+                    <td className="p-3 align-top text-xs">
+                      <strong className="text-slate-900 block font-bold">
+                        {item.utilisateurResponsable}
+                      </strong>
+                      <span className="text-slate-500 block text-[11px]">{item.service}</span>
+                      <span className="text-slate-400 block text-[10px]">
+                        {item.localisation}
+                      </span>
+                    </td>
+                    <td className="p-3 align-top whitespace-nowrap text-xs">
+                      <span
+                        className={`font-semibold block mb-0.5 ${
+                          item.etatMateriel.includes('bon') || item.etatMateriel === 'Neuf'
+                            ? 'text-emerald-700'
+                            : 'text-amber-700'
+                        }`}
+                      >
+                        {item.etatMateriel}
+                      </span>
+                      <span className="text-slate-500 text-[10px] block font-mono tabular-nums">
+                        Garantie : {item.finGarantie}
+                      </span>
+                    </td>
+                    <td className="p-3 align-top text-xs text-slate-600 max-w-xs italic leading-snug">
+                      {item.historiqueInterventions || 'N/A'}
+                    </td>
+                    <td className="p-3 align-top text-right whitespace-nowrap">
+                      <CrudRowActions
+                        onView={() => setInspectingId(item.id)}
+                        onEdit={() => openEditModal(item)}
+                        onDuplicate={() => openDuplicateModal(item)}
+                        onDelete={() => setDeletingId(item.id)}
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
