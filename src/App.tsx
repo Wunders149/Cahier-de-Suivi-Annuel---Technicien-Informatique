@@ -102,6 +102,12 @@ function CahierContent({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [dataModalOpen, setDataModalOpen] = useState(false);
+  const [dataModalTab, setDataModalTab] = useState<'backup' | 'sogediproma'>('backup');
+
+  const openDataModal = useCallback((tab: 'backup' | 'sogediproma' = 'backup') => {
+    setDataModalTab(tab);
+    setDataModalOpen(true);
+  }, []);
 
   const { user, isAdmin, errorMessage, dismissError, saveDataToCloud } = useFirebase();
 
@@ -209,6 +215,7 @@ function CahierContent({
       <DataManagementModal
         isOpen={dataModalOpen}
         onClose={() => setDataModalOpen(false)}
+        initialTab={dataModalTab}
         data={data}
         onUpdateData={(newData) => setData(newData)}
         onShowToast={showToast}
@@ -234,7 +241,7 @@ function CahierContent({
             generalInfo={data.generalInfo}
             badgeCounts={{ pendingTasks, activeInterventions, lowStock }}
             onResetData={handleResetData}
-            onOpenDataModal={() => setDataModalOpen(true)}
+            onOpenDataModal={() => openDataModal('backup')}
           />
 
           {/* Contenu principal */}
@@ -369,6 +376,7 @@ function CahierContent({
                     setData({ ...data, parcEquipements })
                   }
                   onShowToast={showToast}
+                  onOpenSogedipromaSync={() => openDataModal('sogediproma')}
                 />
               )}
 
@@ -407,6 +415,7 @@ function CahierContent({
                     setData({ ...data, demandesAchat })
                   }
                   onShowToast={showToast}
+                  onOpenSogedipromaSync={() => openDataModal('sogediproma')}
                 />
               )}
 

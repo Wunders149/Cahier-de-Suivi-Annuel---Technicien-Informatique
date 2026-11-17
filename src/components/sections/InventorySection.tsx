@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { EquipementParc } from '../../types/it-tracker';
-import { Laptop, Plus, Search, X } from 'lucide-react';
+import { Laptop, Plus, Search, X, PlugZap } from 'lucide-react';
 import { InventoryDataViz, categorizeEquipment } from '../inventory/InventoryDataViz';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
@@ -18,12 +18,14 @@ interface InventorySectionProps {
   parc: EquipementParc[];
   onUpdateParc: (parc: EquipementParc[]) => void;
   onShowToast?: (msg: string) => void;
+  onOpenSogedipromaSync?: () => void;
 }
 
 export const InventorySection: React.FC<InventorySectionProps> = ({
   parc,
   onUpdateParc,
   onShowToast,
+  onOpenSogedipromaSync,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('Tous');
@@ -199,10 +201,23 @@ export const InventorySection: React.FC<InventorySectionProps> = ({
             Recensement exhaustif des actifs informatiques, numéros de série, caractéristiques, garanties et affectations.
           </p>
         </div>
-        <button type="button" onClick={openCreateModal} className={primaryButtonClass}>
-          <Plus className="w-4 h-4" />
-          <span>Ajouter un Équipement</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenSogedipromaSync && (
+            <button
+              type="button"
+              onClick={onOpenSogedipromaSync}
+              className={secondaryButtonClass}
+              title="Importer ou synchroniser les matériels & équipements depuis SOGEDIPROMA (/api/state)"
+            >
+              <PlugZap className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Sync SOGEDIPROMA</span>
+            </button>
+          )}
+          <button type="button" onClick={openCreateModal} className={primaryButtonClass}>
+            <Plus className="w-4 h-4" />
+            <span>Ajouter un Équipement</span>
+          </button>
+        </div>
       </div>
 
       {/* Visualisation Recharts : Répartition du parc par type d'équipement */}

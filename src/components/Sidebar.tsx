@@ -245,10 +245,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           >
             <div className="flex items-center gap-2 truncate">
               <Database className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform shrink-0" />
-              <span className="truncate">Données & Sauvegarde</span>
+              <span className="truncate">Données &amp; API</span>
             </div>
             <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">
-              JSON
+              JSON/API
             </span>
           </button>
         </div>

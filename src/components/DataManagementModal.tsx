@@ -28,8 +28,10 @@ import {
   Trash2,
   RotateCcw,
   Cloud,
+  PlugZap,
 } from 'lucide-react';
 import { Modal } from './ui/Modal';
+import { SogedipromaSyncPanel } from './SogedipromaSyncPanel';
 import {
   dangerButtonClass,
   emeraldButtonClass,
@@ -40,6 +42,7 @@ import {
 interface DataManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: 'backup' | 'sogediproma';
   data: CahierSuiviData;
   onUpdateData: (newData: CahierSuiviData) => void;
   onShowToast: (msg: string) => void;
@@ -50,11 +53,13 @@ const FIRESTORE_MAX_BYTES = 1024 * 1024; // 1 Mo
 export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   isOpen,
   onClose,
+  initialTab = 'backup',
   data,
   onUpdateData,
   onShowToast,
 }) => {
   const { user, saveDataToCloud } = useFirebase();
+  const [activeTab, setActiveTab] = useState<'backup' | 'sogediproma'>(initialTab);
 
   const [confirmCleanOpen, setConfirmCleanOpen] = useState(false);
   const [confirmDemoOpen, setConfirmDemoOpen] = useState(false);
@@ -102,12 +107,13 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
       setConfirmRestoreArchiveId(null);
       setConfirmDeleteArchiveId(null);
     } else {
+      setActiveTab(initialTab);
       setTargetNextYear(
         (data.generalInfo?.anneeReference || new Date().getFullYear()) + 1
       );
       loadArchives();
     }
-  }, [isOpen, data.generalInfo?.anneeReference, loadArchives]);
+  }, [isOpen, initialTab, data.generalInfo?.anneeReference, loadArchives]);
 
   const stats = {
     tasksCount: data.journalTaches?.length || 0,
@@ -291,7 +297,46 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
       }
     >
       <div className="space-y-6">
-        {/* Étape 1 : Sauvegarde préalable */}
+        {/* Sélecteur d'onglet */}
+        <div className="flex flex-wrap items-center gap-2 p-1 rounded-xl bg-slate-100 border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setActiveTab('backup')}
+            className={`flex-1 min-w-[200px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              activeTab === 'backup'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Database className="w-3.5 h-3.5 text-blue-600" />
+            <span>Sauvegarde, Cloud &amp; Multi-Année</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('sogediproma')}
+            className={`flex-1 min-w-[200px] inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition ${
+              activeTab === 'sogediproma'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <PlugZap className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Connecteur API SOGEDIPROMA</span>
+          </button>
+        </div>
+
+        {activeTab === 'sogediproma' ? (
+          <SogedipromaSyncPanel
+            currentData={data}
+            onApplySyncedData={(nextData, summaryMsg) => {
+              onUpdateData(nextData);
+              onShowToast(summaryMsg);
+              onClose();
+            }}
+          />
+        ) : (
+          <div className="space-y-6">
+            {/* Étape 1 : Sauvegarde préalable */}
         <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -797,6 +842,8 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
             )}
           </div>
         </div>
+          </div>
+        )}
       </div>
     </Modal>
   );

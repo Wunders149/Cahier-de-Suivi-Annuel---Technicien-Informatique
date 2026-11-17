@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ArticleConsommable, DemandeAchat } from '../../types/it-tracker';
-import { Package, ShoppingCart, Plus, AlertCircle } from 'lucide-react';
+import { Package, ShoppingCart, Plus, AlertCircle, PlugZap } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
@@ -19,6 +19,7 @@ interface ConsumablesSectionProps {
   onUpdateConsommables: (consommables: ArticleConsommable[]) => void;
   onUpdateDemandesAchat: (demandes: DemandeAchat[]) => void;
   onShowToast?: (msg: string) => void;
+  onOpenSogedipromaSync?: () => void;
 }
 
 const DEFAULT_ARTICLE = (): Partial<ArticleConsommable> => ({
@@ -53,6 +54,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   onUpdateConsommables,
   onUpdateDemandesAchat,
   onShowToast,
+  onOpenSogedipromaSync,
 }) => {
   // 1. CRUD Articles Consommables
   const [articleModalOpen, setArticleModalOpen] = useState(false);
@@ -319,6 +321,17 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {onOpenSogedipromaSync && (
+            <button
+              type="button"
+              onClick={onOpenSogedipromaSync}
+              className={secondaryButtonClass}
+              title="Importer ou synchroniser les consommables et achats depuis SOGEDIPROMA (/api/state)"
+            >
+              <PlugZap className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Sync SOGEDIPROMA</span>
+            </button>
+          )}
           <button type="button" onClick={openCreateArticle} className={primaryButtonClass}>
             <Plus className="w-4 h-4" />
             <span>Nouvel Article Consommable</span>
