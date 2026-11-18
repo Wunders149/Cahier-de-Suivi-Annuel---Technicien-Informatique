@@ -153,7 +153,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   const [password, setPassword] = useState<string>('');
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [loadingPreset, setLoadingPreset] = useState<'full' | 'assets-18' | null>(null);
+  const [loadingPreset, setLoadingPreset] = useState<'full' | 'assets-18' | 'inventory-18' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
@@ -348,40 +348,82 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     }
   };
 
+  const handleLoadInventory18Json = async () => {
+    setErrorMsg(null);
+    setStatusNotice(null);
+    try {
+      setLoadingPreset('inventory-18');
+      const res = await fetch('./assets/aistudio/gemini-code-1795008003938_f0c8c1ed.json');
+      if (!res.ok) {
+        throw new Error(`Impossible de charger l'export consommables (HTTP ${res.status}).`);
+      }
+      const text = await res.text();
+      const parsed = parseSogedipromaJsonPayload(text);
+      if (!parsed.success || !parsed.data) {
+        throw new Error(parsed.error || 'Format export consommables invalide.');
+      }
+      const mapped = mapSogedipromaToWorkbookDelta(parsed.data);
+      setPendingDelta(mapped);
+      selectPopulatedModules(mapped);
+      setSourceRevision(null);
+      setSourceOriginLabel('Export Consommables SOGEDIPROMA (2026-11-18)');
+      setStatusNotice(
+        `Export consommables analysé : ${mapped.consommables.length} articles prêts à synchroniser.`
+      );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur chargement export consommables.');
+    } finally {
+      setLoadingPreset(null);
+    }
+  };
+
   const handleLoadFullCombinedAndLatestAssets = async () => {
     setErrorMsg(null);
     setStatusNotice(null);
     try {
       setLoadingPreset('full');
-      const [assetsRes, combinedRes] = await Promise.all([
+      const [assetsRes, inventoryRes, combinedRes] = await Promise.all([
         fetch('./assets/aistudio/sogediproma-assets-2026-11-18_2_c7f15279.json'),
+        fetch('./assets/aistudio/gemini-code-1795008003938_f0c8c1ed.json'),
         fetch('./assets/aistudio/sogediproma-combined-2026-11-17_b74504df.json'),
       ]);
-      if (!assetsRes.ok || !combinedRes.ok) {
+      if (!assetsRes.ok || !inventoryRes.ok || !combinedRes.ok) {
         throw new Error(
-          `Impossible de charger les exports joints (HTTP ${assetsRes.status} / ${combinedRes.status}).`
+          `Impossible de charger les exports joints (HTTP ${assetsRes.status} / ${inventoryRes.status} / ${combinedRes.status}).`
         );
       }
-      const [assetsText, combinedText] = await Promise.all([
+      const [assetsText, inventoryText, combinedText] = await Promise.all([
         assetsRes.text(),
+        inventoryRes.text(),
         combinedRes.text(),
       ]);
       const parsedAssets = parseSogedipromaJsonPayload(assetsText);
+      const parsedInventory = parseSogedipromaJsonPayload(inventoryText);
       const parsedCombined = parseSogedipromaJsonPayload(combinedText);
-      if (!parsedAssets.success || !parsedAssets.data || !parsedCombined.success || !parsedCombined.data) {
-        throw new Error(parsedAssets.error || parsedCombined.error || 'Format JSON invalide.');
+      if (
+        !parsedAssets.success ||
+        !parsedAssets.data ||
+        !parsedInventory.success ||
+        !parsedInventory.data ||
+        !parsedCombined.success ||
+        !parsedCombined.data
+      ) {
+        throw new Error(
+          parsedAssets.error || parsedInventory.error || parsedCombined.error || 'Format JSON invalide.'
+        );
       }
 
       const mergedState: SogedipromaStateData = {
         ...parsedCombined.data,
         assets: parsedAssets.data.assets,
+        inventory: parsedInventory.data.inventory,
         exportDate: '2026-11-18',
       };
       const mapped = mapSogedipromaToWorkbookDelta(mergedState);
       setPendingDelta(mapped);
       selectPopulatedModules(mapped);
       setSourceRevision(null);
-      setSourceOriginLabel('Pack complet (Actifs 2026-11-18 + Consommables/Achats 2026-11-17)');
+      setSourceOriginLabel('Pack complet (Actifs & Consommables 2026-11-18 + Achats 2026-11-17)');
       setStatusNotice(
         `Pack complet analysé : ${mapped.parcEquipements.length} matériels, ${mapped.reseauEquipements.length} équipements réseau/caméras IP, ${mapped.consommables.length} consommables et ${mapped.demandesAchat.length} achats prêts à synchroniser.`
       );
@@ -613,7 +655,21 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
             <span>
               {loadingPreset === 'full'
                 ? 'Chargement...'
-                : 'Sync complète (355 mat. 18/11 + 25 art. & 20 achats)'}
+                : 'Sync complète (355 mat. · 29 art. · 20 achats)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            disabled={loadingPreset !== null}
+            onClick={handleLoadInventory18Json}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white text-slate-800 border border-slate-300 hover:bg-slate-100 disabled:opacity-60 font-semibold text-xs transition-colors whitespace-nowrap"
+          >
+            <Package className="w-3.5 h-3.5 text-emerald-600" />
+            <span>
+              {loadingPreset === 'inventory-18'
+                ? 'Chargement...'
+                : 'Consommables seuls (18/11 · 29 art.)'}
             </span>
           </button>
 
