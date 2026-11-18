@@ -511,6 +511,59 @@ function normalizeSogedipromaPurchase(raw: unknown, idx: number): SogedipromaPur
   };
 }
 
+function detectArrayCollectionType(
+  arr: unknown[]
+): 'assets' | 'inventory' | 'purchases' | 'tickets' | null {
+  const firstObj = arr.find((item) => item && typeof item === 'object' && !Array.isArray(item)) as
+    | Record<string, unknown>
+    | undefined;
+  if (!firstObj) return null;
+
+  const map = buildNormalizedKeyMap(firstObj);
+  const rawId = (pickStr(map, 'id') || '').toLowerCase();
+
+  if (
+    rawId.startsWith('ass-') ||
+    map.has('matériel') ||
+    map.has('materiel') ||
+    map.has("code d'inventaire") ||
+    map.has('assettag') ||
+    map.has('numéro de série') ||
+    map.has('numero de serie') ||
+    map.has('serial')
+  ) {
+    return 'assets';
+  }
+
+  if (
+    rawId.startsWith('inv-') ||
+    map.has('article') ||
+    map.has('seuil minimum') ||
+    map.has('minqty') ||
+    map.has('sku') ||
+    map.has('code / référence')
+  ) {
+    return 'inventory';
+  }
+
+  if (
+    rawId.startsWith('pur-') ||
+    map.has('référence de commande') ||
+    map.has('reference de commande') ||
+    map.has('article de stock') ||
+    map.has('itemid') ||
+    map.has('unitprice')
+  ) {
+    return 'purchases';
+  }
+
+  if (rawId.startsWith('tic-') || (map.has('priority') && map.has('openedat'))) {
+    return 'tickets';
+  }
+
+  return null;
+}
+
 export function parseSogedipromaJsonPayload(rawJsonText: string): {
   success: boolean;
   data?: SogedipromaStateData;
@@ -518,13 +571,56 @@ export function parseSogedipromaJsonPayload(rawJsonText: string): {
   error?: string;
 } {
   try {
-    const parsed = JSON.parse(rawJsonText) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== 'object') {
-      return { success: false, error: 'Le document JSON ne contient pas un objet valide.' };
+    const parsedRaw = JSON.parse(rawJsonText) as unknown;
+    if (!parsedRaw || typeof parsedRaw !== 'object') {
+      return { success: false, error: 'Le document JSON ne contient pas un objet ou tableau valide.' };
     }
 
-    // Format /api/backup ou /api/state : { app: "SOGEDIPROMA-IT", data: { ... }, revision? }
-    // OU Format export combiné : { export_date, summary, assets: [...], inventory: [...] }
+    // Cas 1 : Export autonome sous forme de tableau JSON racine (ex: sogediproma-assets-*.json)
+    if (Array.isArray(parsedRaw)) {
+      const detectedType = detectArrayCollectionType(parsedRaw);
+      if (!detectedType) {
+        return {
+          success: false,
+          error:
+            'Tableau JSON non reconnu. Utilisez un export SOGEDIPROMA (assets, inventory ou purchases).',
+        };
+      }
+
+      const normalizedData: SogedipromaStateData = {};
+      if (detectedType === 'assets') {
+        const assets = parsedRaw
+          .map((a, idx) => normalizeSogedipromaAsset(a, idx))
+          .filter((a): a is SogedipromaAsset => Boolean(a));
+        normalizedData.assets = assets;
+        const maxDate = assets
+          .map((a) => a.purchaseDate)
+          .filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}/.test(d)))
+          .sort()
+          .pop();
+        if (maxDate) normalizedData.exportDate = maxDate;
+      } else if (detectedType === 'inventory') {
+        normalizedData.inventory = parsedRaw
+          .map((i, idx) => normalizeSogedipromaInventoryItem(i, idx))
+          .filter((i): i is SogedipromaInventoryItem => Boolean(i));
+      } else if (detectedType === 'purchases') {
+        normalizedData.purchases = parsedRaw
+          .map((p, idx) => normalizeSogedipromaPurchase(p, idx))
+          .filter((p): p is SogedipromaPurchase => Boolean(p));
+      } else if (detectedType === 'tickets') {
+        normalizedData.tickets = parsedRaw as SogedipromaTicket[];
+      }
+
+      return {
+        success: true,
+        data: normalizedData,
+      };
+    }
+
+    const parsed = parsedRaw as Record<string, unknown>;
+
+    // Cas 2 : /api/backup ou /api/state ({ app: "SOGEDIPROMA-IT", data: { ... }, revision? })
+    // OU Format export combiné ({ export_date, summary, assets: [...], inventory: [...] })
     const rawCandidate =
       parsed.data && typeof parsed.data === 'object'
         ? (parsed.data as Record<string, unknown>)
@@ -561,7 +657,7 @@ export function parseSogedipromaJsonPayload(rawJsonText: string): {
       return {
         success: false,
         error:
-          'Format SOGEDIPROMA non reconnu. Utilisez un export /api/backup, un export combiné SOGEDIPROMA (.json), une réponse /api/state ou une connexion directe.',
+          'Format SOGEDIPROMA non reconnu. Utilisez un export /api/backup, un export combiné ou matériels SOGEDIPROMA (.json), une réponse /api/state ou une connexion directe.',
       };
     }
 
@@ -644,13 +740,23 @@ function mapUnit(rawUnit?: string): ArticleConsommable['unite'] {
 function isActiveNetworkAsset(asset: SogedipromaAsset): boolean {
   const cat = (asset.category || '').trim().toLowerCase();
   const detail = `${asset.name || ''} ${asset.model || ''} ${asset.brand || ''}`.toLowerCase();
+  const location = (asset.location || '').toLowerCase();
+  const tag = (asset.assetTag || '').toLowerCase();
 
   // Format /api/state classique : catégorie dédiée "Réseau"
   if (cat === 'réseau' || cat === 'reseau') return true;
 
-  // Format export combiné : "Réseau & Câblage" et "Sécurité & Vidéo" regroupent aussi câbles passifs & caméras/NVR
+  // Onduleurs placés dans la baie réseau (NET-011 / NET-012)
+  if (
+    (cat.includes('alimentation') || cat.includes('onduleur')) &&
+    (location.includes('baie') || tag.startsWith('net-'))
+  ) {
+    return true;
+  }
+
+  // Format export combiné / assets : "Réseau & Câblage" et "Sécurité & Vidéo" regroupent câbles passifs & caméras/NVR
   if (cat.includes('réseau') || cat.includes('reseau') || cat.includes('sécurité') || cat.includes('securite')) {
-    return /\b(switch|router|routeur|firewall|pare-feu|mikrotik|starlink|modem|unifi|aruba|wifi|wi-fi|ap|nvr|dvr|camera|caméra|serveur|nas)\b/i.test(
+    return /(?:^|[^a-z0-9à-ÿ])(switch|mini-switch|router|routeur|firewall|pare-feu|mikrotik|starlink|modem|unifi|aruba|wifi|wi-fi|ap|nvr|dvr|camera|caméra|serveur|nas)(?:$|[^a-z0-9à-ÿ])/i.test(
       detail
     );
   }
@@ -949,31 +1055,50 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     };
   });
 
-  // 4. Équipements réseau actifs extraits de assets (Switchs, Routeurs, NVR, Caméras IP, etc.)
+  // 4. Équipements réseau actifs extraits de assets (Switchs, Routeurs, Onduleurs de baie, NVR, Caméras IP, etc.)
   const reseauEquipements: EquipementReseau[] = assets
     .filter((a) => isActiveNetworkAsset(a))
-    .map((a, idx) => ({
-      id: `sog-net-${a.id || idx}`,
-      nom: a.name || `Équipement Réseau ${idx + 1}`,
-      type: mapNetworkType(a.name, a.model, a.notes),
-      marqueModele: [a.brand, a.model].filter(Boolean).join(' ') || a.category || 'Réseau',
-      adresseIp: '—',
-      adresseMac: a.serial || '—',
-      localisation: a.location?.trim() || defaultLocation,
-      vlan: 'LAN Principal',
-      portsPoE: '—',
-      firmwareVersion: 'Standard',
-      etat:
-        a.status === 'En réparation'
-          ? 'En maintenance'
-          : a.status === 'Hors service' || a.status === 'Réformé'
-          ? 'Hors ligne'
-          : a.status === 'Abîmé'
-          ? 'Alerte'
-          : 'En ligne',
-      dernierReboot: a.purchaseDate || '',
-      observations: [a.assetTag ? `Tag : ${a.assetTag}` : '', a.notes || ''].filter(Boolean).join(' · '),
-    }));
+    .map((a, idx) => {
+      const notes = a.notes || '';
+      const ipMatch = /IP:\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})/i.exec(notes);
+      const macMatch = /MAC:\s*([0-9a-fA-F:-]{11,})/i.exec(notes);
+      const fwMatch = /Firmware:\s*([^|]+)/i.exec(notes);
+      const portsMatch = /(\d+\s*ports?\s*[^|,()]+(?:\([^)]+\))?)/i.exec(notes);
+      const poeDetailMatch = /\(([^)]*PoE[^)]*)\)/i.exec(notes);
+
+      const adresseIp = ipMatch ? ipMatch[1].trim() : '—';
+      const adresseMac = macMatch ? macMatch[1].trim().toUpperCase() : a.serial || '—';
+      const firmwareVersion = fwMatch ? fwMatch[1].trim() : 'Standard';
+      const portsPoE = poeDetailMatch
+        ? poeDetailMatch[1].trim()
+        : portsMatch
+        ? portsMatch[1].trim()
+        : '—';
+      const vlan = adresseIp.startsWith('192.168.200.') ? 'VLAN Vidéo (200)' : 'LAN Principal';
+
+      return {
+        id: `sog-net-${a.id || idx}`,
+        nom: a.name || `Équipement Réseau ${idx + 1}`,
+        type: mapNetworkType(a.name, a.model, notes),
+        marqueModele: [a.brand, a.model].filter(Boolean).join(' ') || a.category || 'Réseau',
+        adresseIp,
+        adresseMac,
+        localisation: a.location?.trim() || defaultLocation,
+        vlan,
+        portsPoE,
+        firmwareVersion,
+        etat:
+          a.status === 'En réparation'
+            ? 'En maintenance'
+            : a.status === 'Hors service' || a.status === 'Réformé'
+            ? 'Hors ligne'
+            : a.status === 'Abîmé'
+            ? 'Alerte'
+            : 'En ligne',
+        dernierReboot: a.purchaseDate || '',
+        observations: [a.assetTag ? `Tag : ${a.assetTag}` : '', notes].filter(Boolean).join(' · '),
+      };
+    });
 
   // 5. Maintenances
   const maintenances: ItemMaintenance[] = maintenance.map((m, idx) => {
@@ -1167,6 +1292,11 @@ function upsertBySogPrefix<T extends { id: string }>(
   incoming: T[],
   replaceSogEntries: boolean
 ): T[] {
+  // Évite d'effacer les entrées sog-* existantes lors d'un import partiel (ex: fichier assets uniquement)
+  if (incoming.length === 0) {
+    return existing;
+  }
+
   const base = replaceSogEntries
     ? existing.filter((item) => !String(item.id || '').startsWith('sog-'))
     : [...existing];

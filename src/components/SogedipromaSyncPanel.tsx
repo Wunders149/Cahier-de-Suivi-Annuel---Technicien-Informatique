@@ -153,7 +153,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   const [password, setPassword] = useState<string>('');
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isLoadingAttached, setIsLoadingAttached] = useState(false);
+  const [loadingPreset, setLoadingPreset] = useState<'full' | 'assets-18' | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
@@ -236,6 +236,19 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     }
   };
 
+  const selectPopulatedModules = (mapped: SogedipromaMappedDelta) => {
+    setSelectedModules({
+      consommables: mapped.consommables.length > 0,
+      demandesAchat: mapped.demandesAchat.length > 0,
+      parcEquipements: mapped.parcEquipements.length > 0,
+      reseauEquipements: mapped.reseauEquipements.length > 0,
+      maintenances: mapped.maintenances.length > 0,
+      interventions: mapped.interventions.length > 0,
+      journalTaches: mapped.journalTaches.length > 0,
+      logicielsLicences: mapped.logicielsLicences.length > 0,
+    });
+  };
+
   const handleFetchLiveState = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -262,6 +275,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
       const mapped = mapSogedipromaToWorkbookDelta(payload.data);
       setPendingDelta(mapped);
+      selectPopulatedModules(mapped);
       setSourceRevision(typeof payload.revision === 'number' ? payload.revision : null);
       setSourceOriginLabel(`Serveur live (${baseUrl || serverConfig.defaultUrl || 'env'})`);
       setStatusNotice(
@@ -292,6 +306,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       }
       const mapped = mapSogedipromaToWorkbookDelta(parsed.data);
       setPendingDelta(mapped);
+      selectPopulatedModules(mapped);
       setSourceRevision(parsed.revision ?? null);
       setSourceOriginLabel(`Fichier JSON (${file.name})`);
       setStatusNotice(`Export SOGEDIPROMA « ${file.name} » analysé avec succès.`);
@@ -304,31 +319,76 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     }
   };
 
-  const handleLoadAttachedJson = async () => {
+  const handleLoadAssets18Json = async () => {
     setErrorMsg(null);
     setStatusNotice(null);
     try {
-      setIsLoadingAttached(true);
-      const res = await fetch('./assets/aistudio/sogediproma-combined-2026-11-17_b74504df.json');
+      setLoadingPreset('assets-18');
+      const res = await fetch('./assets/aistudio/sogediproma-assets-2026-11-18_2_c7f15279.json');
       if (!res.ok) {
-        throw new Error(`Impossible de charger l'export joint (HTTP ${res.status}).`);
+        throw new Error(`Impossible de charger l'export matériels (HTTP ${res.status}).`);
       }
       const text = await res.text();
       const parsed = parseSogedipromaJsonPayload(text);
       if (!parsed.success || !parsed.data) {
-        throw new Error(parsed.error || 'Format export combiné invalide.');
+        throw new Error(parsed.error || 'Format export matériels invalide.');
       }
       const mapped = mapSogedipromaToWorkbookDelta(parsed.data);
       setPendingDelta(mapped);
-      setSourceRevision(parsed.revision ?? null);
-      setSourceOriginLabel('Export combiné SOGEDIPROMA (2026-11-17)');
+      selectPopulatedModules(mapped);
+      setSourceRevision(null);
+      setSourceOriginLabel('Export Matériels & Caméras (2026-11-18)');
       setStatusNotice(
-        `Export combiné analysé : ${mapped.parcEquipements.length} matériels, ${mapped.consommables.length} consommables et ${mapped.demandesAchat.length} achats prêts à fusionner.`
+        `Export 2026-11-18 analysé : ${mapped.parcEquipements.length} matériels (dont ${mapped.reseauEquipements.length} équipements réseau/caméras IP) prêts à fusionner.`
       );
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Erreur chargement export JSON joint.');
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur chargement export matériels.');
     } finally {
-      setIsLoadingAttached(false);
+      setLoadingPreset(null);
+    }
+  };
+
+  const handleLoadFullCombinedAndLatestAssets = async () => {
+    setErrorMsg(null);
+    setStatusNotice(null);
+    try {
+      setLoadingPreset('full');
+      const [assetsRes, combinedRes] = await Promise.all([
+        fetch('./assets/aistudio/sogediproma-assets-2026-11-18_2_c7f15279.json'),
+        fetch('./assets/aistudio/sogediproma-combined-2026-11-17_b74504df.json'),
+      ]);
+      if (!assetsRes.ok || !combinedRes.ok) {
+        throw new Error(
+          `Impossible de charger les exports joints (HTTP ${assetsRes.status} / ${combinedRes.status}).`
+        );
+      }
+      const [assetsText, combinedText] = await Promise.all([
+        assetsRes.text(),
+        combinedRes.text(),
+      ]);
+      const parsedAssets = parseSogedipromaJsonPayload(assetsText);
+      const parsedCombined = parseSogedipromaJsonPayload(combinedText);
+      if (!parsedAssets.success || !parsedAssets.data || !parsedCombined.success || !parsedCombined.data) {
+        throw new Error(parsedAssets.error || parsedCombined.error || 'Format JSON invalide.');
+      }
+
+      const mergedState: SogedipromaStateData = {
+        ...parsedCombined.data,
+        assets: parsedAssets.data.assets,
+        exportDate: '2026-11-18',
+      };
+      const mapped = mapSogedipromaToWorkbookDelta(mergedState);
+      setPendingDelta(mapped);
+      selectPopulatedModules(mapped);
+      setSourceRevision(null);
+      setSourceOriginLabel('Pack complet (Actifs 2026-11-18 + Consommables/Achats 2026-11-17)');
+      setStatusNotice(
+        `Pack complet analysé : ${mapped.parcEquipements.length} matériels, ${mapped.reseauEquipements.length} équipements réseau/caméras IP, ${mapped.consommables.length} consommables et ${mapped.demandesAchat.length} achats prêts à synchroniser.`
+      );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur chargement pack combiné.');
+    } finally {
+      setLoadingPreset(null);
     }
   };
 
@@ -461,11 +521,11 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
               required={!serverConfig.hasDefaultUrl}
               className={`${fieldInputClass} font-mono text-xs`}
             />
-            {(isPrivateLanUrl(baseUrl || serverConfig.defaultUrl) || serverConfig.isDefaultUrlPrivateLan) && (
+            {isPrivateLanUrl(baseUrl.trim() || serverConfig.defaultUrl) && (
               <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                 <span>
-                  L&apos;adresse <code className="font-mono font-semibold">{baseUrl || serverConfig.defaultUrl}</code> est une IP privée locale (LAN). Un navigateur ou serveur hébergé dans le Cloud ne peut pas l&apos;atteindre sans tunnel HTTPS (ex. Cloudflare Tunnel) ou exécution locale sur le même réseau. En alternative immédiate, utilisez l&apos;<strong>Option B</strong> ci-dessous avec un export JSON <code className="font-mono">/api/backup</code>.
+                  L&apos;adresse <code className="font-mono font-semibold">{baseUrl.trim() || serverConfig.defaultUrl}</code> est une IP privée locale (LAN). Un navigateur ou serveur hébergé dans le Cloud ne peut pas l&apos;atteindre sans tunnel HTTPS (ex. Cloudflare Tunnel) ou exécution locale sur le même réseau. En alternative immédiate, utilisez l&apos;<strong>Option B</strong> ci-dessous avec un export JSON <code className="font-mono">/api/backup</code>.
                 </span>
               </div>
             )}
@@ -531,29 +591,43 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         </div>
       </form>
 
-      {/* Méthode B : Import direct JSON /api/backup, /api/state ou export combiné */}
-      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+      {/* Méthode B : Import direct JSON /api/backup, /api/state, export combiné ou export matériels */}
+      <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
         <div className="space-y-0.5">
           <strong className="text-xs font-bold text-slate-900 block">
-            Option B · Importer un snapshot ou export combiné JSON SOGEDIPROMA
+            Option B · Importer un snapshot ou export JSON SOGEDIPROMA
           </strong>
           <span className="text-[11px] text-slate-500 block">
-            Compatible avec <code className="font-mono">/api/backup</code>, <code className="font-mono">/api/state</code> et les exports combinés (<code className="font-mono">sogediproma-combined-*.json</code>).
+            Compatible avec <code className="font-mono">/api/backup</code>, <code className="font-mono">/api/state</code>, <code className="font-mono">sogediproma-combined-*.json</code> et les exports matériels (<code className="font-mono">sogediproma-assets-*.json</code>).
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            disabled={isLoadingAttached}
-            onClick={handleLoadAttachedJson}
+            disabled={loadingPreset !== null}
+            onClick={handleLoadFullCombinedAndLatestAssets}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 font-semibold text-xs transition-colors whitespace-nowrap"
           >
             <FileJson className="w-3.5 h-3.5" />
             <span>
-              {isLoadingAttached
+              {loadingPreset === 'full'
                 ? 'Chargement...'
-                : "Charger l'export joint (272 mat. · 25 art. · 20 achats)"}
+                : 'Sync complète (355 mat. 18/11 + 25 art. & 20 achats)'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            disabled={loadingPreset !== null}
+            onClick={handleLoadAssets18Json}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-white text-slate-800 border border-slate-300 hover:bg-slate-100 disabled:opacity-60 font-semibold text-xs transition-colors whitespace-nowrap"
+          >
+            <Laptop className="w-3.5 h-3.5 text-blue-600" />
+            <span>
+              {loadingPreset === 'assets-18'
+                ? 'Chargement...'
+                : 'Matériels & Caméras seuls (18/11 · 355)'}
             </span>
           </button>
 
