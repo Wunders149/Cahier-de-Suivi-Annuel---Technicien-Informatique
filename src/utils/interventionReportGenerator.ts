@@ -1,148 +1,125 @@
-import jsPDF from 'jspdf';
 import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
   BorderStyle,
-  AlignmentType,
+  Document,
+  Paragraph,
   ShadingType,
-  Footer,
-  PageNumber,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
 } from 'docx';
-import { saveAs } from 'file-saver';
-import { FicheIntervention, GeneralInfo } from '../types/it-tracker';
+import {
+  FicheIntervention,
+  GeneralInfo,
+  NatureIntervention,
+} from '../types/it-tracker';
 import { formatDuration } from './durationFormatter';
 import {
   formatInterventionStatusLabel,
   getInterventionVocabulary,
 } from './interventionLabels';
+import {
+  DocumentCategory,
+  formatGenerationDateFr,
+  getDocumentTheme,
+  getStatusTone,
+  getToneColors,
+  sanitizeDocxText,
+  sanitizeFileSlug,
+  sanitizePdfText,
+} from './docDesign/documentThemes';
+import { PdfDocumentBuilder } from './docDesign/pdfLayoutEngine';
+import {
+  A4_HEIGHT_DXA,
+  A4_WIDTH_DXA,
+  CONTENT_WIDTH_DXA,
+  STANDARD_MARGIN_DXA,
+  createDocxCalloutBox,
+  createDocxDataTable,
+  createDocxDocumentBanner,
+  createDocxKeyValueGridTable,
+  createDocxRunningFooter,
+  createDocxRunningHeader,
+  createDocxSectionHeading,
+  createDocxSignatureTable,
+  createDocxStructuredParagraphs,
+  createEditorialDocStyles,
+  packAndSaveDocx,
+} from './docDesign/docxLayoutEngine';
 
-function sanitizeFileSlug(text: string): string {
-  return (text || 'intervention')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-zA-Z0-9_-]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 50);
+function resolveTechnicalCategory(nature?: NatureIntervention): {
+  category: DocumentCategory;
+  reportMainTitle: string;
+} {
+  if (nature === 'Déploiement / Installation') {
+    return {
+      category: 'technical_deployment',
+      reportMainTitle: 'Procès-Verbal de Déploiement & Mise en Service',
+    };
+  }
+  if (nature === 'Maintenance / Contrôle') {
+    return {
+      category: 'technical_maintenance',
+      reportMainTitle: 'Rapport de Maintenance & Contrôle Technique',
+    };
+  }
+  return {
+    category: 'technical_incident',
+    reportMainTitle: "Rapport Détaillé d'Intervention Technique",
+  };
 }
 
-/**
- * Génère un Rapport Détaillé d'Intervention Technique en PDF A4
- * aligné sur la mise en page professionnelle standard (Synthèse, Analyse, Détail par équipement, Comparatif).
- */
-export function generateInterventionReportPdf(
+function buildInterventionContext(
   intervention: FicheIntervention,
   generalInfo?: GeneralInfo
-): void {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const margin = 16;
-  const pageWidth = 210;
-  const pageHeight = 297;
-  const contentWidth = pageWidth - margin * 2;
-  const maxY = pageHeight - 22;
-  let y = 18;
-
-  const navy: [number, number, number] = [15, 42, 74];
-  const blue: [number, number, number] = [2, 132, 199];
-  const slate900: [number, number, number] = [15, 23, 42];
-  const slate700: [number, number, number] = [51, 65, 85];
-  const slate500: [number, number, number] = [100, 116, 139];
-  const lightBg: [number, number, number] = [241, 245, 249];
-  const borderGray: [number, number, number] = [203, 213, 225];
-  const green: [number, number, number] = [21, 128, 61];
-  const amber: [number, number, number] = [180, 83, 9];
-
-  const ensureSpace = (neededMm: number) => {
-    if (y + neededMm > maxY) {
-      doc.addPage();
-      y = 18;
-    }
-  };
-
-  const drawSectionHeading = (title: string) => {
-    ensureSpace(16);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...navy);
-    doc.text(title, margin, y);
-    y += 2.5;
-    doc.setDrawColor(...borderGray);
-    doc.setLineWidth(0.3);
-    doc.line(margin, y, pageWidth - margin, y);
-    y += 5;
-  };
-
+) {
+  const { category, reportMainTitle } = resolveTechnicalCategory(
+    intervention.natureIntervention
+  );
   const vocab = getInterventionVocabulary(intervention.natureIntervention);
   const statusDisplay = formatInterventionStatusLabel(
     intervention.resultat,
     intervention.natureIntervention
   );
+  const genDate = formatGenerationDateFr();
 
-  // --- EN-TÊTE DU RAPPORT ---
+  const companyName =
+    generalInfo?.entreprise?.trim() || "Direction des Systèmes d'Information";
+  const techLine = generalInfo
+    ? `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() ||
+      'Technicien Informatique'
+    : 'Technicien Informatique';
+
   const domaineText = (
     intervention.domaineTitre?.trim() ||
     `${vocab.domainPrefix} · ${(intervention.type || intervention.typeIntervention).toUpperCase()}`
   ).toUpperCase();
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...blue);
-  doc.text(domaineText, margin, y);
-  y += 6.5;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.setTextColor(...navy);
-  doc.text("Rapport Détaillé d'Intervention Technique", margin, y);
-  y += 5.5;
-
   const subtitleText =
     intervention.titreRapport?.trim() ||
     `${intervention.numeroReference} — ${intervention.equipementConcerne} (${intervention.dateReception})`;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.setTextColor(...slate500);
-  const subLines = doc.splitTextToSize(subtitleText, contentWidth);
-  doc.text(subLines, margin, y);
-  y += subLines.length * 4.5 + 1.5;
 
-  doc.setDrawColor(...navy);
-  doc.setLineWidth(0.6);
-  doc.line(margin, y, pageWidth - margin, y);
-  y += 8;
-
-  // --- 1. SYNTHÈSE ---
-  drawSectionHeading(vocab.summaryHeading);
-
-  const techLine = generalInfo
-    ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
-    : '';
   const resultLabel = `${statusDisplay}${
     intervention.solutionAppliquee?.trim()
       ? ` — ${intervention.solutionAppliquee.trim()}`
       : ''
   }`;
 
-  const summaryRows: Array<{ label: string; value: string; isResult?: boolean }> = [
+  const summaryRows: Array<{ label: string; value: string; isStatus?: boolean }> = [
     {
       label: 'Référence & Date',
-      value: `${intervention.numeroReference} · Le ${intervention.dateReception} à ${intervention.heureReception}${
-        techLine ? ` · Intervenant : ${techLine}` : ''
-      }`,
+      value: `${intervention.numeroReference} · Le ${intervention.dateReception} à ${
+        intervention.heureReception
+      }${techLine ? ` · Intervenant : ${techLine}` : ''}`,
     },
     {
       label: 'Demandeur / Service',
       value: `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
+    },
+    {
+      label: 'Priorité & Type',
+      value: `${intervention.priorite} · ${intervention.type || intervention.typeIntervention}`,
     },
     {
       label: vocab.equipmentsRowLabel,
@@ -171,782 +148,537 @@ export function generateInterventionReportPdf(
     {
       label: 'Statut final',
       value: resultLabel,
-      isResult: true,
+      isStatus: true,
     },
   ];
-
-  const col1Width = 48;
-  const col2Width = contentWidth - col1Width;
-
-  // En-tête du tableau Synthèse
-  ensureSpace(12);
-  doc.setFillColor(...lightBg);
-  doc.setDrawColor(...borderGray);
-  doc.setLineWidth(0.25);
-  doc.rect(margin, y, col1Width, 8, 'FD');
-  doc.rect(margin + col1Width, y, col2Width, 8, 'FD');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(...navy);
-  doc.text("Paramètre d'intervention", margin + 3, y + 5.2);
-  doc.text('Détail technique constaté', margin + col1Width + 3, y + 5.2);
-  y += 8;
-
-  summaryRows.forEach((row) => {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    const valLines = doc.splitTextToSize(row.value, col2Width - 6);
-    const rowHeight = Math.max(8, valLines.length * 4 + 4.5);
-
-    ensureSpace(rowHeight);
-
-    doc.setDrawColor(...borderGray);
-    doc.setFillColor(255, 255, 255);
-    doc.rect(margin, y, col1Width, rowHeight, 'S');
-    doc.rect(margin + col1Width, y, col2Width, rowHeight, 'S');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...slate900);
-    doc.text(row.label, margin + 3, y + 5.2);
-
-    if (row.isResult) {
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...(intervention.resultat === 'Résolu' ? green : amber));
-    } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...slate700);
-    }
-    doc.text(valLines, margin + col1Width + 3, y + 5.2);
-    y += rowHeight;
-  });
-
-  y += 8;
-
-  // --- 2. ANALYSE TECHNIQUE / ÉTAPES RÉALISÉES ---
-  drawSectionHeading(vocab.analysisHeading);
 
   const analysisText =
     intervention.analyseCauseRacine?.trim() ||
     `${intervention.diagnosticTechnique}\n\n${vocab.causeLabel} : ${intervention.causeIdentifiee}\n\n${vocab.solutionCardTitle} : ${intervention.solutionAppliquee}`;
 
-  const paragraphs = analysisText
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...slate700);
-
-  paragraphs.forEach((para) => {
-    const lines = doc.splitTextToSize(para, contentWidth);
-    ensureSpace(lines.length * 4.3 + 4);
-    doc.text(lines, margin, y);
-    y += lines.length * 4.3 + 3.5;
-  });
-
-  // --- 3. RAPPORT DÉTAILLÉ PAR ÉQUIPEMENT / UNITÉ (SI PRÉSENT) ---
   const details = intervention.detailEquipements || [];
-  if (details.length > 0) {
-    y += 4;
-    drawSectionHeading(vocab.equipmentsHeading);
-
-    details.forEach((item, idx) => {
-      const startSectionY = () => y;
-
-      const actions = (item.actionsCorrectives || []).filter((a) => a.trim().length > 0);
-      const constatLines = doc.splitTextToSize(
-        `Constat et diagnostic : ${item.constatDiagnostic || '—'}`,
-        contentWidth - 8
-      );
-      const actionLineBlocks = actions.map((act) =>
-        doc.splitTextToSize(act, contentWidth - 14)
-      );
-      const resultText = `Résultat : ${
-        item.resultatDetail?.trim() || item.statut
-      } (${item.statut}).`;
-      const resultLines = doc.splitTextToSize(resultText, contentWidth - 8);
-
-      const estimatedHeight =
-        10 +
-        constatLines.length * 4.1 +
-        6 +
-        actionLineBlocks.reduce((acc, blk) => acc + blk.length * 4.1 + 1.5, 0) +
-        resultLines.length * 4.1 +
-        6;
-
-      ensureSpace(Math.min(estimatedHeight, 70));
-      const blockTop = startSectionY();
-
-      // Sous-titre 3.x
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(10);
-      doc.setTextColor(...blue);
-      const subTitle = `3.${idx + 1}. ${vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`;
-      const subTitleLines = doc.splitTextToSize(subTitle, contentWidth - 8);
-      doc.text(subTitleLines, margin + 4, y + 3);
-      y += subTitleLines.length * 4.5 + 2.5;
-
-      // Constat / Emplacement
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8.8);
-      doc.setTextColor(...slate900);
-      doc.text(`${vocab.equipmentDiagLabel} :`, margin + 4, y);
-      y += 4.2;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...slate700);
-      const diagLines = doc.splitTextToSize(item.constatDiagnostic || '—', contentWidth - 8);
-      ensureSpace(diagLines.length * 4.1);
-      doc.text(diagLines, margin + 4, y);
-      y += diagLines.length * 4.1 + 2.5;
-
-      // Actions / Opérations
-      if (actions.length > 0) {
-        ensureSpace(8);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...slate900);
-        doc.text(`${vocab.equipmentActionsLabel} :`, margin + 4, y);
-        y += 4.5;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...slate700);
-        actionLineBlocks.forEach((blk) => {
-          ensureSpace(blk.length * 4.1 + 2);
-          doc.text('•', margin + 6, y);
-          doc.text(blk, margin + 10, y);
-          y += blk.length * 4.1 + 1.2;
-        });
-        y += 1.5;
-      }
-
-      // Résultat
-      ensureSpace(resultLines.length * 4.1 + 4);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...(item.statut === 'Résolu' ? green : slate900));
-      doc.text(resultLines, margin + 4, y);
-      y += resultLines.length * 4.1 + 2;
-
-      // Barre bleue latérale si le bloc tient sur la même page
-      if (y > blockTop) {
-        doc.setDrawColor(...blue);
-        doc.setLineWidth(1.1);
-        doc.line(margin, blockTop, margin, y - 1);
-      }
-
-      y += 5;
-    });
-
-    // --- 4. RÉCAPITULATIF COMPARATIF ---
-    y += 2;
-    drawSectionHeading(vocab.comparisonHeading);
-
-    const cols = [
-      { title: vocab.comparisonEquipCol, width: 28 },
-      { title: vocab.comparisonDiagCol, width: 40 },
-      { title: vocab.comparisonOpsCol, width: 48 },
-      { title: vocab.comparisonMatCol, width: 40 },
-      { title: 'Statut', width: contentWidth - 156 },
-    ];
-
-    const drawComparisonHeader = () => {
-      ensureSpace(14);
-      let x = margin;
-      doc.setFillColor(...navy);
-      doc.setDrawColor(...navy);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      cols.forEach((c) => {
-        doc.rect(x, y, c.width, 8, 'FD');
-        doc.text(c.title, x + 2, y + 5.3);
-        x += c.width;
-      });
-      y += 8;
-    };
-
-    drawComparisonHeader();
-
-    details.forEach((item) => {
-      const opsText =
-        item.operationsResume?.trim() ||
-        item.actionsCorrectives.join(' + ') ||
-        '—';
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.8);
-      const cellTexts = [
-        doc.splitTextToSize(item.equipement || '—', cols[0].width - 4),
-        doc.splitTextToSize(item.constatDiagnostic || '—', cols[1].width - 4),
-        doc.splitTextToSize(opsText, cols[2].width - 4),
-        doc.splitTextToSize(item.materielSpecifique || '—', cols[3].width - 4),
-        doc.splitTextToSize(item.statut || '—', cols[4].width - 4),
-      ];
-
-      const maxLines = Math.max(...cellTexts.map((lines) => lines.length));
-      const rowH = Math.max(9, maxLines * 3.8 + 4);
-
-      if (y + rowH > maxY) {
-        doc.addPage();
-        y = 18;
-        drawComparisonHeader();
-      }
-
-      let x = margin;
-      cols.forEach((c, cIdx) => {
-        doc.setDrawColor(...borderGray);
-        doc.rect(x, y, c.width, rowH, 'S');
-        if (cIdx === 0) {
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...slate900);
-        } else if (cIdx === 4) {
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(...(item.statut === 'Résolu' ? green : amber));
-        } else {
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(...slate700);
-        }
-        doc.text(cellTexts[cIdx], x + 2, y + 4.5);
-        x += c.width;
-      });
-      y += rowH;
-    });
-  }
-
-  // --- RECOMMANDATIONS D'EXPLOITATION (SI RENSEIGNÉES) ---
-  if (intervention.recommandations?.trim()) {
-    const recSectionNum = details.length > 0 ? 5 : 3;
-    y += 6;
-    drawSectionHeading(`${recSectionNum}. ${vocab.recommandationsTitle}`);
-
-    const recLines = intervention.recommandations
-      .split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(...slate700);
-
-    recLines.forEach((line) => {
-      const wrapped = doc.splitTextToSize(line, contentWidth);
-      ensureSpace(wrapped.length * 4.3 + 2.5);
-      doc.text(wrapped, margin, y);
-      y += wrapped.length * 4.3 + 2;
-    });
-  }
-
-  // --- PIED DE PAGE SUR TOUTES LES PAGES ---
-  const totalPages = doc.getNumberOfPages();
-  const footerLeft = `Rapport d'Intervention Technique (${intervention.numeroReference}) — ${intervention.equipementConcerne}`;
-  for (let p = 1; p <= totalPages; p++) {
-    doc.setPage(p);
-    doc.setDrawColor(...borderGray);
-    doc.setLineWidth(0.25);
-    doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(...slate500);
-    doc.text(footerLeft.slice(0, 90), margin, pageHeight - 10);
-    doc.text(`Page ${p} sur ${totalPages}`, pageWidth - margin, pageHeight - 10, {
-      align: 'right',
-    });
-  }
-
   const slug = sanitizeFileSlug(
     `${intervention.numeroReference}_${intervention.equipementConcerne}`
   );
-  doc.save(`rapport_intervention_${slug}.pdf`);
+
+  return {
+    category,
+    reportMainTitle,
+    vocab,
+    statusDisplay,
+    genDate,
+    companyName,
+    techLine,
+    domaineText,
+    subtitleText,
+    summaryRows,
+    analysisText,
+    details,
+    slug,
+  };
+}
+
+/**
+ * Génère un Rapport Détaillé d'Intervention Technique en PDF A4 vectoriel
+ * adapté dynamiquement à la nature de l'opération (Incident, Déploiement/PV, Maintenance).
+ */
+export function generateInterventionReportPdf(
+  intervention: FicheIntervention,
+  generalInfo?: GeneralInfo
+): void {
+  const ctx = buildInterventionContext(intervention, generalInfo);
+  const builder = new PdfDocumentBuilder(ctx.category);
+  const { doc, theme } = builder;
+
+  // --- EN-TÊTE EXÉCUTIF ---
+  builder.drawDocumentBanner({
+    organization: ctx.companyName,
+    eyebrow: ctx.domaineText,
+    title: ctx.reportMainTitle,
+    subtitle: ctx.subtitleText,
+    rightBadge: `Réf. ${intervention.numeroReference} · Édité le ${ctx.genDate}`,
+    subMeta: `Demandeur : ${intervention.nomDemandeur} (${intervention.serviceDemandeur}) · Intervenant : ${ctx.techLine}`,
+  });
+
+  // --- 1. SYNTHÈSE ---
+  builder.drawSectionHeading(ctx.vocab.summaryHeading);
+  builder.drawKeyValueTable(
+    ctx.summaryRows.map((r) => ({
+      label: r.label,
+      value: r.value,
+      isStatus: r.isStatus,
+      tone: r.isStatus ? getStatusTone(intervention.resultat) : undefined,
+    })),
+    {
+      headerLeft: "Paramètre d'intervention",
+      headerRight: 'Détail technique constaté',
+      labelWidthMm: 48,
+    }
+  );
+
+  // --- 2. ANALYSE TECHNIQUE / ÉTAPES RÉALISÉES ---
+  builder.drawSectionHeading(ctx.vocab.analysisHeading);
+  builder.drawStructuredText(ctx.analysisText, { fontSize: 8.8 });
+  builder.addSpacing(3);
+
+  // --- 3. RAPPORT DÉTAILLÉ PAR ÉQUIPEMENT / UNITÉ ---
+  if (ctx.details.length > 0) {
+    builder.drawSectionHeading(ctx.vocab.equipmentsHeading);
+
+    ctx.details.forEach((item, idx) => {
+      const actions = (item.actionsCorrectives || []).filter((a) => a.trim().length > 0);
+      const toneColors = getToneColors(getStatusTone(item.statut), theme);
+
+      // Estimation pour éviter un sous-titre isolé
+      builder.ensureSpace(34);
+      const startPage = doc.getCurrentPageInfo().pageNumber;
+      const startY = builder.y;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9.8);
+      doc.setTextColor(...theme.secondaryRgb);
+      const subTitle = sanitizePdfText(
+        `3.${idx + 1}. ${ctx.vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`
+      );
+      const subLines = doc.splitTextToSize(subTitle, builder.contentWidth - 8);
+      doc.text(subLines, builder.margin + 4.5, builder.y + 3);
+      builder.y += subLines.length * 4.3 + 3;
+
+      // Constat / Emplacement
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...theme.textDarkRgb);
+      doc.text(sanitizePdfText(`${ctx.vocab.equipmentDiagLabel} :`), builder.margin + 4.5, builder.y);
+      builder.y += 4;
+      builder.drawStructuredText(item.constatDiagnostic || '—', {
+        indentMm: 4.5,
+        fontSize: 8.4,
+      });
+
+      // Actions / Opérations
+      if (actions.length > 0) {
+        builder.ensureSpace(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.setTextColor(...theme.textDarkRgb);
+        doc.text(
+          sanitizePdfText(`${ctx.vocab.equipmentActionsLabel} :`),
+          builder.margin + 4.5,
+          builder.y
+        );
+        builder.y += 4.2;
+        builder.drawStructuredText(actions.map((a) => `• ${a}`).join('\n'), {
+          indentMm: 4.5,
+          fontSize: 8.4,
+        });
+      }
+
+      // Matériel spécifique si présent
+      if (item.materielSpecifique?.trim()) {
+        builder.ensureSpace(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.2);
+        doc.setTextColor(...theme.textMutedRgb);
+        const matLines = doc.splitTextToSize(
+          sanitizePdfText(`Matériel : ${item.materielSpecifique.trim()}`),
+          builder.contentWidth - 8
+        );
+        doc.text(matLines, builder.margin + 4.5, builder.y);
+        builder.y += matLines.length * 3.8 + 1.5;
+      }
+
+      // Résultat
+      const resText = sanitizePdfText(
+        `Résultat : ${item.resultatDetail?.trim() || item.statut} (${item.statut}).`
+      );
+      const resLines = doc.splitTextToSize(resText, builder.contentWidth - 8);
+      builder.ensureSpace(resLines.length * 4 + 3);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(...toneColors.rgb);
+      doc.text(resLines, builder.margin + 4.5, builder.y);
+      builder.y += resLines.length * 4 + 2;
+
+      // Barre latérale d'accentuation si le bloc est resté sur la même page
+      if (doc.getCurrentPageInfo().pageNumber === startPage && builder.y > startY) {
+        doc.setDrawColor(...theme.accentRgb);
+        doc.setLineWidth(1);
+        doc.line(builder.margin, startY, builder.margin, builder.y - 1.5);
+      }
+
+      builder.addSpacing(4.5);
+    });
+
+    // --- 4. RÉCAPITULATIF COMPARATIF ---
+    builder.drawSectionHeading(ctx.vocab.comparisonHeading);
+    builder.drawDataTable(
+      [
+        ctx.vocab.comparisonEquipCol,
+        ctx.vocab.comparisonDiagCol,
+        ctx.vocab.comparisonOpsCol,
+        ctx.vocab.comparisonMatCol,
+        'Statut',
+      ],
+      ctx.details.map((item) => [
+        item.equipement || '—',
+        item.constatDiagnostic || '—',
+        item.operationsResume?.trim() || item.actionsCorrectives.join(' + ') || '—',
+        item.materielSpecifique || '—',
+        item.statut || '—',
+      ]),
+      [16, 22, 28, 21, 13],
+      { boldColumns: [0], statusColumns: [4], fontSize: 7.7 }
+    );
+  }
+
+  // --- RECOMMANDATIONS D'EXPLOITATION ---
+  if (intervention.recommandations?.trim()) {
+    const recSectionNum = ctx.details.length > 0 ? 5 : 3;
+    builder.drawSectionHeading(`${recSectionNum}. ${ctx.vocab.recommandationsTitle}`);
+    builder.drawCalloutBox(
+      "Préconisations Techniques & Suivi d'Exploitation",
+      intervention.recommandations.trim(),
+      'info'
+    );
+  }
+
+  // --- VALIDATION & SIGNATURES ---
+  const sigSectionNum =
+    (ctx.details.length > 0 ? 5 : 3) + (intervention.recommandations?.trim() ? 1 : 0);
+  builder.drawSectionHeading(`${sigSectionNum}. VALIDATION & RÉCEPTION DE L'INTERVENTION`);
+  if (intervention.commentairesDemandeur?.trim()) {
+    builder.drawCalloutBox(
+      'Commentaire du Demandeur / Service Utilisateur',
+      intervention.commentairesDemandeur.trim(),
+      intervention.validationDemandeur ? 'success' : 'neutral'
+    );
+  }
+  builder.drawSignatureGrid(
+    {
+      role: 'INTERVENANT / TECHNICIEN IT',
+      name: ctx.techLine,
+      dateLabel: intervention.dateReception,
+      statusLabel: `Clôturé (${ctx.statusDisplay})`,
+      signed: intervention.resultat === 'Résolu',
+    },
+    {
+      role: 'DEMANDEUR / VALIDATION SERVICE',
+      name: `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
+      dateLabel: intervention.dateValidation || undefined,
+      statusLabel: intervention.validationDemandeur
+        ? 'Réception validée par le demandeur'
+        : 'En attente de validation demandeur',
+      signed: Boolean(intervention.validationDemandeur),
+    }
+  );
+
+  // En-tête et pied de page avec pagination "Page X sur Y"
+  builder.finalizeHeadersAndFooters({
+    organization: ctx.companyName,
+    documentTitle: `${ctx.reportMainTitle} — ${intervention.equipementConcerne}`,
+    reference: intervention.numeroReference,
+    generationDate: ctx.genDate,
+    hasCoverPage: false,
+  });
+
+  doc.save(`rapport_intervention_${ctx.slug}.pdf`);
 }
 
 /**
  * Génère et télécharge un Rapport Détaillé d'Intervention Technique au format Word (.docx)
+ * adapté dynamiquement à la nature de l'intervention.
  */
 export async function generateInterventionReportDocx(
   intervention: FicheIntervention,
   generalInfo?: GeneralInfo
 ): Promise<void> {
-  const vocab = getInterventionVocabulary(intervention.natureIntervention);
-  const statusDisplay = formatInterventionStatusLabel(
-    intervention.resultat,
-    intervention.natureIntervention
-  );
+  const ctx = buildInterventionContext(intervention, generalInfo);
+  const theme = getDocumentTheme(ctx.category);
 
-  const domaineText = (
-    intervention.domaineTitre?.trim() ||
-    `${vocab.domainPrefix} · ${(intervention.type || intervention.typeIntervention).toUpperCase()}`
-  ).toUpperCase();
+  const equipmentChildren: Array<Paragraph | Table> = [];
+  if (ctx.details.length > 0) {
+    equipmentChildren.push(...createDocxSectionHeading(theme, ctx.vocab.equipmentsHeading));
 
-  const subtitleText =
-    intervention.titreRapport?.trim() ||
-    `${intervention.numeroReference} — ${intervention.equipementConcerne} (${intervention.dateReception})`;
+    ctx.details.forEach((item, idx) => {
+      const actions = (item.actionsCorrectives || []).filter((a) => a.trim().length > 0);
+      const toneColors = getToneColors(getStatusTone(item.statut), theme);
+      const leftAccent = { style: BorderStyle.SINGLE, size: 18, color: theme.accentHex };
+      const subtleBorder = { style: BorderStyle.SINGLE, size: 4, color: theme.borderHex };
 
-  const techLine = generalInfo
-    ? `${generalInfo.prenomTechnicien} ${generalInfo.nomTechnicien}`.trim()
-    : '';
-
-  const resultLabel = `${statusDisplay}${
-    intervention.solutionAppliquee?.trim()
-      ? ` — ${intervention.solutionAppliquee.trim()}`
-      : ''
-  }`;
-
-  const summaryRowsData: Array<[string, string, boolean?]> = [
-    [
-      'Référence & Date',
-      `${intervention.numeroReference} · ${intervention.dateReception} à ${intervention.heureReception}${
-        techLine ? ` · Intervenant : ${techLine}` : ''
-      }`,
-    ],
-    [
-      'Demandeur / Service',
-      `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
-    ],
-    [vocab.equipmentsRowLabel, intervention.equipementConcerne || '—'],
-    [vocab.descriptionCardTitle, intervention.descriptionPanne || '—'],
-    [vocab.diagnosticLabel, intervention.diagnosticTechnique || '—'],
-    [vocab.causeLabel, intervention.causeIdentifiee || '—'],
-    [vocab.materialLabel, intervention.materielLogicielUtilise || '—'],
-    ['Temps total consacré', formatDuration(intervention.tempsConsacreMin, true)],
-    ['Statut final', resultLabel, true],
-  ];
-
-  const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' };
-  const cellBorders = {
-    top: thinBorder,
-    bottom: thinBorder,
-    left: thinBorder,
-    right: thinBorder,
-  };
-
-  const summaryTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: [
-      new TableRow({
-        tableHeader: true,
-        children: [
-          new TableCell({
-            width: { size: 32, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F1F5F9', type: ShadingType.CLEAR },
-            borders: cellBorders,
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: "Paramètre d'intervention",
-                    bold: true,
-                    size: 19,
-                    color: '0F2A4A',
-                  }),
-                ],
-              }),
-            ],
-          }),
-          new TableCell({
-            width: { size: 68, type: WidthType.PERCENTAGE },
-            shading: { fill: 'F1F5F9', type: ShadingType.CLEAR },
-            borders: cellBorders,
-            children: [
-              new Paragraph({
-                children: [
-                  new TextRun({
-                    text: 'Détail technique constaté',
-                    bold: true,
-                    size: 19,
-                    color: '0F2A4A',
-                  }),
-                ],
-              }),
-            ],
-          }),
-        ],
-      }),
-      ...summaryRowsData.map(
-        ([label, val, isRes]) =>
-          new TableRow({
-            children: [
-              new TableCell({
-                borders: cellBorders,
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: label,
-                        bold: true,
-                        size: 18,
-                        color: '0F172A',
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-              new TableCell({
-                borders: cellBorders,
-                children: [
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: val,
-                        bold: Boolean(isRes),
-                        size: 18,
-                        color: isRes
-                          ? intervention.resultat === 'Résolu'
-                            ? '15803D'
-                            : 'B45309'
-                          : '334155',
-                      }),
-                    ],
-                  }),
-                ],
-              }),
-            ],
-          })
-      ),
-    ],
-  });
-
-  const analysisText =
-    intervention.analyseCauseRacine?.trim() ||
-    `${intervention.diagnosticTechnique}\n\n${vocab.causeLabel} : ${intervention.causeIdentifiee}\n\n${vocab.solutionCardTitle} : ${intervention.solutionAppliquee}`;
-  const analysisParagraphs = analysisText
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .map(
-      (para) =>
+      const cardChildren: Paragraph[] = [
         new Paragraph({
-          spacing: { after: 140 },
-          children: [
-            new TextRun({ text: para, size: 20, color: '334155' }),
-          ],
-        })
-    );
-
-  const sectionHeading = (text: string) =>
-    new Paragraph({
-      spacing: { before: 240, after: 120 },
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CBD5E1' },
-      },
-      children: [
-        new TextRun({ text, bold: true, size: 24, color: '0F2A4A' }),
-      ],
-    });
-
-  const children: Array<Paragraph | Table> = [
-    new Paragraph({
-      spacing: { after: 60 },
-      children: [
-        new TextRun({
-          text: domaineText,
-          bold: true,
-          size: 18,
-          color: '0284C7',
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 60 },
-      children: [
-        new TextRun({
-          text: "Rapport Détaillé d'Intervention Technique",
-          bold: true,
-          size: 34,
-          color: '0F2A4A',
-        }),
-      ],
-    }),
-    new Paragraph({
-      spacing: { after: 180 },
-      border: {
-        bottom: { style: BorderStyle.SINGLE, size: 12, color: '0F2A4A' },
-      },
-      children: [
-        new TextRun({
-          text: subtitleText,
-          size: 20,
-          color: '64748B',
-        }),
-      ],
-    }),
-    sectionHeading(vocab.summaryHeading),
-    summaryTable,
-    sectionHeading(vocab.analysisHeading),
-    ...analysisParagraphs,
-  ];
-
-  const details = intervention.detailEquipements || [];
-  if (details.length > 0) {
-    children.push(sectionHeading(vocab.equipmentsHeading));
-
-    details.forEach((item, idx) => {
-      children.push(
-        new Paragraph({
-          spacing: { before: 160, after: 80 },
-          indent: { left: 180 },
-          border: {
-            left: { style: BorderStyle.SINGLE, size: 18, color: '0284C7' },
-          },
+          keepNext: true,
+          spacing: { before: 0, after: 70 },
           children: [
             new TextRun({
-              text: `3.${idx + 1}. ${vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`,
+              text: sanitizeDocxText(
+                `3.${idx + 1}. ${ctx.vocab.equipmentItemPrefix} : ${item.equipement} — ${item.titre}`
+              ),
               bold: true,
               size: 21,
-              color: '0284C7',
+              color: theme.secondaryHex,
             }),
           ],
         }),
         new Paragraph({
-          spacing: { after: 80 },
-          indent: { left: 180 },
+          keepNext: true,
+          spacing: { before: 0, after: 40 },
           children: [
             new TextRun({
-              text: `${vocab.equipmentDiagLabel} : `,
+              text: sanitizeDocxText(`${ctx.vocab.equipmentDiagLabel} :`),
               bold: true,
-              size: 19,
-              color: '0F172A',
-            }),
-            new TextRun({
-              text: item.constatDiagnostic || '—',
-              size: 19,
-              color: '334155',
+              size: 18,
+              color: theme.textDarkHex,
             }),
           ],
-        })
-      );
+        }),
+        ...createDocxStructuredParagraphs(theme, item.constatDiagnostic || '—', { fontSize: 18 }),
+      ];
 
-      const actions = (item.actionsCorrectives || []).filter((a) => a.trim().length > 0);
       if (actions.length > 0) {
-        children.push(
+        cardChildren.push(
           new Paragraph({
-            spacing: { after: 60 },
-            indent: { left: 180 },
+            keepNext: true,
+            spacing: { before: 40, after: 40 },
             children: [
               new TextRun({
-                text: `${vocab.equipmentActionsLabel} :`,
+                text: sanitizeDocxText(`${ctx.vocab.equipmentActionsLabel} :`),
                 bold: true,
-                size: 19,
-                color: '0F172A',
+                size: 18,
+                color: theme.textDarkHex,
+              }),
+            ],
+          }),
+          ...createDocxStructuredParagraphs(
+            theme,
+            actions.map((a) => `• ${a}`).join('\n'),
+            { fontSize: 18 }
+          )
+        );
+      }
+
+      if (item.materielSpecifique?.trim()) {
+        cardChildren.push(
+          new Paragraph({
+            spacing: { before: 30, after: 40 },
+            children: [
+              new TextRun({
+                text: 'Matériel utilisé : ',
+                bold: true,
+                size: 17,
+                color: theme.textMutedHex,
+              }),
+              new TextRun({
+                text: sanitizeDocxText(item.materielSpecifique),
+                size: 17,
+                color: theme.textBodyHex,
               }),
             ],
           })
         );
-        actions.forEach((act) => {
-          children.push(
-            new Paragraph({
-              spacing: { after: 40 },
-              indent: { left: 420 },
-              children: [
-                new TextRun({
-                  text: `• ${act}`,
-                  size: 19,
-                  color: '334155',
-                }),
-              ],
-            })
-          );
-        });
       }
 
-      children.push(
+      cardChildren.push(
         new Paragraph({
-          spacing: { before: 60, after: 140 },
-          indent: { left: 180 },
+          spacing: { before: 50, after: 0 },
           children: [
             new TextRun({
               text: 'Résultat : ',
               bold: true,
-              size: 19,
-              color: item.statut === 'Résolu' ? '15803D' : 'B45309',
+              size: 18,
+              color: toneColors.hex,
             }),
             new TextRun({
-              text: `${item.resultatDetail?.trim() || item.statut} (${item.statut}).`,
+              text: sanitizeDocxText(
+                `${item.resultatDetail?.trim() || item.statut} (${item.statut}).`
+              ),
               bold: true,
-              size: 19,
-              color: item.statut === 'Résolu' ? '15803D' : 'B45309',
+              size: 18,
+              color: toneColors.hex,
             }),
           ],
         })
       );
+
+      equipmentChildren.push(
+        new Table({
+          width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+          columnWidths: [CONTENT_WIDTH_DXA],
+          rows: [
+            new TableRow({
+              cantSplit: true,
+              children: [
+                new TableCell({
+                  width: { size: CONTENT_WIDTH_DXA, type: WidthType.DXA },
+                  shading: { type: ShadingType.CLEAR, fill: theme.zebraBgHex },
+                  borders: {
+                    top: subtleBorder,
+                    bottom: subtleBorder,
+                    right: subtleBorder,
+                    left: leftAccent,
+                  },
+                  margins: { top: 110, bottom: 110, left: 160, right: 140 },
+                  children: cardChildren,
+                }),
+              ],
+            }),
+          ],
+        }),
+        new Paragraph({ text: '', spacing: { before: 0, after: 100 } })
+      );
     });
 
-    children.push(sectionHeading(vocab.comparisonHeading));
-
-    const headers = [
-      vocab.comparisonEquipCol,
-      vocab.comparisonDiagCol,
-      vocab.comparisonOpsCol,
-      vocab.comparisonMatCol,
-      'Statut',
-    ];
-
-    children.push(
-      new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
-        rows: [
-          new TableRow({
-            tableHeader: true,
-            children: headers.map(
-              (h) =>
-                new TableCell({
-                  shading: { fill: '0F2A4A', type: ShadingType.CLEAR },
-                  borders: cellBorders,
-                  children: [
-                    new Paragraph({
-                      children: [
-                        new TextRun({
-                          text: h,
-                          bold: true,
-                          size: 17,
-                          color: 'FFFFFF',
-                        }),
-                      ],
-                    }),
-                  ],
-                })
-            ),
-          }),
-          ...details.map(
-            (item) =>
-              new TableRow({
-                children: [
-                  new TableCell({
-                    borders: cellBorders,
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: item.equipement || '—',
-                            bold: true,
-                            size: 17,
-                            color: '0F172A',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    borders: cellBorders,
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: item.constatDiagnostic || '—',
-                            size: 17,
-                            color: '334155',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    borders: cellBorders,
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text:
-                              item.operationsResume?.trim() ||
-                              item.actionsCorrectives.join(' + ') ||
-                              '—',
-                            size: 17,
-                            color: '334155',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    borders: cellBorders,
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: item.materielSpecifique || '—',
-                            size: 17,
-                            color: '334155',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  new TableCell({
-                    borders: cellBorders,
-                    children: [
-                      new Paragraph({
-                        children: [
-                          new TextRun({
-                            text: item.statut || '—',
-                            bold: true,
-                            size: 17,
-                            color: item.statut === 'Résolu' ? '15803D' : 'B45309',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                ],
-              })
-          ),
+    equipmentChildren.push(
+      ...createDocxSectionHeading(theme, ctx.vocab.comparisonHeading),
+      createDocxDataTable(
+        theme,
+        [
+          ctx.vocab.comparisonEquipCol,
+          ctx.vocab.comparisonDiagCol,
+          ctx.vocab.comparisonOpsCol,
+          ctx.vocab.comparisonMatCol,
+          'Statut',
         ],
-      })
+        ctx.details.map((item) => [
+          item.equipement || '—',
+          item.constatDiagnostic || '—',
+          item.operationsResume?.trim() || item.actionsCorrectives.join(' + ') || '—',
+          item.materielSpecifique || '—',
+          item.statut || '—',
+        ]),
+        [16, 22, 28, 21, 13],
+        { boldColumns: [0], statusColumns: [4] }
+      )
     );
   }
 
-  if (intervention.recommandations?.trim()) {
-    const recSectionNum = details.length > 0 ? 5 : 3;
-    children.push(sectionHeading(`${recSectionNum}. ${vocab.recommandationsTitle}`));
-    intervention.recommandations
-      .split(/\n/)
-      .map((l) => l.trim())
-      .filter(Boolean)
-      .forEach((line) => {
-        children.push(
-          new Paragraph({
-            spacing: { after: 90 },
-            children: [
-              new TextRun({
-                text: line,
-                size: 19,
-                color: '334155',
-              }),
-            ],
-          })
-        );
-      });
-  }
+  const sigSectionNum =
+    (ctx.details.length > 0 ? 5 : 3) + (intervention.recommandations?.trim() ? 1 : 0);
+
+  const children: Array<Paragraph | Table> = [
+    createDocxDocumentBanner({
+      theme,
+      organization: ctx.companyName,
+      eyebrow: ctx.domaineText,
+      title: ctx.reportMainTitle,
+      subtitle: ctx.subtitleText,
+      rightBadge: `Réf. ${intervention.numeroReference} · Édité le ${ctx.genDate}`,
+    }),
+    new Paragraph({ text: '', spacing: { before: 100, after: 0 } }),
+
+    ...createDocxSectionHeading(theme, ctx.vocab.summaryHeading),
+    createDocxKeyValueGridTable(
+      theme,
+      ctx.summaryRows.map((r) => ({
+        kind: 'pair',
+        label: r.label,
+        value: r.value,
+        isStatus: r.isStatus,
+        tone: r.isStatus ? getStatusTone(intervention.resultat) : undefined,
+      })),
+      {
+        headerLeft: "Paramètre d'intervention",
+        headerRight: 'Détail technique constaté',
+        labelWidthPct: 32,
+      }
+    ),
+
+    ...createDocxSectionHeading(theme, ctx.vocab.analysisHeading),
+    ...createDocxStructuredParagraphs(theme, ctx.analysisText, { fontSize: 20 }),
+
+    ...equipmentChildren,
+
+    ...(intervention.recommandations?.trim()
+      ? [
+          ...createDocxSectionHeading(
+            theme,
+            `${ctx.details.length > 0 ? 5 : 3}. ${ctx.vocab.recommandationsTitle}`
+          ),
+          createDocxCalloutBox(
+            theme,
+            "Préconisations Techniques & Suivi d'Exploitation",
+            intervention.recommandations.trim(),
+            'info'
+          ),
+        ]
+      : []),
+
+    ...createDocxSectionHeading(
+      theme,
+      `${sigSectionNum}. VALIDATION & RÉCEPTION DE L'INTERVENTION`
+    ),
+    ...(intervention.commentairesDemandeur?.trim()
+      ? [
+          createDocxCalloutBox(
+            theme,
+            'Commentaire du Demandeur / Service Utilisateur',
+            intervention.commentairesDemandeur.trim(),
+            intervention.validationDemandeur ? 'success' : 'neutral'
+          ),
+          new Paragraph({ text: '', spacing: { before: 0, after: 100 } }),
+        ]
+      : []),
+    createDocxSignatureTable(
+      theme,
+      {
+        role: 'INTERVENANT / TECHNICIEN IT',
+        name: ctx.techLine,
+        dateLabel: intervention.dateReception,
+        statusLabel: `Clôturé (${ctx.statusDisplay})`,
+        signed: intervention.resultat === 'Résolu',
+      },
+      {
+        role: 'DEMANDEUR / VALIDATION SERVICE',
+        name: `${intervention.nomDemandeur} (${intervention.serviceDemandeur})`,
+        dateLabel: intervention.dateValidation || undefined,
+        statusLabel: intervention.validationDemandeur
+          ? 'Réception validée par le demandeur'
+          : 'En attente de validation demandeur',
+        signed: Boolean(intervention.validationDemandeur),
+      }
+    ),
+  ];
 
   const doc = new Document({
+    title: `${ctx.reportMainTitle} (${intervention.numeroReference})`,
+    subject: ctx.subtitleText,
+    creator: ctx.techLine,
+    styles: createEditorialDocStyles(theme),
     sections: [
       {
+        properties: {
+          titlePage: true,
+          page: {
+            size: { width: A4_WIDTH_DXA, height: A4_HEIGHT_DXA },
+            margin: {
+              top: STANDARD_MARGIN_DXA,
+              right: STANDARD_MARGIN_DXA,
+              bottom: STANDARD_MARGIN_DXA,
+              left: STANDARD_MARGIN_DXA,
+            },
+          },
+        },
+        headers: {
+          default: createDocxRunningHeader({
+            theme,
+            organization: ctx.companyName,
+            documentTitle: `${ctx.reportMainTitle} — ${intervention.equipementConcerne}`,
+            reference: intervention.numeroReference,
+            generationDate: ctx.genDate,
+          }),
+        },
         footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [
-                  new TextRun({
-                    text: `Rapport d'Intervention Technique (${intervention.numeroReference}) — Page `,
-                    size: 16,
-                    color: '64748B',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.CURRENT],
-                    size: 16,
-                    color: '64748B',
-                  }),
-                  new TextRun({
-                    text: ' / ',
-                    size: 16,
-                    color: '64748B',
-                  }),
-                  new TextRun({
-                    children: [PageNumber.TOTAL_PAGES],
-                    size: 16,
-                    color: '64748B',
-                  }),
-                ],
-              }),
-            ],
+          first: createDocxRunningFooter({
+            theme,
+            organization: ctx.companyName,
+            confidentialityText: `${ctx.reportMainTitle} (${intervention.numeroReference})`,
+            generationDate: ctx.genDate,
+          }),
+          default: createDocxRunningFooter({
+            theme,
+            organization: ctx.companyName,
+            confidentialityText: `${ctx.reportMainTitle} (${intervention.numeroReference})`,
+            generationDate: ctx.genDate,
           }),
         },
         children,
@@ -954,9 +686,5 @@ export async function generateInterventionReportDocx(
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
-  const slug = sanitizeFileSlug(
-    `${intervention.numeroReference}_${intervention.equipementConcerne}`
-  );
-  saveAs(blob, `rapport_intervention_${slug}.docx`);
+  await packAndSaveDocx(doc, `rapport_intervention_${ctx.slug}.docx`);
 }

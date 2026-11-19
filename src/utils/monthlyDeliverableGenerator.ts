@@ -1,21 +1,4 @@
-import jsPDF from 'jspdf';
-import {
-  Document,
-  Packer,
-  Paragraph,
-  TextRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  BorderStyle,
-  AlignmentType,
-  ShadingType,
-  Header,
-  Footer,
-  PageNumber,
-} from 'docx';
-import { saveAs } from 'file-saver';
+import { Document, Paragraph } from 'docx';
 import { getLocalTodayIso } from './coherenceUtils';
 import {
   CahierSuiviData,
@@ -27,6 +10,29 @@ import {
   TacheJournal,
 } from '../types/it-tracker';
 import { formatDuration } from './durationFormatter';
+import { formatInterventionStatusLabel } from './interventionLabels';
+import {
+  formatGenerationDateFr,
+  getDocumentTheme,
+} from './docDesign/documentThemes';
+import { PdfDocumentBuilder } from './docDesign/pdfLayoutEngine';
+import {
+  A4_HEIGHT_DXA,
+  A4_WIDTH_DXA,
+  STANDARD_MARGIN_DXA,
+  createDocxCalloutBox,
+  createDocxDataTable,
+  createDocxDocumentBanner,
+  createDocxKeyValueGridTable,
+  createDocxKpiStripTable,
+  createDocxRunningFooter,
+  createDocxRunningHeader,
+  createDocxSectionHeading,
+  createDocxSignatureTable,
+  createDocxSubHeading,
+  createEditorialDocStyles,
+  packAndSaveDocx,
+} from './docDesign/docxLayoutEngine';
 
 export const MONTH_NAMES = [
   'Janvier',
@@ -153,315 +159,286 @@ export function getMonthlyActivitySnapshot(
   };
 }
 
-/**
- * Génère et télécharge un Cahier de Suivi Mensuel complet au format PDF A4
- */
-export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): void {
+function buildMonthlyDisplayContext(data: CahierSuiviData, moisIndex: number) {
   const snap = getMonthlyActivitySnapshot(data, moisIndex);
   const { generalInfo } = data;
   const { rapport } = snap;
-
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const margin = 15;
-  const pageWidth = 210;
-  const contentWidth = pageWidth - margin * 2;
-  let y = margin;
-  let pageCount = 1;
+  const genDate = formatGenerationDateFr();
 
   const techName =
     `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() ||
     'Technicien Informatique';
-  const companyName = generalInfo.entreprise || 'Direction des Systèmes d\'Information';
-  const managerName = generalInfo.responsableHierarchique || 'Responsable Hiérarchique (RSI)';
+  const companyName =
+    generalInfo.entreprise?.trim() || "Direction des Systèmes d'Information";
+  const departmentName = generalInfo.departement?.trim() || 'DSI';
+  const managerName =
+    generalInfo.responsableHierarchique?.trim() || 'Responsable Hiérarchique (RSI)';
+  const recipientName = rapport.destinataireLivraison?.trim() || managerName;
 
-  const addHeaderFooter = () => {
-    doc.setFontSize(8);
-    doc.setTextColor(148, 163, 184);
-    doc.text(
-      `${companyName} | Cahier de Suivi Mensuel — ${snap.nomMois} ${snap.annee}`,
-      margin,
-      10
-    );
-    doc.text(techName, pageWidth - margin, 10, { align: 'right' });
-    doc.setDrawColor(203, 213, 225);
-    doc.line(margin, 12, pageWidth - margin, 12);
+  const totalIntervDisplay = Math.max(
+    snap.interventions.length,
+    rapport.totalInterventions || 0
+  );
+  const resolvedDisplay = Math.max(
+    snap.interventionsTerminees,
+    rapport.incidentsResolus || 0
+  );
+  const totalTaskHours = Math.round((snap.totalTaskMinutes / 60) * 10) / 10;
 
-    doc.line(margin, 285, pageWidth - margin, 285);
-    doc.text(
-      `Livrable Mensuel Officiel · ${snap.nomMois} ${snap.annee}`,
-      margin,
-      290
-    );
-    doc.text(`Page ${pageCount}`, pageWidth - margin, 290, { align: 'right' });
+  const narrativeItems: Array<{ title: string; content: string }> = [
+    { title: '1. Travaux & Projets réalisés', content: rapport.travauxRealises },
+    { title: '2. Maintenance préventive effectuée', content: rapport.maintenanceEffectuee },
+    { title: '3. Problèmes récurrents identifiés', content: rapport.problemesRecurrents },
+    {
+      title: '4. Difficultés techniques / organisationnelles',
+      content: rapport.difficultesRencontrees,
+    },
+    { title: '5. Besoins matériels & logiciels', content: rapport.besoinsMaterielsLogiciels },
+    { title: '6. Recommandations à la hiérarchie', content: rapport.recommandationsTechnicien },
+    { title: '7. Priorités pour le mois suivant (M+1)', content: rapport.activitesMoisSuivant },
+  ];
+
+  const monthCode = `${snap.annee}-${String(snap.moisIndex).padStart(2, '0')}`;
+  const deliveryDate = rapport.dateLivraison || getLocalTodayIso();
+  const safeMonthSlug = snap.nomMois.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  return {
+    snap,
+    rapport,
+    genDate,
+    techName,
+    techRole: generalInfo.fonction || 'Technicien Informatique',
+    companyName,
+    departmentName,
+    managerName,
+    recipientName,
+    totalIntervDisplay,
+    resolvedDisplay,
+    totalTaskHours,
+    narrativeItems,
+    monthCode,
+    deliveryDate,
+    safeMonthSlug,
   };
+}
 
-  const ensureSpace = (neededMm: number) => {
-    if (y + neededMm > 276) {
-      doc.addPage();
-      pageCount += 1;
-      addHeaderFooter();
-      y = 20;
-    }
-  };
+/**
+ * Génère et télécharge un Cahier de Suivi Mensuel complet au format PDF A4 vectoriel.
+ */
+export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): void {
+  const ctx = buildMonthlyDisplayContext(data, moisIndex);
+  const { snap, rapport } = ctx;
+  const builder = new PdfDocumentBuilder('monthly_report');
 
-  addHeaderFooter();
-
-  // Bannière d'en-tête
-  doc.setFillColor(15, 42, 74);
-  doc.roundedRect(margin, 18, contentWidth, 28, 2, 2, 'F');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(147, 197, 253);
-  doc.text('CAHIER DE SUIVI MENSUEL DU TECHNICIEN INFORMATIQUE', margin + 5, 26);
-
-  doc.setFontSize(17);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`${snap.nomMois.toUpperCase()} ${snap.annee}`, margin + 5, 35);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(226, 232, 240);
-  doc.text(
-    `Statut livraison : ${rapport.statutLivraison || 'Prêt à livrer'}${
+  // --- BANDEAU EXÉCUTIF ---
+  builder.drawDocumentBanner({
+    organization: ctx.companyName,
+    eyebrow: 'CAHIER DE SUIVI MENSUEL DU TECHNICIEN INFORMATIQUE',
+    title: `${snap.nomMois.toUpperCase()} ${snap.annee}`,
+    subtitle: `${ctx.companyName} (${ctx.departmentName}) — Livrable mensuel d'activité et indicateurs SI`,
+    rightBadge: `Réf. LIV-${ctx.monthCode} · Édité le ${ctx.genDate}`,
+    subMeta: `Statut de livraison : ${rapport.statutLivraison || 'Prêt à livrer'}${
       rapport.dateLivraison ? ` (${rapport.dateLivraison})` : ''
-    }`,
-    margin + 5,
-    42
-  );
-
-  y = 53;
-
-  // Fiche d'identification
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(margin, y, contentWidth, 24, 1.5, 1.5, 'FD');
-
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 41, 59);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Entreprise / Organisation :', margin + 4, y + 6);
-  doc.text('Technicien titulaire :', margin + 4, y + 12.5);
-  doc.text('Destinataire (Hiérarchie) :', margin + 4, y + 19);
-
-  doc.setFont('helvetica', 'normal');
-  doc.text(`${companyName} (${generalInfo.departement || 'DSI'})`, margin + 52, y + 6);
-  doc.text(`${techName} — ${generalInfo.fonction || 'Technicien IT'}`, margin + 52, y + 12.5);
-  doc.text(
-    `${rapport.destinataireLivraison || managerName}`,
-    margin + 52,
-    y + 19
-  );
-
-  y += 31;
-
-  // Indicateurs clés du mois
-  const totalIntervDisplay = Math.max(snap.interventions.length, rapport.totalInterventions || 0);
-  const resolvedDisplay = Math.max(snap.interventionsTerminees, rapport.incidentsResolus || 0);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 42, 74);
-  doc.text('1. SYNTHÈSE & INDICATEURS DU MOIS', margin, y);
-  y += 4;
-
-  const boxW = (contentWidth - 9) / 4;
-  const kpis = [
-    { label: 'Interventions', val: `${totalIntervDisplay}`, sub: `${resolvedDisplay} terminées` },
-    { label: 'Taux Résolution', val: `${snap.tauxResolution}%`, sub: `MTTR ${formatDuration(snap.avgInterventionMinutes)}` },
-    { label: 'Journal Quotidien', val: `${snap.taches.length}`, sub: `${snap.tachesTerminees} terminées` },
-    { label: 'Maintenances', val: `${snap.maintenances.length}`, sub: `${snap.reseauIncidents.length} inc. réseau` },
-  ];
-
-  kpis.forEach((k, idx) => {
-    const bx = margin + idx * (boxW + 3);
-    doc.setFillColor(241, 245, 249);
-    doc.setDrawColor(203, 213, 225);
-    doc.roundedRect(bx, y, boxW, 18, 1.5, 1.5, 'FD');
-    doc.setFontSize(7.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text(k.label.toUpperCase(), bx + boxW / 2, y + 5, { align: 'center' });
-    doc.setFontSize(12);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 58, 138);
-    doc.text(k.val, bx + boxW / 2, y + 11.5, { align: 'center' });
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(71, 85, 105);
-    doc.text(k.sub, bx + boxW / 2, y + 15.8, { align: 'center' });
+    }${rapport.modeLivraison ? ` · Mode : ${rapport.modeLivraison}` : ''}`,
   });
 
-  y += 25;
+  // --- FICHE D'IDENTIFICATION ---
+  builder.drawKeyValueTable(
+    [
+      { label: 'Entreprise / Direction', value: `${ctx.companyName} (${ctx.departmentName})` },
+      { label: 'Technicien titulaire', value: `${ctx.techName} — ${ctx.techRole}` },
+      { label: 'Destinataire hiérarchique', value: ctx.recipientName },
+      {
+        label: 'Livraison & Visa RSI',
+        value: `${rapport.statutLivraison || 'Prêt à livrer'} · ${
+          rapport.valideParHierarchie
+            ? `Validé le ${rapport.dateValidation || ctx.deliveryDate}`
+            : 'En attente de signature RSI'
+        }`,
+        isStatus: true,
+      },
+    ],
+    { labelWidthMm: 48 }
+  );
 
-  // Sections narratives du rapport mensuel
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 42, 74);
-  doc.text('2. COMPTE-RENDU D\'ACTIVITÉ MENSUEL', margin, y);
-  y += 5;
+  // --- 1. SYNTHÈSE & KPI DU MOIS ---
+  builder.drawSectionHeading('1. SYNTHÈSE & INDICATEURS CLÉS DU MOIS');
+  builder.drawKpiStrip([
+    {
+      label: 'Interventions IT',
+      value: `${ctx.totalIntervDisplay}`,
+      sub: `${ctx.resolvedDisplay} terminées`,
+      tone: 'info',
+    },
+    {
+      label: 'Taux Résolution FCR',
+      value: `${snap.tauxResolution}%`,
+      sub: `MTTR : ${formatDuration(snap.avgInterventionMinutes)}`,
+      tone: snap.tauxResolution >= 85 ? 'success' : 'warning',
+    },
+    {
+      label: 'Journal Quotidien',
+      value: `${snap.taches.length}`,
+      sub: `${snap.tachesTerminees} terminées (${ctx.totalTaskHours} h)`,
+      tone: 'info',
+    },
+    {
+      label: 'Maintenances & Inc.',
+      value: `${snap.maintenances.length}`,
+      sub: `${snap.reseauIncidents.length} rés. · ${snap.incidentsSecurite.length} sécu`,
+      tone:
+        snap.reseauIncidents.length + snap.incidentsSecurite.length === 0
+          ? 'success'
+          : 'warning',
+    },
+  ]);
 
-  const narrativeItems: Array<[string, string]> = [
-    ['Travaux & Projets réalisés', rapport.travauxRealises],
-    ['Maintenance préventive effectuée', rapport.maintenanceEffectuee],
-    ['Problèmes récurrents identifiés', rapport.problemesRecurrents],
-    ['Difficultés techniques / organisationnelles', rapport.difficultesRencontrees],
-    ['Besoins matériels & logiciels', rapport.besoinsMaterielsLogiciels],
-    ['Recommandations du technicien', rapport.recommandationsTechnicien],
-    ['Priorités pour le mois suivant (M+1)', rapport.activitesMoisSuivant],
-  ];
-
-  narrativeItems.forEach(([title, content]) => {
-    const body = content?.trim() || 'Aucune observation particulière consignée pour cette rubrique.';
-    const lines = doc.splitTextToSize(body, contentWidth - 6);
-    const blockH = 8 + lines.length * 4.2;
-    ensureSpace(blockH + 3);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8.5);
-    doc.setTextColor(30, 58, 138);
-    doc.text(title, margin, y + 3.5);
-
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(226, 232, 240);
-    doc.roundedRect(margin, y + 5, contentWidth, lines.length * 4.2 + 4, 1, 1, 'FD');
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(30, 41, 59);
-    doc.text(lines, margin + 3, y + 9);
-
-    y += blockH + 4;
+  // --- 2. COMPTE-RENDU D'ACTIVITÉ MENSUEL ---
+  builder.drawSectionHeading("2. COMPTE-RENDU D'ACTIVITÉ MENSUEL");
+  ctx.narrativeItems.forEach((item) => {
+    const body =
+      item.content?.trim() || 'Aucune observation particulière consignée pour cette rubrique.';
+    builder.drawCalloutBox(item.title, body, 'info');
   });
 
-  // 3. Interventions IT du mois
-  ensureSpace(24);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 42, 74);
-  doc.text(
+  // --- 3. INTERVENTIONS TECHNIQUES DU MOIS ---
+  builder.drawSectionHeading(
     `3. INTERVENTIONS TECHNIQUES DU MOIS (${snap.interventions.length})`,
-    margin,
-    y + 2
+    `Tickets et opérations enregistrés sur ${snap.nomMois} ${snap.annee}`
   );
-  y += 7;
+  builder.drawDataTable(
+    ['Référence', 'Date', 'Demandeur / Service', 'Problème & Solution Appliquée', 'Durée', 'Statut'],
+    snap.interventions.map((it) => [
+      it.numeroReference,
+      it.dateReception,
+      `${it.nomDemandeur}\n(${it.serviceDemandeur})`,
+      `${it.descriptionPanne || '—'}\nSolution : ${it.solutionAppliquee || 'En cours'}`,
+      formatDuration(it.tempsConsacreMin),
+      formatInterventionStatusLabel(it.resultat, it.natureIntervention),
+    ]),
+    [13, 12, 19, 34, 10, 12],
+    {
+      boldColumns: [0],
+      statusColumns: [5],
+      emptyMessage: `Aucune fiche d'intervention enregistrée sur ${snap.nomMois} ${snap.annee}.`,
+    }
+  );
 
-  if (snap.interventions.length === 0) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Aucune fiche d'intervention enregistrée sur ${snap.nomMois} ${snap.annee}.`, margin, y + 2);
-    y += 9;
-  } else {
-    snap.interventions.forEach((it) => {
-      const desc = doc.splitTextToSize(
-        `${it.descriptionPanne} — Solution : ${it.solutionAppliquee || 'En attente'}`,
-        contentWidth - 6
+  // --- 4. JOURNAL QUOTIDIEN DU MOIS ---
+  builder.drawSectionHeading(
+    `4. JOURNAL QUOTIDIEN DU MOIS (${snap.taches.length} tâches · ${ctx.totalTaskHours} h)`,
+    "Chronologie des opérations d'exploitation courante"
+  );
+  builder.drawDataTable(
+    ['Date / Heure', 'Tâche / Activité', 'Catégorie', 'Durée', 'Statut'],
+    snap.taches.map((t) => [
+      `${t.date}\n${t.heure || '—'}`,
+      `${t.tache}${t.observations ? `\nObs : ${t.observations}` : ''}`,
+      t.categorie,
+      formatDuration(t.dureeReelleMin || t.dureeEstimeeMin || 0),
+      t.statut,
+    ]),
+    [15, 42, 19, 11, 13],
+    {
+      boldColumns: [0],
+      statusColumns: [4],
+      emptyMessage: `Aucune activité journalière consignée sur ${snap.nomMois} ${snap.annee}.`,
+    }
+  );
+
+  // --- 5. MAINTENANCES & INCIDENTS DU MOIS (SI PRÉSENTS) ---
+  if (
+    snap.maintenances.length > 0 ||
+    snap.reseauIncidents.length > 0 ||
+    snap.incidentsSecurite.length > 0
+  ) {
+    builder.drawSectionHeading(
+      '5. MAINTENANCES & INCIDENTS RÉSEAU / SÉCURITÉ DU MOIS',
+      'Synthèse des contrôles préventifs et événements notables de la période'
+    );
+
+    if (snap.maintenances.length > 0) {
+      builder.drawSubHeading(`5.1. Contrôles de Maintenance (${snap.maintenances.length})`);
+      builder.drawDataTable(
+        ['Domaine / Cible', 'Type', 'Contrôle Effectué', 'Date', 'Statut'],
+        snap.maintenances.map((m) => [
+          `${m.categorie}\n(${m.responsableOuEquipement || 'SI'})`,
+          m.typeMaintenance,
+          m.tacheControle,
+          m.dernierControle,
+          m.statut,
+        ]),
+        [23, 13, 38, 13, 13],
+        { boldColumns: [0], statusColumns: [4] }
       );
-      const itemH = 9 + desc.length * 3.8;
-      ensureSpace(itemH + 2);
+    }
 
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(203, 213, 225);
-      doc.roundedRect(margin, y, contentWidth, itemH, 1, 1, 'FD');
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.setTextColor(15, 42, 74);
-      doc.text(
-        `${it.numeroReference} | ${it.dateReception} | ${it.nomDemandeur} (${it.serviceDemandeur})`,
-        margin + 3,
-        y + 4.5
+    if (snap.reseauIncidents.length > 0 || snap.incidentsSecurite.length > 0) {
+      builder.drawSubHeading('5.2. Incidents Réseau & Cybersécurité');
+      const combinedIncidents = [
+        ...snap.reseauIncidents.map((inc) => [
+          inc.dateHeure,
+          `Réseau · ${inc.typeIncident}`,
+          `${inc.equipementOuLiaison} — ${inc.actionCorrective || inc.cause}`,
+          inc.statut,
+        ]),
+        ...snap.incidentsSecurite.map((sec) => [
+          sec.dateHeure,
+          `Sécurité · ${sec.typeIncident} (${sec.severite})`,
+          `${sec.postesConcernes} — ${sec.actionsMenées}`,
+          sec.statut,
+        ]),
+      ];
+      builder.drawDataTable(
+        ['Date / Heure', 'Nature', 'Détail & Action Corrective', 'Statut'],
+        combinedIncidents,
+        [17, 25, 43, 15],
+        { boldColumns: [1], statusColumns: [3] }
       );
-      doc.text(
-        `${it.resultat} (${formatDuration(it.tempsConsacreMin)})`,
-        pageWidth - margin - 3,
-        y + 4.5,
-        { align: 'right' }
-      );
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(71, 85, 105);
-      doc.text(desc, margin + 3, y + 9);
-
-      y += itemH + 2.5;
-    });
+    }
   }
 
-  // 4. Tâches du Journal Quotidien du mois
-  ensureSpace(22);
-  y += 3;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(15, 42, 74);
-  doc.text(
-    `4. JOURNAL QUOTIDIEN DU MOIS (${snap.taches.length} tâches · ${Math.round((snap.totalTaskMinutes / 60) * 10) / 10} h)`,
-    margin,
-    y
+  // --- BORDEREAU DE LIVRAISON & VISA ---
+  const finalSecNum =
+    snap.maintenances.length > 0 ||
+    snap.reseauIncidents.length > 0 ||
+    snap.incidentsSecurite.length > 0
+      ? 6
+      : 5;
+  builder.drawSectionHeading(
+    `${finalSecNum}. BORDEREAU DE LIVRAISON & VISA HIÉRARCHIQUE`
   );
-  y += 5;
 
-  if (snap.taches.length === 0) {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(8.5);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Aucune activité journalière consignée sur ${snap.nomMois} ${snap.annee}.`, margin, y + 2);
-    y += 9;
-  } else {
-    snap.taches.forEach((t) => {
-      const line = `${t.date} (${t.heure}) · ${t.tache} [${t.categorie}] — ${t.statut} (${t.dureeReelleMin} min)`;
-      const wrapped = doc.splitTextToSize(line, contentWidth - 4);
-      ensureSpace(wrapped.length * 4 + 3);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(30, 41, 59);
-      doc.text(wrapped, margin + 2, y + 3);
-      y += wrapped.length * 4 + 1.5;
-    });
+  if (rapport.noteLivraison?.trim()) {
+    builder.drawCalloutBox('Note de Remise du Technicien', rapport.noteLivraison.trim(), 'info');
   }
 
-  // 5. Cadre de livraison & Visa Hiérarchique
-  ensureSpace(38);
-  y += 6;
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(15, 42, 74);
-  doc.roundedRect(margin, y, contentWidth, 30, 1.5, 1.5, 'FD');
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(15, 42, 74);
-  doc.text('BORDEREAU DE LIVRAISON & VISA HIÉRARCHIQUE', margin + 4, y + 6);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(51, 65, 85);
-  doc.text(
-    `Livré par : ${techName}   |   Date de remise : ${
-      rapport.dateLivraison || getLocalTodayIso()
-    }`,
-    margin + 4,
-    y + 13
+  builder.drawSignatureGrid(
+    {
+      role: 'TECHNICIEN ÉMETTEUR',
+      name: ctx.techName,
+      dateLabel: ctx.deliveryDate,
+      statusLabel: `Remis (${rapport.statutLivraison || 'Prêt à livrer'})`,
+      signed: true,
+    },
+    {
+      role: 'DESTINATAIRE / VALIDATION RSI',
+      name: ctx.recipientName,
+      dateLabel: rapport.dateValidation || undefined,
+      statusLabel: rapport.valideParHierarchie ? 'Approuvé & Validé' : 'En attente de visa',
+      signed: Boolean(rapport.valideParHierarchie),
+    }
   );
-  doc.text(
-    `Destinataire : ${rapport.destinataireLivraison || managerName}   |   Validation RSI : ${
-      rapport.valideParHierarchie ? `Validé le ${rapport.dateValidation}` : 'En attente de visa'
-    }`,
-    margin + 4,
-    y + 19
-  );
-  if (rapport.noteLivraison) {
-    doc.text(`Note de remise : ${rapport.noteLivraison}`, margin + 4, y + 25);
-  }
 
-  const safeMonth = snap.nomMois.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  doc.save(`Cahier_Suivi_Mensuel_${safeMonth}_${snap.annee}.pdf`);
+  builder.finalizeHeadersAndFooters({
+    organization: ctx.companyName,
+    documentTitle: `Rapport Mensuel — ${snap.nomMois} ${snap.annee}`,
+    reference: `LIV-${ctx.monthCode}`,
+    generationDate: ctx.genDate,
+    hasCoverPage: false,
+  });
+
+  builder.docInstance.save(`Cahier_Suivi_Mensuel_${ctx.safeMonthSlug}_${snap.annee}.pdf`);
 }
 
 /**
@@ -471,316 +448,281 @@ export async function generateMonthlyDocx(
   data: CahierSuiviData,
   moisIndex: number
 ): Promise<void> {
-  const snap = getMonthlyActivitySnapshot(data, moisIndex);
-  const { generalInfo } = data;
-  const { rapport } = snap;
+  const ctx = buildMonthlyDisplayContext(data, moisIndex);
+  const { snap, rapport } = ctx;
+  const theme = getDocumentTheme('monthly_report');
 
-  const techName =
-    `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() ||
-    'Technicien Informatique';
-  const companyName = generalInfo.entreprise || 'Entreprise / Organisation';
-  const managerName = generalInfo.responsableHierarchique || 'Responsable Hiérarchique (RSI)';
+  const hasExtraEvents =
+    snap.maintenances.length > 0 ||
+    snap.reseauIncidents.length > 0 ||
+    snap.incidentsSecurite.length > 0;
+  const finalSecNum = hasExtraEvents ? 6 : 5;
 
-  const totalIntervDisplay = Math.max(snap.interventions.length, rapport.totalInterventions || 0);
-  const resolvedDisplay = Math.max(snap.interventionsTerminees, rapport.incidentsResolus || 0);
-
-  const cellBorders = {
-    top: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E1' },
-    bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E1' },
-    left: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E1' },
-    right: { style: BorderStyle.SINGLE, size: 1, color: 'CBD5E1' },
-  };
-
-  const makeHeaderCell = (text: string) =>
-    new TableCell({
-      children: [
-        new Paragraph({
-          alignment: AlignmentType.CENTER,
-          children: [new TextRun({ text, bold: true, color: 'FFFFFF', size: 18 })],
-        }),
-      ],
-      shading: { type: ShadingType.CLEAR, fill: '0F2A4A' },
-      borders: cellBorders,
-    });
-
-  const makeTextCell = (text: string, bold = false) =>
-    new TableCell({
-      children: [
-        new Paragraph({
-          children: [new TextRun({ text: text || '—', bold, color: '1E293B', size: 18 })],
-        }),
-      ],
-      borders: cellBorders,
-    });
-
-  const narrativeBlocks: Paragraph[] = [];
-  const sections: Array<[string, string]> = [
-    ['1. Travaux & Projets réalisés', rapport.travauxRealises],
-    ['2. Maintenance préventive effectuée', rapport.maintenanceEffectuee],
-    ['3. Problèmes récurrents identifiés', rapport.problemesRecurrents],
-    ['4. Difficultés rencontrées', rapport.difficultesRencontrees],
-    ['5. Besoins matériels & logiciels', rapport.besoinsMaterielsLogiciels],
-    ['6. Recommandations à la hiérarchie', rapport.recommandationsTechnicien],
-    ['7. Activités prévues mois suivant (M+1)', rapport.activitesMoisSuivant],
+  const combinedIncidents = [
+    ...snap.reseauIncidents.map((inc) => [
+      inc.dateHeure,
+      `Réseau · ${inc.typeIncident}`,
+      `${inc.equipementOuLiaison} — ${inc.actionCorrective || inc.cause}`,
+      inc.statut,
+    ]),
+    ...snap.incidentsSecurite.map((sec) => [
+      sec.dateHeure,
+      `Sécurité · ${sec.typeIncident} (${sec.severite})`,
+      `${sec.postesConcernes} — ${sec.actionsMenées}`,
+      sec.statut,
+    ]),
   ];
 
-  sections.forEach(([title, content]) => {
-    narrativeBlocks.push(
-      new Paragraph({
-        spacing: { before: 180, after: 60 },
-        children: [new TextRun({ text: title, bold: true, color: '1E3A8A', size: 22 })],
-      }),
-      new Paragraph({
-        spacing: { after: 100 },
-        children: [
-          new TextRun({
-            text: content?.trim() || 'Aucune observation particulière consignée pour ce mois.',
-            color: '334155',
-            size: 20,
-          }),
-        ],
-      })
-    );
-  });
-
-  const interventionTableRows: TableRow[] = [
-    new TableRow({
-      children: [
-        makeHeaderCell('Référence'),
-        makeHeaderCell('Date'),
-        makeHeaderCell('Demandeur / Service'),
-        makeHeaderCell('Problème & Solution'),
-        makeHeaderCell('Résultat'),
-      ],
+  const children = [
+    createDocxDocumentBanner({
+      theme,
+      organization: ctx.companyName,
+      eyebrow: 'CAHIER DE SUIVI MENSUEL DU TECHNICIEN INFORMATIQUE',
+      title: `${snap.nomMois.toUpperCase()} ${snap.annee}`,
+      subtitle: `${ctx.companyName} (${ctx.departmentName}) · ${
+        rapport.statutLivraison || 'Prêt à livrer'
+      }${rapport.dateLivraison ? ` (${rapport.dateLivraison})` : ''}`,
+      rightBadge: `Réf. LIV-${ctx.monthCode} · Édité le ${ctx.genDate}`,
     }),
-  ];
-
-  if (snap.interventions.length === 0) {
-    interventionTableRows.push(
-      new TableRow({
-        children: [
-          makeTextCell('—'),
-          makeTextCell('—'),
-          makeTextCell('—'),
-          makeTextCell(`Aucune fiche d'intervention enregistrée pour ${snap.nomMois} ${snap.annee}.`),
-          makeTextCell('—'),
-        ],
-      })
-    );
-  } else {
-    snap.interventions.forEach((it) => {
-      interventionTableRows.push(
-        new TableRow({
-          children: [
-            makeTextCell(it.numeroReference, true),
-            makeTextCell(it.dateReception),
-            makeTextCell(`${it.nomDemandeur} (${it.serviceDemandeur})`),
-            makeTextCell(`${it.descriptionPanne} → ${it.solutionAppliquee || 'En cours'}`),
-            makeTextCell(`${it.resultat} (${formatDuration(it.tempsConsacreMin)})`),
-          ],
-        })
-      );
-    });
-  }
-
-  const taskTableRows: TableRow[] = [
-    new TableRow({
-      children: [
-        makeHeaderCell('Date'),
-        makeHeaderCell('Activité / Tâche'),
-        makeHeaderCell('Catégorie'),
-        makeHeaderCell('Durée'),
-        makeHeaderCell('Statut'),
+    new Paragraph({ text: '', spacing: { before: 120, after: 0 } }),
+    createDocxKeyValueGridTable(
+      theme,
+      [
+        {
+          kind: 'pair',
+          label: 'Entreprise / Direction',
+          value: `${ctx.companyName} (${ctx.departmentName})`,
+        },
+        { kind: 'pair', label: 'Technicien titulaire', value: `${ctx.techName} — ${ctx.techRole}` },
+        { kind: 'pair', label: 'Destinataire hiérarchique', value: ctx.recipientName },
+        {
+          kind: 'pair',
+          label: 'Statut de livraison & Visa',
+          value: `${rapport.statutLivraison || 'Prêt à livrer'} · ${
+            rapport.valideParHierarchie
+              ? `Validé le ${rapport.dateValidation || ctx.deliveryDate}`
+              : 'En attente de visa RSI'
+          }`,
+          isStatus: true,
+        },
       ],
-    }),
-  ];
+      { labelWidthPct: 32 }
+    ),
 
-  if (snap.taches.length === 0) {
-    taskTableRows.push(
-      new TableRow({
-        children: [
-          makeTextCell('—'),
-          makeTextCell(`Aucune tâche journalière enregistrée pour ${snap.nomMois} ${snap.annee}.`),
-          makeTextCell('—'),
-          makeTextCell('—'),
-          makeTextCell('—'),
-        ],
-      })
-    );
-  } else {
-    snap.taches.forEach((t) => {
-      taskTableRows.push(
-        new TableRow({
-          children: [
-            makeTextCell(`${t.date} ${t.heure}`),
-            makeTextCell(t.tache, true),
-            makeTextCell(t.categorie),
-            makeTextCell(`${t.dureeReelleMin} min`),
-            makeTextCell(t.statut),
-          ],
-        })
-      );
-    });
-  }
+    ...createDocxSectionHeading(theme, '1. SYNTHÈSE & INDICATEURS CLÉS DU MOIS'),
+    createDocxKpiStripTable(theme, [
+      {
+        label: 'Interventions IT',
+        value: `${ctx.totalIntervDisplay}`,
+        sub: `${ctx.resolvedDisplay} terminées`,
+        tone: 'info',
+      },
+      {
+        label: 'Taux Résolution FCR',
+        value: `${snap.tauxResolution}%`,
+        sub: `MTTR : ${formatDuration(snap.avgInterventionMinutes)}`,
+        tone: snap.tauxResolution >= 85 ? 'success' : 'warning',
+      },
+      {
+        label: 'Journal Quotidien',
+        value: `${snap.taches.length}`,
+        sub: `${snap.tachesTerminees} terminées (${ctx.totalTaskHours} h)`,
+        tone: 'info',
+      },
+      {
+        label: 'Maintenances & Inc.',
+        value: `${snap.maintenances.length}`,
+        sub: `${snap.reseauIncidents.length} rés. · ${snap.incidentsSecurite.length} sécu`,
+        tone:
+          snap.reseauIncidents.length + snap.incidentsSecurite.length === 0
+            ? 'success'
+            : 'warning',
+      },
+    ]),
+
+    ...createDocxSectionHeading(theme, "2. COMPTE-RENDU D'ACTIVITÉ MENSUEL"),
+    ...ctx.narrativeItems.flatMap((item) => [
+      createDocxCalloutBox(
+        theme,
+        item.title,
+        item.content?.trim() || 'Aucune observation particulière consignée pour cette rubrique.',
+        'info'
+      ),
+      new Paragraph({ text: '', spacing: { before: 0, after: 80 } }),
+    ]),
+
+    ...createDocxSectionHeading(
+      theme,
+      `3. INTERVENTIONS TECHNIQUES DU MOIS (${snap.interventions.length})`,
+      `Tickets et opérations enregistrés sur ${snap.nomMois} ${snap.annee}`
+    ),
+    createDocxDataTable(
+      theme,
+      ['Référence', 'Date', 'Demandeur / Service', 'Problème & Solution Appliquée', 'Durée', 'Statut'],
+      snap.interventions.map((it) => [
+        it.numeroReference,
+        it.dateReception,
+        `${it.nomDemandeur}\n(${it.serviceDemandeur})`,
+        `${it.descriptionPanne || '—'}\nSolution : ${it.solutionAppliquee || 'En cours'}`,
+        formatDuration(it.tempsConsacreMin),
+        formatInterventionStatusLabel(it.resultat, it.natureIntervention),
+      ]),
+      [13, 12, 19, 34, 10, 12],
+      {
+        boldColumns: [0],
+        statusColumns: [5],
+        emptyMessage: `Aucune fiche d'intervention enregistrée pour ${snap.nomMois} ${snap.annee}.`,
+      }
+    ),
+
+    ...createDocxSectionHeading(
+      theme,
+      `4. JOURNAL QUOTIDIEN DU MOIS (${snap.taches.length} tâches · ${ctx.totalTaskHours} h)`,
+      "Chronologie des opérations d'exploitation courante"
+    ),
+    createDocxDataTable(
+      theme,
+      ['Date / Heure', 'Tâche / Activité', 'Catégorie', 'Durée', 'Statut'],
+      snap.taches.map((t) => [
+        `${t.date}\n${t.heure || '—'}`,
+        `${t.tache}${t.observations ? `\nObs : ${t.observations}` : ''}`,
+        t.categorie,
+        formatDuration(t.dureeReelleMin || t.dureeEstimeeMin || 0),
+        t.statut,
+      ]),
+      [15, 42, 19, 11, 13],
+      {
+        boldColumns: [0],
+        statusColumns: [4],
+        emptyMessage: `Aucune tâche journalière enregistrée pour ${snap.nomMois} ${snap.annee}.`,
+      }
+    ),
+
+    ...(hasExtraEvents
+      ? [
+          ...createDocxSectionHeading(
+            theme,
+            '5. MAINTENANCES & INCIDENTS RÉSEAU / SÉCURITÉ DU MOIS',
+            'Synthèse des contrôles préventifs et événements notables de la période'
+          ),
+          ...(snap.maintenances.length > 0
+            ? [
+                createDocxSubHeading(`5.1. Contrôles de Maintenance (${snap.maintenances.length})`),
+                createDocxDataTable(
+                  theme,
+                  ['Domaine / Cible', 'Type', 'Contrôle Effectué', 'Date', 'Statut'],
+                  snap.maintenances.map((m) => [
+                    `${m.categorie}\n(${m.responsableOuEquipement || 'SI'})`,
+                    m.typeMaintenance,
+                    m.tacheControle,
+                    m.dernierControle,
+                    m.statut,
+                  ]),
+                  [23, 13, 38, 13, 13],
+                  { boldColumns: [0], statusColumns: [4] }
+                ),
+              ]
+            : []),
+          ...(combinedIncidents.length > 0
+            ? [
+                createDocxSubHeading('5.2. Incidents Réseau & Cybersécurité'),
+                createDocxDataTable(
+                  theme,
+                  ['Date / Heure', 'Nature', 'Détail & Action Corrective', 'Statut'],
+                  combinedIncidents,
+                  [17, 25, 43, 15],
+                  { boldColumns: [1], statusColumns: [3] }
+                ),
+              ]
+            : []),
+        ]
+      : []),
+
+    ...createDocxSectionHeading(
+      theme,
+      `${finalSecNum}. BORDEREAU DE LIVRAISON & VISA HIÉRARCHIQUE`
+    ),
+    ...(rapport.noteLivraison?.trim()
+      ? [
+          createDocxCalloutBox(
+            theme,
+            'Note de Remise du Technicien',
+            rapport.noteLivraison.trim(),
+            'info'
+          ),
+          new Paragraph({ text: '', spacing: { before: 0, after: 100 } }),
+        ]
+      : []),
+    createDocxSignatureTable(
+      theme,
+      {
+        role: 'TECHNICIEN ÉMETTEUR',
+        name: ctx.techName,
+        dateLabel: ctx.deliveryDate,
+        statusLabel: `Remis (${rapport.statutLivraison || 'Prêt à livrer'})`,
+        signed: true,
+      },
+      {
+        role: 'DESTINATAIRE / VALIDATION RSI',
+        name: ctx.recipientName,
+        dateLabel: rapport.dateValidation || undefined,
+        statusLabel: rapport.valideParHierarchie
+          ? 'Approuvé & Validé'
+          : 'En attente de visa hiérarchique',
+        signed: Boolean(rapport.valideParHierarchie),
+      }
+    ),
+  ];
 
   const doc = new Document({
+    title: `Cahier de Suivi Mensuel — ${snap.nomMois} ${snap.annee}`,
+    subject: `Rapport mensuel d'activité IT — ${ctx.companyName}`,
+    creator: ctx.techName,
+    styles: createEditorialDocStyles(theme),
     sections: [
       {
+        properties: {
+          titlePage: true,
+          page: {
+            size: { width: A4_WIDTH_DXA, height: A4_HEIGHT_DXA },
+            margin: {
+              top: STANDARD_MARGIN_DXA,
+              right: STANDARD_MARGIN_DXA,
+              bottom: STANDARD_MARGIN_DXA,
+              left: STANDARD_MARGIN_DXA,
+            },
+          },
+        },
         headers: {
-          default: new Header({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.RIGHT,
-                children: [
-                  new TextRun({
-                    text: `${companyName} — Cahier Mensuel ${snap.nomMois} ${snap.annee}`,
-                    color: '64748B',
-                    size: 16,
-                  }),
-                ],
-              }),
-            ],
+          default: createDocxRunningHeader({
+            theme,
+            organization: ctx.companyName,
+            documentTitle: `Rapport Mensuel — ${snap.nomMois} ${snap.annee}`,
+            reference: `LIV-${ctx.monthCode}`,
+            generationDate: ctx.genDate,
           }),
         },
         footers: {
-          default: new Footer({
-            children: [
-              new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [
-                  new TextRun({ text: 'Document de Suivi Mensuel DSI · Page ', color: '64748B', size: 16 }),
-                  new TextRun({ children: [PageNumber.CURRENT], color: '64748B', size: 16 }),
-                ],
-              }),
-            ],
+          first: createDocxRunningFooter({
+            theme,
+            organization: ctx.companyName,
+            confidentialityText: `Livrable Mensuel Officiel · ${snap.nomMois} ${snap.annee}`,
+            generationDate: ctx.genDate,
+          }),
+          default: createDocxRunningFooter({
+            theme,
+            organization: ctx.companyName,
+            confidentialityText: `Livrable Mensuel Officiel · ${snap.nomMois} ${snap.annee}`,
+            generationDate: ctx.genDate,
           }),
         },
-        children: [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 80 },
-            children: [
-              new TextRun({
-                text: 'CAHIER DE SUIVI MENSUEL DU TECHNICIEN INFORMATIQUE',
-                bold: true,
-                color: '0F2A4A',
-                size: 30,
-              }),
-            ],
-          }),
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 240 },
-            children: [
-              new TextRun({
-                text: `${snap.nomMois.toUpperCase()} ${snap.annee} — ${companyName}`,
-                bold: true,
-                color: '0284C7',
-                size: 24,
-              }),
-            ],
-          }),
-
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: [
-              new TableRow({
-                children: [
-                  makeTextCell('Technicien titulaire', true),
-                  makeTextCell(`${techName} (${generalInfo.fonction || 'Technicien IT'})`),
-                ],
-              }),
-              new TableRow({
-                children: [
-                  makeTextCell('Destinataire / Hiérarchie', true),
-                  makeTextCell(rapport.destinataireLivraison || managerName),
-                ],
-              }),
-              new TableRow({
-                children: [
-                  makeTextCell('Statut de livraison', true),
-                  makeTextCell(
-                    `${rapport.statutLivraison || 'Prêt à livrer'}${
-                      rapport.dateLivraison ? ` — remis le ${rapport.dateLivraison}` : ''
-                    }`
-                  ),
-                ],
-              }),
-              new TableRow({
-                children: [
-                  makeTextCell('Synthèse chiffrée', true),
-                  makeTextCell(
-                    `${totalIntervDisplay} interventions (${resolvedDisplay} terminées) · ${snap.taches.length} tâches journal · Taux FCR ${snap.tauxResolution}%`
-                  ),
-                ],
-              }),
-            ],
-          }),
-
-          ...narrativeBlocks,
-
-          new Paragraph({
-            spacing: { before: 280, after: 120 },
-            children: [
-              new TextRun({
-                text: `REGISTRE DES INTERVENTIONS (${snap.interventions.length})`,
-                bold: true,
-                color: '0F2A4A',
-                size: 24,
-              }),
-            ],
-          }),
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: interventionTableRows,
-          }),
-
-          new Paragraph({
-            spacing: { before: 280, after: 120 },
-            children: [
-              new TextRun({
-                text: `JOURNAL QUOTIDIEN DU MOIS (${snap.taches.length})`,
-                bold: true,
-                color: '0F2A4A',
-                size: 24,
-              }),
-            ],
-          }),
-          new Table({
-            width: { size: 100, type: WidthType.PERCENTAGE },
-            rows: taskTableRows,
-          }),
-
-          new Paragraph({
-            spacing: { before: 320, after: 80 },
-            children: [
-              new TextRun({
-                text: 'VISA DE LIVRAISON & VALIDATION HIÉRARCHIQUE',
-                bold: true,
-                color: '0F2A4A',
-                size: 22,
-              }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: `Technicien : ${techName} | Destinataire : ${
-                  rapport.destinataireLivraison || managerName
-                } | Statut RSI : ${
-                  rapport.valideParHierarchie ? `Validé le ${rapport.dateValidation}` : 'En attente de signature'
-                }`,
-                size: 20,
-                color: '334155',
-              }),
-            ],
-          }),
-        ],
+        children,
       },
     ],
   });
 
-  const blob = await Packer.toBlob(doc);
-  const safeMonth = snap.nomMois.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  saveAs(blob, `Cahier_Suivi_Mensuel_${safeMonth}_${snap.annee}.docx`);
+  await packAndSaveDocx(
+    doc,
+    `Cahier_Suivi_Mensuel_${ctx.safeMonthSlug}_${snap.annee}.docx`
+  );
 }

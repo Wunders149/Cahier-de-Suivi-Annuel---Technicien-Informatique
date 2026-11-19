@@ -69,15 +69,27 @@ body {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm 10mm;
+    margin: 14mm 12mm;
   }
   body {
     background: white !important;
-    color: black !important;
-    font-size: 10pt;
+    color: #0f172a !important;
+    font-size: 9.5pt;
+    line-height: 1.45;
   }
   header, nav, .no-print {
     display: none !important;
+  }
+  h1, h2, h3 {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+  thead {
+    display: table-header-group !important;
+  }
+  tr, .avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
   .page-break {
     page-break-before: always !important;
