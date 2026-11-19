@@ -17,6 +17,11 @@ import {
   CalendarRange,
   ArrowRight,
   ListTodo,
+  Package,
+  AlertTriangle,
+  ShieldAlert,
+  Target,
+  Activity,
 } from 'lucide-react';
 import { getMonthPrefix } from '../../utils/monthlyDeliverableGenerator';
 
@@ -55,6 +60,22 @@ const FULL_MONTHS = [
   'Décembre',
 ];
 
+function parseBudgetAr(text?: string): number {
+  if (!text) return 0;
+  const digits = text.replace(/[^\d]/g, '');
+  const n = Number(digits);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatCompactAr(amount: number): string {
+  if (amount <= 0) return '0 Ar';
+  if (amount >= 1_000_000) {
+    const m = (amount / 1_000_000).toFixed(1).replace('.0', '').replace('.', ',');
+    return `${m} M Ar`;
+  }
+  return `${Math.round(amount).toLocaleString('fr-FR')} Ar`;
+}
+
 export const DashboardStats: React.FC<DashboardStatsProps> = ({
   data,
   onNavigateTab,
@@ -70,10 +91,17 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     totalTaskHours,
     deliveredReportsCount,
     hasAnyInterventions,
+    sogAlerts,
   } = useMemo(() => {
     const interventions = data.interventions || [];
     const taches = data.journalTaches || [];
     const rapports = data.rapportsMensuels || [];
+    const consommables = data.consommables || [];
+    const demandesAchat = data.demandesAchat || [];
+    const maintenances = data.maintenances || [];
+    const logiciels = data.logicielsLicences || [];
+    const objectifs = data.objectifsAnnuels || [];
+    const jalons = data.jalonsCalendrier || [];
 
     const series = SHORT_MONTHS.map((shortName, idx) => {
       const moisIndex = idx + 1;
@@ -125,6 +153,72 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       (r) => r.statutLivraison === 'Livré'
     ).length;
 
+    // Alertes & indicateurs opérationnels SOGEDIPROMA
+    const ruptureCount = consommables.filter((c) => c.stockActuel <= 0).length;
+    const lowStockCount = consommables.filter(
+      (c) => c.stockActuel > 0 && c.stockActuel <= c.stockMinimumAlerte
+    ).length;
+    const pendingPurchasesCount = demandesAchat.filter(
+      (d) => d.statut !== 'Reçu / Contrôlé'
+    ).length;
+
+    const openTickets = interventions.filter((i) => i.resultat !== 'Résolu');
+    const urgentTicketsCount = openTickets.filter(
+      (i) => i.priorite === 'Critique' || i.priorite === 'Haute'
+    ).length;
+
+    const now = Date.now();
+    const in30Days = now + 30 * 24 * 60 * 60 * 1000;
+    const expiringLicencesCount = logiciels.filter((l) => {
+      if (l.statutConformite === 'Expire sous 30j' || l.statutConformite === 'Sous-licencié') {
+        return true;
+      }
+      if (!l.dateExpiration) return false;
+      const ts = new Date(l.dateExpiration).getTime();
+      return Number.isFinite(ts) && ts <= in30Days;
+    }).length;
+
+    const cameraControls = maintenances.filter(
+      (m) =>
+        m.id?.startsWith('sog-cam-') ||
+        /cam[eé]ra|vid[eé]o|nvr/i.test(`${m.tacheControle} ${m.responsableOuEquipement}`)
+    );
+    const cameraAlertCount = cameraControls.filter(
+      (m) => m.statut === 'À traiter' || !m.valide
+    ).length;
+
+    const budgetObjectives = objectifs.filter((o) => o.id?.startsWith('sog-bdg-'));
+    const totalBudgetAr = budgetObjectives.reduce(
+      (sum, o) => sum + parseBudgetAr(o.ressourcesNecessaires),
+      0
+    );
+    const campaignJalons = jalons.filter(
+      (j) =>
+        j.id?.startsWith('sog-camp-') || /inventaire/i.test(j.titre || '')
+    );
+    const completedCampaignCount = campaignJalons.filter(
+      (j) => j.estComplete
+    ).length;
+
+    let lastSyncRev: string | null = null;
+    try {
+      const rawSync = localStorage.getItem('sogediproma_last_sync_v1');
+      if (rawSync) {
+        const parsed = JSON.parse(rawSync) as { revision?: number; at?: string };
+        if (parsed.revision) {
+          const dt = parsed.at
+            ? new Date(parsed.at).toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })
+            : '';
+          lastSyncRev = `Rév. #${parsed.revision}${dt ? ` · ${dt}` : ''}`;
+        }
+      }
+    } catch {
+      // Ignorer erreur localStorage
+    }
+
     return {
       monthlySeries: series,
       totalCompletedInterventions: totalTerminees,
@@ -134,8 +228,34 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       totalTaskHours: hours,
       deliveredReportsCount: deliveredCount,
       hasAnyInterventions: totalGlobal > 0,
+      sogAlerts: {
+        ruptureCount,
+        lowStockCount,
+        pendingPurchasesCount,
+        openTicketsCount: openTickets.length,
+        urgentTicketsCount,
+        expiringLicencesCount,
+        cameraTotalCount: cameraControls.length,
+        cameraAlertCount,
+        budgetCount: budgetObjectives.length,
+        totalBudgetAr,
+        campaignTotalCount: campaignJalons.length,
+        completedCampaignCount,
+        lastSyncRev,
+      },
     };
-  }, [data.interventions, data.journalTaches, data.rapportsMensuels, annee]);
+  }, [
+    data.interventions,
+    data.journalTaches,
+    data.rapportsMensuels,
+    data.consommables,
+    data.demandesAchat,
+    data.maintenances,
+    data.logicielsLicences,
+    data.objectifsAnnuels,
+    data.jalonsCalendrier,
+    annee,
+  ]);
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -264,6 +384,129 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
           </div>
         </button>
+      </div>
+
+      {/* Pilotage & Alertes opérationnelles SOGEDIPROMA */}
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+            <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>Pilotage &amp; Alertes SOGEDIPROMA</span>
+          </div>
+          <span className="text-[11px] font-mono tabular-nums text-slate-500">
+            {sogAlerts.lastSyncRev ? `Source live : ${sogAlerts.lastSyncRev}` : 'Indicateurs temps réel du cahier'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigateTab('consommables')}
+            className="text-left bg-white rounded-xl border border-slate-200 p-3.5 hover:border-blue-300 transition group"
+          >
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+              <span className="font-medium">Stocks critiques &amp; Achats</span>
+              <Package
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  sogAlerts.ruptureCount > 0
+                    ? 'text-red-600'
+                    : sogAlerts.lowStockCount > 0
+                      ? 'text-amber-600'
+                      : 'text-emerald-600'
+                }`}
+              />
+            </div>
+            <div className="text-lg font-bold font-mono tabular-nums text-slate-900">
+              {sogAlerts.ruptureCount + sogAlerts.lowStockCount} alerte(s)
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
+              <span className="font-mono tabular-nums truncate">
+                {sogAlerts.ruptureCount} rupture · {sogAlerts.pendingPurchasesCount} DA en cours
+              </span>
+              <ArrowRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('interventions')}
+            className="text-left bg-white rounded-xl border border-slate-200 p-3.5 hover:border-blue-300 transition group"
+          >
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+              <span className="font-medium">Tickets ouverts &amp; Urgences</span>
+              <AlertTriangle
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  sogAlerts.urgentTicketsCount > 0
+                    ? 'text-red-600'
+                    : sogAlerts.openTicketsCount > 0
+                      ? 'text-amber-600'
+                      : 'text-emerald-600'
+                }`}
+              />
+            </div>
+            <div className="text-lg font-bold font-mono tabular-nums text-slate-900">
+              {sogAlerts.openTicketsCount} actif(s)
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
+              <span className="font-mono tabular-nums truncate">
+                {sogAlerts.urgentTicketsCount} critique(s)/haute(s)
+              </span>
+              <ArrowRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              onNavigateTab(
+                sogAlerts.expiringLicencesCount > 0 ? 'logiciels' : 'maintenance'
+              )
+            }
+            className="text-left bg-white rounded-xl border border-slate-200 p-3.5 hover:border-blue-300 transition group"
+          >
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+              <span className="font-medium">Vidéosurveillance &amp; Licences</span>
+              <ShieldAlert
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  sogAlerts.expiringLicencesCount > 0 || sogAlerts.cameraAlertCount > 0
+                    ? 'text-amber-600'
+                    : 'text-emerald-600'
+                }`}
+              />
+            </div>
+            <div className="text-lg font-bold font-mono tabular-nums text-slate-900">
+              {sogAlerts.expiringLicencesCount} à renouveler
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
+              <span className="font-mono tabular-nums truncate">
+                {sogAlerts.cameraTotalCount} caméras ({sogAlerts.cameraAlertCount} à suivre)
+              </span>
+              <ArrowRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigateTab('plan')}
+            className="text-left bg-white rounded-xl border border-slate-200 p-3.5 hover:border-blue-300 transition group"
+          >
+            <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+              <span className="font-medium">Budgets &amp; Inventaire</span>
+              <Target className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            </div>
+            <div className="text-lg font-bold font-mono tabular-nums text-slate-900 truncate">
+              {sogAlerts.totalBudgetAr > 0
+                ? formatCompactAr(sogAlerts.totalBudgetAr)
+                : `${data.objectifsAnnuels.length} objectif(s)`}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between gap-2">
+              <span className="font-mono tabular-nums truncate">
+                {sogAlerts.budgetCount} budgets · {sogAlerts.completedCampaignCount}/{sogAlerts.campaignTotalCount || data.jalonsCalendrier.length} jalons
+              </span>
+              <ArrowRight className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600" />
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Graphique linéaire Recharts : Interventions terminées par mois */}

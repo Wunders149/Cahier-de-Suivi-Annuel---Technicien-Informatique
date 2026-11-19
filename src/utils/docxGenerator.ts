@@ -893,7 +893,7 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                     children: [
                       createTextCell(`${da.numeroCommande}\n${da.dateDemande}`, { bold: true }),
                       createTextCell(`${da.articlesDemandes}\nQté: ${da.quantite}`),
-                      createTextCell(`${da.fournisseur}\n${da.montantEstimeTTC.toFixed(2)} € TTC`),
+                      createTextCell(`${da.fournisseur}\n${Math.round(da.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar`),
                       createTextCell(da.statut, { bold: true }),
                       createTextCell(`${da.dateReception || 'En attente'}\n${da.observations}`),
                     ],
@@ -1099,16 +1099,17 @@ export async function generateDocx(data: CahierSuiviData): Promise<void> {
                       const invest = p.coutInvestissementEuros || 0;
                       const eco = p.economiesFinancieresAnnuellesEuros || 0;
                       const heures = p.gainTempsEstimeHeuresParAn || 0;
-                      const val = eco + heures * (p.tauxHoraireMoyenValorise || 35);
+                      const taux = p.tauxHoraireMoyenValorise || 25000;
+                      const val = eco + heures * taux;
                       const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
                       const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
 
                       return new TableRow({
                         children: [
                           createTextCell(`${p.nomProjet}\n[${p.categorie}] - ${p.statut}`, { bold: true }),
-                          createTextCell(`${invest.toLocaleString('fr-FR')} €`),
-                          createTextCell(`+${eco.toLocaleString('fr-FR')} € / an`, { bold: true }),
-                          createTextCell(`${heures} h / an\n(+${(heures * 35).toLocaleString('fr-FR')} € valorisés)`),
+                          createTextCell(`${Math.round(invest).toLocaleString('fr-FR')} Ar`),
+                          createTextCell(`+${Math.round(eco).toLocaleString('fr-FR')} Ar / an`, { bold: true }),
+                          createTextCell(`${heures} h / an\n(+${Math.round(heures * taux).toLocaleString('fr-FR')} Ar valorisés)`),
                           createTextCell(`${roi > 0 ? `+${roi}%` : `${roi}%`}\n(Amorti en ${payback} mois)`, { bold: true }),
                         ],
                       });

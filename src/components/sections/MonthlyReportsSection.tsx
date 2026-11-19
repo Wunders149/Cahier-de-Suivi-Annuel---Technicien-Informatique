@@ -12,10 +12,12 @@ import {
   Clock,
   PackageCheck,
   FileDown,
+  Sparkles,
 } from 'lucide-react';
 import {
   generateMonthlyDocx,
   generateMonthlyPdf,
+  getMonthPrefix,
   getMonthlyActivitySnapshot,
 } from '../../utils/monthlyDeliverableGenerator';
 import { formatDuration } from '../../utils/durationFormatter';
@@ -138,8 +140,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
     );
   };
 
-  const handleGenerateMonthlyReport = () => {
-    const targetMonth = currentCalendarMonth;
+  const buildPrefilledMonthReport = (targetMonth: number): RapportMensuel => {
     const baseReport =
       rapports.find((r) => r.moisIndex === targetMonth) || currentReport;
     const snap = getMonthlyActivitySnapshot(data, targetMonth);
@@ -178,14 +179,25 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       );
     }
 
+    const maintenanceLines = snap.maintenances.map(
+      (m) =>
+        `• ${m.dernierControle} — ${m.tacheControle} (${m.responsableOuEquipement}, ${m.frequence}) : ${m.statut}`
+    );
+    const monthSauvegardes = (data.sauvegardes || []).filter((s) =>
+      s.dateDernierTestRestauration?.startsWith(getMonthPrefix(snap.annee, targetMonth))
+    );
+    if (monthSauvegardes.length > 0) {
+      maintenanceLines.push(
+        ...monthSauvegardes.slice(0, 4).map(
+          (s) =>
+            `• Sauvegarde ${s.nomJob} (${s.dateDernierTestRestauration}) : ${s.statut}`
+        )
+      );
+    }
+
     const generatedMaintenance =
-      snap.maintenances.length > 0
-        ? snap.maintenances
-            .map(
-              (m) =>
-                `• ${m.dernierControle} — ${m.tacheControle} (${m.responsableOuEquipement}, ${m.frequence}) : ${m.statut}`
-            )
-            .join('\n')
+      maintenanceLines.length > 0
+        ? maintenanceLines.join('\n')
         : baseReport.maintenanceEffectuee ||
           `Aucun contrôle de maintenance daté sur ${snap.nomMois} ${snap.annee}.`;
 
@@ -213,7 +225,61 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
         : baseReport.problemesRecurrents ||
           `Aucun incident ouvert ou récurrent signalé sur ${snap.nomMois} ${snap.annee}.`;
 
-    const updatedReport: RapportMensuel = {
+    // Besoins matériels & licences calculés depuis stocks critiques, achats en cours et licences < 30 jours
+    const lowConsommables = (data.consommables || []).filter(
+      (c) => c.stockActuel <= c.stockMinimumAlerte
+    );
+    const pendingPurchases = (data.demandesAchat || []).filter(
+      (d) => d.statut !== 'Reçu / Contrôlé'
+    );
+    const in30Days = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    const expiringLicences = (data.logicielsLicences || []).filter((l) => {
+      if (l.statutConformite === 'Expire sous 30j' || l.statutConformite === 'Sous-licencié') {
+        return true;
+      }
+      if (!l.dateExpiration) return false;
+      const ts = new Date(l.dateExpiration).getTime();
+      return Number.isFinite(ts) && ts <= in30Days;
+    });
+
+    const needLines: string[] = [
+      ...lowConsommables.slice(0, 6).map(
+        (c) =>
+          `• Stock ${c.stockActuel <= 0 ? 'EN RUPTURE' : 'BAS'} — ${c.designation} (${c.stockActuel}/${c.stockMinimumAlerte} ${c.unite})`
+      ),
+      ...pendingPurchases.slice(0, 5).map(
+        (d) =>
+          `• DA ${d.statut} — ${d.articlesDemandes} (${Math.round(d.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar)`
+      ),
+      ...expiringLicences.slice(0, 5).map(
+        (l) =>
+          `• Licence à renouveler — ${l.nomLogiciel} (${l.editeur}${l.dateExpiration ? `, éch. ${l.dateExpiration}` : ''})`
+      ),
+    ];
+
+    const generatedNeeds =
+      needLines.length > 0
+        ? needLines.join('\n')
+        : baseReport.besoinsMaterielsLogiciels;
+
+    // Priorités mois suivant M+1 depuis jalons et objectifs non clôturés
+    const nextMonthIdx = targetMonth === 12 ? 1 : targetMonth + 1;
+    const nextMonthName =
+      rapports.find((r) => r.moisIndex === nextMonthIdx)?.nomMois || `Mois ${nextMonthIdx}`;
+    const nextMonthJalons = (data.jalonsCalendrier || []).filter(
+      (j) =>
+        j.mois === nextMonthIdx ||
+        (j.mois === targetMonth && !j.estComplete)
+    );
+    const nextLines: string[] = nextMonthJalons.slice(0, 6).map(
+      (j) => `• [${nextMonthName}] ${j.titre} — ${j.description || j.categorie}`
+    );
+    const generatedNext =
+      nextLines.length > 0
+        ? nextLines.join('\n')
+        : baseReport.activitesMoisSuivant;
+
+    return {
       ...baseReport,
       totalInterventions: snap.interventions.length,
       incidentsResolus: snap.interventionsTerminees,
@@ -223,7 +289,29 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
       travauxRealises: generatedTravauxParts.join('\n\n'),
       maintenanceEffectuee: generatedMaintenance,
       problemesRecurrents: generatedProblems,
+      besoinsMaterielsLogiciels: generatedNeeds,
+      activitesMoisSuivant: generatedNext,
     };
+  };
+
+  const handlePrefillSelectedMonth = () => {
+    const targetMonth = selectedMonthIndex;
+    const updatedReport = buildPrefilledMonthReport(targetMonth);
+    const nextRapports = rapports.map((r) =>
+      r.moisIndex === targetMonth ? updatedReport : r
+    );
+    onUpdateRapports(nextRapports);
+    setFormData(updatedReport);
+    setIsEditing(true);
+    notify(
+      `Rapport de ${updatedReport.nomMois} pré-rempli depuis les données live (${updatedReport.incidentsResolus}/${updatedReport.totalInterventions} interventions).`
+    );
+  };
+
+  const handleGenerateMonthlyReport = () => {
+    const targetMonth = selectedMonthIndex;
+    const updatedReport = buildPrefilledMonthReport(targetMonth);
+    const snap = getMonthlyActivitySnapshot(data, targetMonth);
 
     const nextRapports = rapports.map((r) =>
       r.moisIndex === targetMonth ? updatedReport : r
@@ -234,7 +322,6 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
     };
 
     onUpdateRapports(nextRapports);
-    setSelectedMonthIndex(targetMonth);
     setFormData(updatedReport);
     setIsEditing(false);
 
@@ -408,12 +495,21 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
           </span>
           <button
             type="button"
+            onClick={handlePrefillSelectedMonth}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition shadow-xs whitespace-nowrap"
+            title="Pré-remplir le mois sélectionné depuis les tickets, maintenances, alertes stocks et jalons live sans export PDF"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Pré-remplir depuis l&apos;activité live</span>
+          </button>
+          <button
+            type="button"
             onClick={handleGenerateMonthlyReport}
             className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition shadow-xs whitespace-nowrap"
-            title="Compiler un résumé filtré sur le mois en cours et télécharger le PDF mensuel"
+            title="Compiler le mois sélectionné et télécharger le PDF mensuel"
           >
             <FileDown className="w-3.5 h-3.5" />
-            <span>Générer rapport mensuel</span>
+            <span>Générer PDF du mois</span>
           </button>
           <button
             type="button"
@@ -422,7 +518,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
             title="Calculer automatiquement les compteurs depuis les fiches d'intervention de ce mois"
           >
             <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-            <span>Synchroniser le mois</span>
+            <span>Synchroniser compteurs</span>
           </button>
           <button
             type="button"

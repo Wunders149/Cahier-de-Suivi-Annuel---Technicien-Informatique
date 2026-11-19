@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   AlertCircle,
   Clock,
+  Zap,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
@@ -304,6 +305,26 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
     notify('Incident de sécurité supprimé.');
   };
 
+  const openTemplateBackup = (preset: Partial<SuiviSauvegarde>) => {
+    setEditingBackupId(null);
+    setIsDuplicatingBackup(false);
+    setFormBackup({
+      ...DEFAULT_BACKUP(),
+      ...preset,
+    });
+    setBackupModalOpen(true);
+  };
+
+  const openTemplateSecurity = (preset: Partial<IncidentSecurite>) => {
+    setEditingSecId(null);
+    setIsDuplicatingSec(false);
+    setFormSec({
+      ...DEFAULT_SECURITY(),
+      ...preset,
+    });
+    setSecModalOpen(true);
+  };
+
   return (
     <div className="space-y-8">
       {/* En-tête */}
@@ -329,6 +350,108 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
             <span>Consigner un Incident</span>
           </button>
         </div>
+      </div>
+
+      {/* Modèles rapides SOGEDIPROMA (PRA & Sécurité) */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 mr-1">
+          <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          Modèles rapides :
+        </span>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateBackup({
+              nomJob: 'Sauvegarde NAS Règle 3-2-1 — Données Partagées',
+              serveurCible: 'NAS-SOGEDIPROMA',
+              typeSauvegarde: 'Quotidienne Incrémentale',
+              horaireExecution: '22:30',
+              tailleGo: 320,
+              dureeExecutionMin: 40,
+              destinationStockage: 'NAS Synology RAID + Disque Externe Hors-Site (3-2-1)',
+              statut: 'Succès',
+              resultatTestRestauration: 'Succès complet',
+              observations: 'Copie quotidienne vérifiée avec rotation hebdomadaire sur support externe.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Backup NAS 3-2-1
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateBackup({
+              nomJob: 'Dump Base Odoo ERP / PostgreSQL',
+              serveurCible: 'SRV-SOGEDIPROMA-APP',
+              typeSauvegarde: 'Hebdomadaire Différentielle',
+              horaireExecution: '23:30',
+              tailleGo: 45,
+              dureeExecutionMin: 18,
+              destinationStockage: 'NAS Local + Archive Cloud Chiffrée',
+              statut: 'Succès',
+              resultatTestRestauration: 'Succès complet',
+              observations: 'Export pg_dump + filestore Odoo vérifié sans erreur.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Dump Odoo PostgreSQL
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateBackup({
+              nomJob: 'Exercice Trimestriel de Restauration PRA',
+              serveurCible: 'Serveur Fichiers & ERP',
+              typeSauvegarde: 'Mensuelle Complète',
+              horaireExecution: '14:00',
+              tailleGo: 120,
+              dureeExecutionMin: 30,
+              destinationStockage: 'Environnement Bac à Sable PRA',
+              statut: 'Succès',
+              resultatTestRestauration: 'Succès complet',
+              observations: 'Restauration testée : intégrité fichiers et démarrage base validés (RTO < 45 min).',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Test Restauration PRA
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateSecurity({
+              typeIncident: 'Alerte EDR / Malware',
+              severite: 'Faible',
+              postesConcernes: 'Parc Postes & Pare-feu SOGEDIPROMA',
+              description: 'Contrôle périodique signatures Antivirus/EDR, pare-feu et mises à jour Windows.',
+              actionsMenées: 'Vérification consoles de sécurité et mise à jour des postes détectés.',
+              statut: 'Clôturé',
+              leconsApprises: 'Audit de conformité préventif conforme PSSI.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Contrôle Antivirus / Firewall
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateSecurity({
+              typeIncident: 'Tentative Phishing',
+              severite: 'Moyenne',
+              postesConcernes: 'Messagerie Collaborateur',
+              description: 'Email suspect signalé avec pièce jointe ou lien frauduleux.',
+              actionsMenées: 'Mise en quarantaine du message, blocage domaine expéditeur et sensibilisation utilisateur.',
+              statut: 'Sous surveillance',
+              leconsApprises: 'Rappel de vigilance sur l’authentification des expéditeurs externes.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Alerte Phishing
+        </button>
       </div>
 
       {/* Cartouche Règle 3-2-1 de sauvegarde */}

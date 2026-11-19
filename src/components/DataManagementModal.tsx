@@ -168,14 +168,15 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   const handleApplyCleanWorkbook = () => {
     const cleanWorkbook = createCleanProductionWorkbook(
       data.generalInfo.anneeReference,
-      data.generalInfo.nomTechnicien === 'DUBOIS'
-        ? ''
+      data.generalInfo.nomTechnicien === 'DUBOIS' || !data.generalInfo.nomTechnicien?.trim()
+        ? 'RAZAFIMAHEFA'
         : data.generalInfo.nomTechnicien,
-      data.generalInfo.prenomTechnicien === 'Alexandre'
-        ? ''
+      data.generalInfo.prenomTechnicien === 'Alexandre' || !data.generalInfo.prenomTechnicien?.trim()
+        ? 'Philibert'
         : data.generalInfo.prenomTechnicien,
-      data.generalInfo.entreprise === 'GROUPE NEXUS TECHNOLOGIES & SERVICES'
-        ? ''
+      data.generalInfo.entreprise === 'GROUPE NEXUS TECHNOLOGIES & SERVICES' ||
+        !data.generalInfo.entreprise?.trim()
+        ? 'SOGEDIPROMA'
         : data.generalInfo.entreprise,
       data.generalInfo.responsableHierarchique === 'M. Marc LEFEBVRE'
         ? ''
@@ -183,7 +184,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
     );
 
     onUpdateData(cleanWorkbook);
-    onShowToast('Cahier de suivi réinitialisé en mode Production Vierge.');
+    onShowToast('Cahier de suivi réinitialisé sur le profil de production SOGEDIPROMA.');
     setConfirmCleanOpen(false);
     onClose();
   };

@@ -483,7 +483,7 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
                       const invest = p.coutInvestissementEuros || 0;
                       const eco = p.economiesFinancieresAnnuellesEuros || 0;
                       const heures = p.gainTempsEstimeHeuresParAn || 0;
-                      const val = eco + heures * (p.tauxHoraireMoyenValorise || 35);
+                      const val = eco + heures * (p.tauxHoraireMoyenValorise || 25000);
                       const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
                       const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
 
@@ -493,8 +493,8 @@ export const PrintBooklet: React.FC<PrintBookletProps> = ({
                             <strong>{p.nomProjet}</strong>
                             <span className="block text-slate-500 text-[9px]">{p.categorie}</span>
                           </td>
-                          <td className="p-2 text-right font-mono">{invest.toLocaleString('fr-FR')} €</td>
-                          <td className="p-2 text-right font-mono text-emerald-800 font-semibold">+{eco.toLocaleString('fr-FR')} €/an</td>
+                          <td className="p-2 text-right font-mono">{Math.round(invest).toLocaleString('fr-FR')} Ar</td>
+                          <td className="p-2 text-right font-mono text-emerald-800 font-semibold">+{Math.round(eco).toLocaleString('fr-FR')} Ar/an</td>
                           <td className="p-2 text-right font-mono text-blue-800">{heures} h/an</td>
                           <td className="p-2 text-right font-mono font-bold text-slate-900">
                             {roi > 0 ? `+${roi}%` : `${roi}%`} ({payback} m)

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BilanTrimestriel, BilanAnnuel, GeneralInfo } from '../../types/it-tracker';
+import { BilanTrimestriel, BilanAnnuel, CahierSuiviData, GeneralInfo } from '../../types/it-tracker';
 import {
   Award,
   CheckCircle2,
@@ -13,6 +13,7 @@ import {
   BarChart3,
   Edit3,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { RoiProjectsSection } from '../roi/RoiProjectsSection';
 import { FormField, FormSection } from '../ui/FormField';
@@ -24,19 +25,23 @@ import {
 } from '../ui/formStyles';
 
 interface QuarterlyAnnualSectionProps {
+  data?: CahierSuiviData;
   bilansTrimestriels: BilanTrimestriel[];
   bilanAnnuel: BilanAnnuel;
   generalInfo?: GeneralInfo;
   onUpdateTrimestriels: (bilans: BilanTrimestriel[]) => void;
   onUpdateBilanAnnuel: (bilan: BilanAnnuel) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
+  data,
   bilansTrimestriels,
   bilanAnnuel,
   generalInfo,
   onUpdateTrimestriels,
   onUpdateBilanAnnuel,
+  onShowToast,
 }) => {
   const [activeTab, setActiveTab] = useState<'annuel' | 'roi' | 'trimestres'>('annuel');
   const [selectedTrimestre, setSelectedTrimestre] = useState<'T1' | 'T2' | 'T3' | 'T4'>('T4');
@@ -83,14 +88,17 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
     let investTotal = 0;
     let ecoDirectes = 0;
     let heuresTotal = 0;
+    let gainTempsVal = 0;
 
     list.forEach((p) => {
+      const heures = Number(p.gainTempsEstimeHeuresParAn) || 0;
+      const taux = Number(p.tauxHoraireMoyenValorise) || 25000;
       investTotal += Number(p.coutInvestissementEuros) || 0;
       ecoDirectes += Number(p.economiesFinancieresAnnuellesEuros) || 0;
-      heuresTotal += Number(p.gainTempsEstimeHeuresParAn) || 0;
+      heuresTotal += heures;
+      gainTempsVal += heures * taux;
     });
 
-    const gainTempsVal = heuresTotal * 35; // 35€/h standard
     const beneficeTotal = ecoDirectes + gainTempsVal;
     const roi1An =
       investTotal > 0
@@ -106,6 +114,135 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
       roi1An,
     };
   }, [bilanAnnuel.projetsRoi]);
+
+  const handlePrefillAnnualFromWorkbook = () => {
+    if (!data) return;
+    const totalTickets = data.interventions.length;
+    const resolvedTickets = data.interventions.filter((i) => i.resultat === 'Résolu').length;
+    const resRate = totalTickets > 0 ? Math.round((resolvedTickets / totalTickets) * 100) : 100;
+    const doneTasks = data.journalTaches.filter((t) => t.statut === 'Terminé').length;
+    const objDone = data.objectifsAnnuels.filter((o) => o.statut === 'Atteint' || o.avancement >= 100).length;
+    const avgObjPct =
+      data.objectifsAnnuels.length > 0
+        ? Math.round(
+            data.objectifsAnnuels.reduce((s, o) => s + (o.avancement || 0), 0) /
+              data.objectifsAnnuels.length
+          )
+        : resRate;
+
+    const realisations: string[] = [
+      `• Support & Ticketing : ${resolvedTickets}/${totalTickets} intervention(s) résolue(s) (${resRate}% de résolution).`,
+      `• Parc & Licences suivis : ${data.parcEquipements.length} équipement(s) CMDB, ${data.logicielsLicences.length} licence(s)/accès recensés.`,
+      ...data.objectifsAnnuels
+        .filter((o) => o.avancement >= 80 || o.statut === 'Atteint')
+        .slice(0, 4)
+        .map((o) => `• ${o.titre} (${o.avancement}%)`),
+    ];
+
+    const incidentsMaj: string[] = [
+      ...data.interventions
+        .filter((i) => i.priorite === 'Critique' || i.priorite === 'Haute')
+        .slice(0, 4)
+        .map((i) => `• ${i.numeroReference} (${i.dateReception}) — ${i.equipementConcerne} : ${i.descriptionPanne}`),
+      ...data.reseauIncidents
+        .slice(0, 3)
+        .map((r) => `• Incident réseau (${r.dateHeure}) — ${r.equipementOuLiaison} : ${r.cause || r.typeIncident}`),
+    ];
+
+    const investLines: string[] = [
+      ...data.objectifsAnnuels
+        .filter((o) => o.id?.startsWith('sog-bdg-'))
+        .slice(0, 6)
+        .map((b) => `• ${b.titre} : ${b.ressourcesNecessaires}`),
+      ...data.consommables
+        .filter((c) => c.stockActuel <= c.stockMinimumAlerte)
+        .slice(0, 4)
+        .map((c) => `• Réapprovisionnement ${c.designation} (stock ${c.stockActuel}/${c.stockMinimumAlerte} ${c.unite})`),
+    ];
+
+    const prefilled: BilanAnnuel = {
+      ...bilanAnnuel,
+      objectifsAtteintsTaux: avgObjPct,
+      syntheseGenerale: `Exercice ${bilanAnnuel.annee} (${data.generalInfo.entreprise || 'SOGEDIPROMA'}) : ${resolvedTickets} intervention(s) clôturée(s) sur ${totalTickets}, ${doneTasks} tâche(s) journal terminée(s) et ${objDone}/${data.objectifsAnnuels.length} objectif(s) atteint(s).`,
+      principalesRealisations: realisations.join('\n'),
+      incidentsMajeursAnnee:
+        incidentsMaj.length > 0
+          ? incidentsMaj.join('\n')
+          : 'Aucun incident critique majeur recensé sur la période.',
+      ameliorationsApportees: `${data.maintenances.filter((m) => m.valide).length} contrôle(s) de maintenance préventive validés, ${data.sauvegardes.length} job(s) de sauvegarde/PRA suivis et consolidation des indicateurs ROI (+${Math.round(roiSummary.beneficeTotal).toLocaleString('fr-FR')} Ar/an).`,
+      investissementsInformatiquesPreconises:
+        investLines.length > 0
+          ? investLines.join('\n')
+          : bilanAnnuel.investissementsInformatiquesPreconises,
+    };
+
+    onUpdateBilanAnnuel(prefilled);
+    setAnnualForm(prefilled);
+    setIsEditingAnnual(true);
+    if (onShowToast) {
+      onShowToast('Bilan annuel pré-rempli depuis les données live du Cahier.');
+    }
+  };
+
+  const handlePrefillQuarterFromWorkbook = () => {
+    if (!data || !currentTrimestre) return;
+    const qMap: Record<'T1' | 'T2' | 'T3' | 'T4', number[]> = {
+      T1: [1, 2, 3],
+      T2: [4, 5, 6],
+      T3: [7, 8, 9],
+      T4: [10, 11, 12],
+    };
+    const months = qMap[currentTrimestre.trimestre];
+    const year = data.generalInfo.anneeReference || bilanAnnuel.annee || new Date().getFullYear();
+    const inQuarter = (dateStr?: string) => {
+      if (!dateStr) return false;
+      return months.some((m) => dateStr.startsWith(`${year}-${String(m).padStart(2, '0')}`));
+    };
+
+    const qInterv = data.interventions.filter((i) => inQuarter(i.dateReception));
+    const qResolved = qInterv.filter((i) => i.resultat === 'Résolu').length;
+    const qTasks = data.journalTaches.filter((t) => inQuarter(t.date));
+    const qMaint = data.maintenances.filter((m) => inQuarter(m.dernierControle));
+    const qNetInc = data.reseauIncidents.filter((r) => inQuarter(r.dateHeure));
+    const resRate = qInterv.length > 0 ? Math.round((qResolved / qInterv.length) * 100) : 100;
+
+    const updatedQuarter: BilanTrimestriel = {
+      ...currentTrimestre,
+      objectifsAtteints: `• ${qResolved}/${qInterv.length} intervention(s) clôturée(s) sur ${currentTrimestre.periode}\n• ${qTasks.filter((t) => t.statut === 'Terminé').length}/${qTasks.length} tâche(s) journal terminées\n• ${qMaint.length} contrôle(s) de maintenance effectués`,
+      performancesResume: `Taux de résolution ${resRate}% sur ${qInterv.length} ticket(s) reçus au ${currentTrimestre.trimestre}.`,
+      incidentsMajeurs:
+        qNetInc.length > 0 || qInterv.some((i) => i.priorite === 'Critique')
+          ? [
+              ...qInterv
+                .filter((i) => i.priorite === 'Critique' || i.priorite === 'Haute')
+                .slice(0, 3)
+                .map((i) => `• ${i.numeroReference} : ${i.descriptionPanne}`),
+              ...qNetInc
+                .slice(0, 3)
+                .map((n) => `• Réseau (${n.equipementOuLiaison}) : ${n.cause || n.typeIncident}`),
+            ].join('\n')
+          : 'Aucun incident critique signalé sur ce trimestre.',
+      ameliorationsApportees: `${qMaint.filter((m) => m.valide).length} contrôle(s) préventifs validés ; suivi continu du parc (${data.parcEquipements.length} équipements) et des sauvegardes.`,
+      investissementsNecessaires: data.demandesAchat
+        .filter((d) => d.statut !== 'Reçu / Contrôlé')
+        .slice(0, 3)
+        .map((d) => `${d.articlesDemandes} (${Math.round(d.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar)`)
+        .join(' ; ') || currentTrimestre.investissementsNecessaires,
+      tauxSatisfactionUtilisateurs: resRate,
+      tauxDisponibiliteInfrastructure: qNetInc.length === 0 ? 99.8 : Math.max(95, 100 - qNetInc.length * 0.5),
+    };
+
+    onUpdateTrimestriels(
+      bilansTrimestriels.map((bt) =>
+        bt.trimestre === updatedQuarter.trimestre ? updatedQuarter : bt
+      )
+    );
+    setQuarterForm(updatedQuarter);
+    setIsEditingQuarter(true);
+    if (onShowToast) {
+      onShowToast(`Trimestre ${updatedQuarter.trimestre} pré-rempli depuis le Cahier.`);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -184,7 +321,17 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                {data && (
+                  <button
+                    type="button"
+                    onClick={handlePrefillAnnualFromWorkbook}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Pré-remplir depuis le Cahier</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -442,8 +589,8 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   <span className="text-[10px] font-semibold text-slate-500 uppercase block">
                     Investissement Engagé
                   </span>
-                  <strong className="text-slate-900 font-mono tabular-nums text-base font-bold">
-                    {roiSummary.investTotal.toLocaleString('fr-FR')} €
+                  <strong className="text-slate-900 font-mono tabular-nums text-sm sm:text-base font-bold">
+                    {Math.round(roiSummary.investTotal).toLocaleString('fr-FR')} Ar
                   </strong>
                 </div>
 
@@ -451,8 +598,8 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   <span className="text-[10px] font-semibold text-emerald-700 uppercase block">
                     Économies Directes
                   </span>
-                  <strong className="text-emerald-700 font-mono tabular-nums text-base font-bold">
-                    +{roiSummary.ecoDirectes.toLocaleString('fr-FR')} €/an
+                  <strong className="text-emerald-700 font-mono tabular-nums text-sm sm:text-base font-bold">
+                    +{Math.round(roiSummary.ecoDirectes).toLocaleString('fr-FR')} Ar/an
                   </strong>
                 </div>
 
@@ -460,7 +607,7 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   <span className="text-[10px] font-semibold text-blue-700 uppercase block">
                     Temps Gagné
                   </span>
-                  <strong className="text-blue-700 font-mono tabular-nums text-base font-bold">
+                  <strong className="text-blue-700 font-mono tabular-nums text-sm sm:text-base font-bold">
                     {roiSummary.heuresTotal} h/an
                   </strong>
                 </div>
@@ -469,8 +616,8 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   <span className="text-[10px] font-semibold text-emerald-100 uppercase block">
                     Bénéfice Annuel Net
                   </span>
-                  <strong className="font-mono tabular-nums text-base font-black">
-                    +{roiSummary.beneficeTotal.toLocaleString('fr-FR')} €/an
+                  <strong className="font-mono tabular-nums text-sm sm:text-base font-black">
+                    +{Math.round(roiSummary.beneficeTotal).toLocaleString('fr-FR')} Ar/an
                   </strong>
                 </div>
               </div>
@@ -627,6 +774,8 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
           onUpdateProjets={(projets) =>
             onUpdateBilanAnnuel({ ...bilanAnnuel, projetsRoi: projets })
           }
+          objectifsAnnuels={data?.objectifsAnnuels || []}
+          onShowToast={onShowToast}
         />
       )}
 
@@ -692,6 +841,16 @@ export const QuarterlyAnnualSection: React.FC<QuarterlyAnnualSectionProps> = ({
                   Disponibilité SI :{' '}
                   {currentTrimestre.tauxDisponibiliteInfrastructure}%
                 </span>
+                {data && (
+                  <button
+                    type="button"
+                    onClick={handlePrefillQuarterFromWorkbook}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Pré-remplir depuis le Cahier</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

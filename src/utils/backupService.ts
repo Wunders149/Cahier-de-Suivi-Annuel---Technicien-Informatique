@@ -1,6 +1,44 @@
 import { CahierSuiviData } from '../types/it-tracker';
 import { initialCahierData } from '../data/initialData';
 
+function pickNonEmpty(candidate: unknown, fallback: string): string {
+  if (typeof candidate === 'string' && candidate.trim().length > 0) {
+    return candidate;
+  }
+  return fallback;
+}
+
+function mergeGeneralInfoWithFallback(
+  primary: Partial<CahierSuiviData['generalInfo']> | undefined,
+  fallback: CahierSuiviData['generalInfo']
+): CahierSuiviData['generalInfo'] {
+  const src = primary && typeof primary === 'object' ? primary : {};
+  return {
+    ...fallback,
+    ...src,
+    anneeReference:
+      typeof src.anneeReference === 'number' && src.anneeReference > 2000
+        ? src.anneeReference
+        : fallback.anneeReference,
+    nomTechnicien: pickNonEmpty(src.nomTechnicien, fallback.nomTechnicien),
+    prenomTechnicien: pickNonEmpty(src.prenomTechnicien, fallback.prenomTechnicien),
+    fonction: pickNonEmpty(src.fonction, fallback.fonction),
+    departement: pickNonEmpty(src.departement, fallback.departement),
+    entreprise: pickNonEmpty(src.entreprise, fallback.entreprise),
+    responsableHierarchique: pickNonEmpty(
+      src.responsableHierarchique,
+      fallback.responsableHierarchique
+    ),
+    titreResponsable: pickNonEmpty(src.titreResponsable, fallback.titreResponsable),
+    datePriseFonction: pickNonEmpty(src.datePriseFonction, fallback.datePriseFonction),
+    telephonePro: pickNonEmpty(src.telephonePro, fallback.telephonePro),
+    emailPro: pickNonEmpty(src.emailPro, fallback.emailPro),
+    localisationBureau: pickNonEmpty(src.localisationBureau, fallback.localisationBureau),
+    charteAcceptee:
+      typeof src.charteAcceptee === 'boolean' ? src.charteAcceptee : fallback.charteAcceptee,
+  };
+}
+
 /**
  * Normalise et complète un objet CahierSuiviData (issu du localStorage, Cloud ou JSON)
  * pour garantir l'intégrité de toutes les sections et éviter tout crash sur champ manquant.
@@ -9,10 +47,7 @@ export function normalizeWorkbookData(raw: unknown): CahierSuiviData {
   const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<CahierSuiviData>;
   const base = initialCahierData;
 
-  const generalInfo = {
-    ...base.generalInfo,
-    ...(source.generalInfo && typeof source.generalInfo === 'object' ? source.generalInfo : {}),
-  };
+  const generalInfo = mergeGeneralInfoWithFallback(source.generalInfo, base.generalInfo);
 
   const rawRapports = Array.isArray(source.rapportsMensuels) ? source.rapportsMensuels : [];
   const rapportsMensuels = base.rapportsMensuels.map((defaultRep) => {
@@ -158,10 +193,7 @@ export function mergeWorkbookData(
   );
 
   return normalizeWorkbookData({
-    generalInfo: {
-      ...cloud.generalInfo,
-      ...local.generalInfo,
-    },
+    generalInfo: mergeGeneralInfoWithFallback(local.generalInfo, cloud.generalInfo),
     objectifsAnnuels: mergeArraysById(local.objectifsAnnuels, cloud.objectifsAnnuels),
     jalonsCalendrier: mergeArraysById(local.jalonsCalendrier, cloud.jalonsCalendrier),
     journalTaches: mergeArraysById(local.journalTaches, cloud.journalTaches),
@@ -307,25 +339,25 @@ export async function parseBackupFile(file: File): Promise<{ success: boolean; d
  */
 export function createCleanProductionWorkbook(
   annee: number = new Date().getFullYear(),
-  technicienNom: string = '',
-  technicienPrenom: string = '',
-  entreprise: string = '',
+  technicienNom: string = 'RAZAFIMAHEFA',
+  technicienPrenom: string = 'Philibert',
+  entreprise: string = 'SOGEDIPROMA',
   responsableHierarchique: string = ''
 ): CahierSuiviData {
   return {
     generalInfo: {
       anneeReference: annee,
-      nomTechnicien: technicienNom,
-      prenomTechnicien: technicienPrenom,
+      nomTechnicien: technicienNom || 'RAZAFIMAHEFA',
+      prenomTechnicien: technicienPrenom || 'Philibert',
       fonction: 'Technicien Informatique',
       departement: 'Direction des Systèmes d\'Information (DSI)',
-      entreprise: entreprise,
+      entreprise: entreprise || 'SOGEDIPROMA',
       responsableHierarchique: responsableHierarchique,
       titreResponsable: 'Responsable des Systèmes d\'Information (RSI)',
-      datePriseFonction: new Date().toISOString().split('T')[0],
+      datePriseFonction: `${annee}-01-01`,
       telephonePro: '',
-      emailPro: '',
-      localisationBureau: '',
+      emailPro: 'razafimahefaphilibert7@gmail.com',
+      localisationBureau: 'Siège SOGEDIPROMA — Atelier DSI',
       charteAcceptee: true,
     },
     objectifsAnnuels: [],

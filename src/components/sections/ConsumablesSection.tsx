@@ -776,11 +776,11 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                   className={fieldInputClass}
                 />
               </FormField>
-              <FormField label="Montant estimé (€ TTC)">
+              <FormField label="Montant estimé (Ar)">
                 <input
                   type="number"
                   min={0}
-                  step="0.01"
+                  step={1000}
                   value={formDA.montantEstimeTTC ?? 0}
                   onChange={(e) =>
                     setFormDA({ ...formDA, montantEstimeTTC: parseFloat(e.target.value) || 0 })
@@ -897,7 +897,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
               <div>
                 <div className="text-[11px] text-slate-500">Montant TTC</div>
                 <div className="font-mono tabular-nums font-bold text-slate-900 mt-0.5">
-                  {inspectingDA.montantEstimeTTC.toFixed(2)} €
+                  {Math.round(inspectingDA.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar
                 </div>
               </div>
               <div>
@@ -945,7 +945,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
         itemLabel={deletingDA?.numeroCommande || ''}
         itemMeta={
           deletingDA
-            ? `${deletingDA.articlesDemandes} · ${deletingDA.montantEstimeTTC.toFixed(2)} € TTC`
+            ? `${deletingDA.articlesDemandes} · ${Math.round(deletingDA.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar`
             : undefined
         }
       />
@@ -1155,7 +1155,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
                       <td className="p-3 align-top whitespace-nowrap">
                         <span className="text-slate-800 font-medium block">{da.fournisseur}</span>
                         <strong className="text-slate-900 text-sm font-mono tabular-nums">
-                          {da.montantEstimeTTC.toFixed(2)} € TTC
+                          {Math.round(da.montantEstimeTTC || 0).toLocaleString('fr-FR')} Ar
                         </strong>
                       </td>
                       <td className="p-3 align-top whitespace-nowrap">

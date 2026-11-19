@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ProjetRoiIT } from '../../types/it-tracker';
+import { ObjectifAnnuel, ProjetRoiIT } from '../../types/it-tracker';
 import {
   TrendingUp,
   DollarSign,
@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Percent,
   Layers,
+  Download,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -36,25 +37,84 @@ import {
 interface RoiProjectsSectionProps {
   projets: ProjetRoiIT[];
   onUpdateProjets: (projets: ProjetRoiIT[]) => void;
+  objectifsAnnuels?: ObjectifAnnuel[];
+  onShowToast?: (msg: string) => void;
+}
+
+const DEFAULT_HOURLY_RATE_AR = 25000;
+
+function formatCompactAriaryAxis(val: number): string {
+  const num = Number(val) || 0;
+  if (Math.abs(num) >= 1_000_000) {
+    return `${(num / 1_000_000).toFixed(1).replace('.0', '').replace('.', ',')}M`;
+  }
+  if (Math.abs(num) >= 1_000) {
+    return `${Math.round(num / 1_000)}k`;
+  }
+  return `${num}`;
+}
+
+function parseAmountAr(text?: string): number {
+  if (!text) return 0;
+  const digits = text.replace(/[^\d]/g, '');
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mapBudgetCategoryToRoi(titre: string, desc: string): ProjetRoiIT['categorie'] {
+  const hay = `${titre} ${desc}`.toLowerCase();
+  if (/sécur|sauvegard|antivirus|pare-feu|caméra|cctv|vidéo/.test(hay)) {
+    return 'Sécurité & Sauvegarde';
+  }
+  if (/réseau|fibre|starlink|switch|wifi|routeur|télécom/.test(hay)) {
+    return 'Réseau & Télécoms';
+  }
+  if (/cloud|saas|licence|odoo|m365|abonnement|logiciel/.test(hay)) {
+    return 'Cloud & SaaS';
+  }
+  if (/automat|script|api/.test(hay)) {
+    return 'Automatisation';
+  }
+  if (/poste|pc|laptop|imprimante|bureautique|écran/.test(hay)) {
+    return 'Bureautique & Postes';
+  }
+  return 'Infrastructure';
 }
 
 export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
   projets = [],
   onUpdateProjets,
+  objectifsAnnuels = [],
+  onShowToast,
 }) => {
   const [showModal, setShowModal] = useState(false);
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const sogBudgets = useMemo(() => {
+    return (objectifsAnnuels || [])
+      .filter((o) => o.id?.startsWith('sog-bdg-') || /Ar/i.test(o.ressourcesNecessaires || ''))
+      .map((o) => ({
+        id: o.id,
+        titre: o.titre.replace(/^Budget\s+\d{4}\s+—\s+/i, '').trim(),
+        fullTitre: o.titre,
+        description: o.description,
+        resultatsAttendus: o.resultatsAttendus,
+        allocatedAr: parseAmountAr(o.ressourcesNecessaires),
+        categorie: mapBudgetCategoryToRoi(o.titre, o.description),
+      }));
+  }, [objectifsAnnuels]);
 
   // Formulaire d'édition / création
   const [formData, setFormData] = useState<Partial<ProjetRoiIT>>({
     nomProjet: '',
     description: '',
     categorie: 'Automatisation',
-    coutInvestissementEuros: 2500,
-    economiesFinancieresAnnuellesEuros: 1500,
+    coutInvestissementEuros: 1500000,
+    economiesFinancieresAnnuellesEuros: 900000,
     gainTempsEstimeHeuresParAn: 60,
-    tauxHoraireMoyenValorise: 35,
+    tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
     impactQualitatif: '',
     dateMiseEnService: new Date().toISOString().split('T')[0],
     statut: 'En production',
@@ -71,7 +131,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       const invest = Number(p.coutInvestissementEuros) || 0;
       const eco = Number(p.economiesFinancieresAnnuellesEuros) || 0;
       const heures = Number(p.gainTempsEstimeHeuresParAn) || 0;
-      const taux = Number(p.tauxHoraireMoyenValorise) || 35;
+      const taux = Number(p.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR;
       const valTemps = heures * taux;
 
       totalInvestissement += invest;
@@ -118,7 +178,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       const invest = Number(p.coutInvestissementEuros) || 0;
       const eco = Number(p.economiesFinancieresAnnuellesEuros) || 0;
       const heures = Number(p.gainTempsEstimeHeuresParAn) || 0;
-      const taux = Number(p.tauxHoraireMoyenValorise) || 35;
+      const taux = Number(p.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR;
       const gainAnnuel = eco + (heures * taux);
       const gain3Ans = gainAnnuel * 3;
 
@@ -136,7 +196,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
     const invest = Number(formData.coutInvestissementEuros) || 0;
     const eco = Number(formData.economiesFinancieresAnnuellesEuros) || 0;
     const heures = Number(formData.gainTempsEstimeHeuresParAn) || 0;
-    const taux = Number(formData.tauxHoraireMoyenValorise) || 35;
+    const taux = Number(formData.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR;
 
     const valTemps = heures * taux;
     const gainAnnuelTotal = eco + valTemps;
@@ -157,15 +217,36 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       nomProjet: '',
       description: '',
       categorie: 'Automatisation',
-      coutInvestissementEuros: 2000,
-      economiesFinancieresAnnuellesEuros: 1200,
+      coutInvestissementEuros: 1500000,
+      economiesFinancieresAnnuellesEuros: 900000,
       gainTempsEstimeHeuresParAn: 50,
-      tauxHoraireMoyenValorise: 35,
+      tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
       impactQualitatif: '',
       dateMiseEnService: new Date().toISOString().split('T')[0],
       statut: 'En production',
     });
     setShowModal(true);
+  };
+
+  const handleImportBudgetAsRoi = (budget: (typeof sogBudgets)[number]) => {
+    setEditingId(null);
+    setShowBudgetModal(false);
+    setFormData({
+      nomProjet: budget.titre,
+      description: `${budget.description}\n${budget.resultatsAttendus}`.trim(),
+      categorie: budget.categorie,
+      coutInvestissementEuros: budget.allocatedAr || 0,
+      economiesFinancieresAnnuellesEuros: Math.round((budget.allocatedAr || 0) * 0.35),
+      gainTempsEstimeHeuresParAn: 40,
+      tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
+      impactQualitatif: `Ligne budgétaire SOGEDIPROMA importée (${budget.allocatedAr.toLocaleString('fr-FR')} Ar).`,
+      dateMiseEnService: new Date().toISOString().split('T')[0],
+      statut: 'En cours',
+    });
+    setShowModal(true);
+    if (onShowToast) {
+      onShowToast(`Budget "${budget.titre}" chargé dans le simulateur ROI.`);
+    }
   };
 
   const handleOpenEditModal = (proj: ProjetRoiIT) => {
@@ -199,7 +280,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
         coutInvestissementEuros: Number(formData.coutInvestissementEuros) || 0,
         economiesFinancieresAnnuellesEuros: Number(formData.economiesFinancieresAnnuellesEuros) || 0,
         gainTempsEstimeHeuresParAn: Number(formData.gainTempsEstimeHeuresParAn) || 0,
-        tauxHoraireMoyenValorise: Number(formData.tauxHoraireMoyenValorise) || 35,
+        tauxHoraireMoyenValorise: Number(formData.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR,
         impactQualitatif: formData.impactQualitatif || '',
         dateMiseEnService: formData.dateMiseEnService || new Date().toISOString().split('T')[0],
         statut: (formData.statut as any) || 'En production',
@@ -220,21 +301,34 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               <TrendingUp className="w-5 h-5" />
             </span>
             <h3 className="text-xl font-bold text-slate-900">
-              Calcul du Retour sur Investissement (ROI) des Projets IT
+              Calcul du Retour sur Investissement (ROI) des Projets IT (Ar)
             </h3>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Valorisation économique des chantiers réalisés, économies directes récurrentes et gains de productivité opérationnels.
+            Valorisation économique en Ariary (Ar) des chantiers réalisés, économies directes et gains de productivité opérationnels.
           </p>
         </div>
 
-        <button
-          onClick={handleOpenAddModal}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition shrink-0 whitespace-nowrap"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Ajouter un Projet au Bilan ROI</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {sogBudgets.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowBudgetModal(true)}
+              className={secondaryButtonClass}
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              <span>Importer Budget SOGEDIPROMA ({sogBudgets.length})</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleOpenAddModal}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Ajouter un Projet au Bilan ROI</span>
+          </button>
+        </div>
       </div>
 
       {/* Cartes KPI Consolidées du Retour sur Investissement */}
@@ -245,8 +339,8 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             <span className="text-[11px] font-semibold uppercase tracking-wider">Investissement Total</span>
             <DollarSign className="w-4 h-4 text-slate-400" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-slate-900 font-mono tabular-nums">
-            {summary.totalInvestissement.toLocaleString('fr-FR')} €
+          <div className="text-lg sm:text-xl font-black text-slate-900 font-mono tabular-nums">
+            {Math.round(summary.totalInvestissement).toLocaleString('fr-FR')} Ar
           </div>
           <span className="text-[10px] text-slate-400 block mt-1">
             Matériel, licences & prestations
@@ -259,8 +353,8 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             <span className="text-[11px] font-semibold uppercase tracking-wider">Économies Directes</span>
             <ArrowUpRight className="w-4 h-4" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-emerald-600 font-mono tabular-nums">
-            +{summary.totalEconomiesDirectes.toLocaleString('fr-FR')} €/an
+          <div className="text-lg sm:text-xl font-black text-emerald-600 font-mono tabular-nums">
+            +{Math.round(summary.totalEconomiesDirectes).toLocaleString('fr-FR')} Ar/an
           </div>
           <span className="text-[10px] text-slate-400 block mt-1">
             Contrats résiliés & coûts évités
@@ -273,11 +367,11 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             <span className="text-[11px] font-semibold uppercase tracking-wider">Temps Économisé</span>
             <Clock className="w-4 h-4" />
           </div>
-          <div className="text-xl sm:text-2xl font-black text-blue-600 font-mono tabular-nums">
+          <div className="text-lg sm:text-xl font-black text-blue-600 font-mono tabular-nums">
             {summary.totalHeuresGagnees} h/an
           </div>
           <span className="text-[10px] text-slate-500 block mt-1">
-            Valorisé à <strong>+{summary.totalValorisationTemps.toLocaleString('fr-FR')} €/an</strong>
+            Valorisé à <strong className="font-mono tabular-nums">+{Math.round(summary.totalValorisationTemps).toLocaleString('fr-FR')} Ar/an</strong>
           </span>
         </div>
 
@@ -311,14 +405,14 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             <div>
               <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <BarChart2 className="w-4 h-4 text-emerald-600" />
-                Comparatif Financier : Investissement initial vs Gains générés (€)
+                Comparatif Financier : Investissement initial vs Gains générés (Ar)
               </h4>
               <p className="text-xs text-slate-500 mt-0.5">
                 Mise en regard du coût d'engagement avec la création de valeur annuelle et la projection à 3 ans.
               </p>
             </div>
             <span className="text-xs font-mono tabular-nums font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
-              Bénéfice Net Annuel : +{summary.beneficeAnnuelTotal.toLocaleString('fr-FR')} €/an
+              Bénéfice Annuel : +{Math.round(summary.beneficeAnnuelTotal).toLocaleString('fr-FR')} Ar/an
             </span>
           </div>
 
@@ -326,7 +420,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
-                margin={{ top: 10, right: 15, left: 0, bottom: 20 }}
+                margin={{ top: 10, right: 15, left: 6, bottom: 20 }}
               >
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis
@@ -340,10 +434,11 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                   tick={{ fontSize: 11, fill: '#64748b' }}
                   tickLine={false}
                   axisLine={{ stroke: '#cbd5e1' }}
-                  tickFormatter={(val) => `${val} €`}
+                  tickFormatter={formatCompactAriaryAxis}
+                  width={56}
                 />
                 <Tooltip
-                  formatter={(value: any) => [`${Number(value).toLocaleString('fr-FR')} €`, '']}
+                  formatter={(value: any) => [`${Math.round(Number(value)).toLocaleString('fr-FR')} Ar`, '']}
                   contentStyle={{
                     backgroundColor: '#0f172a',
                     borderColor: '#334155',
@@ -387,7 +482,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               const invest = Number(proj.coutInvestissementEuros) || 0;
               const eco = Number(proj.economiesFinancieresAnnuellesEuros) || 0;
               const heures = Number(proj.gainTempsEstimeHeuresParAn) || 0;
-              const taux = Number(proj.tauxHoraireMoyenValorise) || 35;
+              const taux = Number(proj.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR;
               const valTemps = heures * taux;
               const gainAnnuelTotal = eco + valTemps;
               const roiProjet = invest > 0 ? Math.round(((gainAnnuelTotal - invest) / invest) * 100) : 0;
@@ -440,14 +535,14 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Investissement</span>
                       <strong className="text-slate-900 font-mono tabular-nums text-xs font-bold">
-                        {invest.toLocaleString('fr-FR')} €
+                        {Math.round(invest).toLocaleString('fr-FR')} Ar
                       </strong>
                     </div>
 
                     <div>
                       <span className="text-[10px] text-slate-400 block font-medium">Économies directes</span>
                       <strong className="text-emerald-600 font-mono tabular-nums text-xs font-bold">
-                        +{eco.toLocaleString('fr-FR')} €/an
+                        +{Math.round(eco).toLocaleString('fr-FR')} Ar/an
                       </strong>
                     </div>
 
@@ -457,7 +552,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                         {heures} h/an
                       </strong>
                       <span className="text-[9px] text-slate-400 block font-mono tabular-nums">
-                        (+{valTemps.toLocaleString('fr-FR')} €)
+                        (+{Math.round(valTemps).toLocaleString('fr-FR')} Ar)
                       </span>
                     </div>
 
@@ -598,7 +693,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField
-                label="Coût d'investissement (€ HT)"
+                label="Coût d'investissement (Ar)"
                 required
                 hint="Matériel, licences, formation, prestation"
               >
@@ -606,7 +701,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                   type="number"
                   required
                   min={0}
-                  step={50}
+                  step={50000}
                   value={formData.coutInvestissementEuros ?? 0}
                   onChange={(e) =>
                     setFormData({ ...formData, coutInvestissementEuros: Number(e.target.value) })
@@ -616,7 +711,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               </FormField>
 
               <FormField
-                label="Économies financières directes (€ / an)"
+                label="Économies financières directes (Ar / an)"
                 required
                 hint="Coûts de licences résiliées, électricité, maintenance évitée"
               >
@@ -624,7 +719,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                   type="number"
                   required
                   min={0}
-                  step={50}
+                  step={50000}
                   value={formData.economiesFinancieresAnnuellesEuros ?? 0}
                   onChange={(e) =>
                     setFormData({
@@ -660,16 +755,16 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               </FormField>
 
               <FormField
-                label="Taux horaire moyen valorisé (€ / heure)"
+                label="Taux horaire moyen valorisé (Ar / heure)"
                 required
-                hint="Coût horaire moyen standard d'entreprise (défaut : 35 €/h)"
+                hint="Coût horaire moyen standard (défaut : 25 000 Ar/h)"
               >
                 <input
                   type="number"
                   required
-                  min={10}
-                  step={5}
-                  value={formData.tauxHoraireMoyenValorise ?? 35}
+                  min={1000}
+                  step={1000}
+                  value={formData.tauxHoraireMoyenValorise ?? DEFAULT_HOURLY_RATE_AR}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
@@ -688,10 +783,10 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
                   Bénéfice Annuel Total Projeté
                 </span>
                 <strong className="text-emerald-800 text-sm font-mono tabular-nums">
-                  +{liveFormMetrics.gainAnnuelTotal.toLocaleString('fr-FR')} € / an
+                  +{Math.round(liveFormMetrics.gainAnnuelTotal).toLocaleString('fr-FR')} Ar / an
                 </strong>
-                <span className="text-[11px] text-slate-500 block">
-                  dont +{liveFormMetrics.valTemps.toLocaleString('fr-FR')} € de temps valorisé
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
+                  dont +{Math.round(liveFormMetrics.valTemps).toLocaleString('fr-FR')} Ar de temps valorisé
                 </span>
               </div>
 
@@ -747,6 +842,49 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
               </FormField>
             </div>
           </FormSection>
+        </div>
+      </Modal>
+
+      {/* Modal Import Budget SOGEDIPROMA vers Calculateur ROI */}
+      <Modal
+        isOpen={showBudgetModal}
+        onClose={() => setShowBudgetModal(false)}
+        title="Importer un Budget SOGEDIPROMA vers le ROI"
+        subtitle="Sélectionnez une ligne budgétaire synchronisée pour pré-remplir une simulation de rentabilité en Ariary (Ar)."
+        icon={<Download className="w-4 h-4" />}
+        size="lg"
+        footer={
+          <button
+            type="button"
+            onClick={() => setShowBudgetModal(false)}
+            className={secondaryButtonClass}
+          >
+            Fermer
+          </button>
+        }
+      >
+        <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+          {sogBudgets.map((b) => (
+            <div
+              key={b.id}
+              className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-emerald-300 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="font-bold text-slate-900 truncate">{b.fullTitre}</div>
+                <div className="text-[11px] text-slate-500 line-clamp-2">{b.description}</div>
+                <div className="text-[11px] font-mono tabular-nums text-blue-700 font-semibold">
+                  Enveloppe : {b.allocatedAr.toLocaleString('fr-FR')} Ar
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleImportBudgetAsRoi(b)}
+                className={`${emeraldButtonClass} shrink-0`}
+              >
+                Pré-remplir ROI
+              </button>
+            </div>
+          ))}
         </div>
       </Modal>
     </div>

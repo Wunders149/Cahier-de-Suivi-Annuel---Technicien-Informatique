@@ -30,6 +30,12 @@ import {
 import { Modal } from './components/ui/Modal';
 import { Toast } from './components/ui/Toast';
 import { dangerButtonClass, secondaryButtonClass } from './components/ui/formStyles';
+import {
+  SogedipromaStateData,
+  SogedipromaSyncModuleKey,
+  applySogedipromaMerge,
+  mapSogedipromaToWorkbookDelta,
+} from './utils/sogedipromaSync';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
 const SYNC_META_KEY = 'cahier_suivi_sync_meta_v1';
@@ -433,6 +439,7 @@ function CahierContent({
 
               {activeTab === 'bilans' && (
                 <QuarterlyAnnualSection
+                  data={data}
                   bilansTrimestriels={data.bilansTrimestriels}
                   bilanAnnuel={data.bilanAnnuel}
                   generalInfo={data.generalInfo}
@@ -442,6 +449,7 @@ function CahierContent({
                   onUpdateBilanAnnuel={(bilanAnnuel) =>
                     setData({ ...data, bilanAnnuel })
                   }
+                  onShowToast={showToast}
                 />
               )}
             </main>
@@ -489,6 +497,14 @@ function CahierContent({
 }
 
 export default function App() {
+  const hasLocalStorageAtBootRef = useRef<boolean>((() => {
+    try {
+      return Boolean(localStorage.getItem(STORAGE_KEY));
+    } catch {
+      return false;
+    }
+  })());
+  const initialBaselineSerializedRef = useRef<string>(JSON.stringify(initialCahierData));
   const [data, setData] = useState<CahierSuiviData>(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -513,6 +529,9 @@ export default function App() {
   dataRef.current = data;
 
   const isApplyingCloudRef = useRef(false);
+  const isAutoSyncRef = useRef(false);
+  const hasAutoSyncedRef = useRef(false);
+  const didRunStartupAutoSyncRef = useRef(false);
 
   // Synchronisation continue avec localStorage + suivi des modifications locales non synchronisées
   useEffect(() => {
@@ -525,6 +544,20 @@ export default function App() {
 
     if (isApplyingCloudRef.current) {
       isApplyingCloudRef.current = false;
+      return;
+    }
+
+    if (isAutoSyncRef.current) {
+      isAutoSyncRef.current = false;
+      return;
+    }
+
+    // Au tout premier démarrage sans historique local ni cloud, ne pas marquer comme modifié manuellement
+    if (
+      !hasLocalStorageAtBootRef.current &&
+      !syncMetaRef.current.lastSyncedHash &&
+      serialized === initialBaselineSerializedRef.current
+    ) {
       return;
     }
 
@@ -602,6 +635,109 @@ export default function App() {
     writeSyncMeta(nextMeta);
   }, []);
 
+  // Synchronisation automatique et non bloquante depuis SOGEDIPROMA à l'ouverture
+  useEffect(() => {
+    if (didRunStartupAutoSyncRef.current) return;
+    didRunStartupAutoSyncRef.current = true;
+
+    let cancelled = false;
+    const runStartupAutoSync = async () => {
+      try {
+        const cfgRes = await fetch('/api/sogediproma/config');
+        if (!cfgRes.ok) return;
+        const cfg = (await cfgRes.json()) as {
+          hasDefaultUrl?: boolean;
+          defaultUrl?: string;
+          pairedUrl?: string;
+          hasDefaultCredentials?: boolean;
+        };
+        if (!cfg?.hasDefaultUrl && !cfg?.hasDefaultCredentials) return;
+
+        const syncRes = await fetch('/api/sogediproma/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        if (!syncRes.ok || cancelled) return;
+
+        const payload = (await syncRes.json()) as {
+          revision?: number;
+          data?: SogedipromaStateData;
+        };
+        if (!payload?.data || cancelled) return;
+
+        const mapped = mapSogedipromaToWorkbookDelta(payload.data);
+        const populatedSel: Record<SogedipromaSyncModuleKey, boolean> = {
+          consommables: mapped.consommables.length > 0,
+          demandesAchat: mapped.demandesAchat.length > 0,
+          parcEquipements: mapped.parcEquipements.length > 0,
+          reseauEquipements: mapped.reseauEquipements.length > 0,
+          maintenances: mapped.maintenances.length > 0,
+          interventions: mapped.interventions.length > 0,
+          journalTaches: mapped.journalTaches.length > 0,
+          logicielsLicences: mapped.logicielsLicences.length > 0,
+          objectifsAnnuels: mapped.objectifsAnnuels.length > 0,
+          jalonsCalendrier: mapped.jalonsCalendrier.length > 0,
+        };
+
+        const result = applySogedipromaMerge(
+          dataRef.current,
+          mapped,
+          populatedSel,
+          'merge'
+        );
+        if (result.estimatedBytes >= 950 * 1024) return;
+
+        const revLabel = payload.revision ?? '—';
+        const counts: string[] = [];
+        if (mapped.parcEquipements.length) counts.push(`${mapped.parcEquipements.length} mat.`);
+        if (mapped.consommables.length) counts.push(`${mapped.consommables.length} art.`);
+        if (mapped.demandesAchat.length) counts.push(`${mapped.demandesAchat.length} achats`);
+        if (mapped.logicielsLicences.length) counts.push(`${mapped.logicielsLicences.length} licences`);
+        if (mapped.objectifsAnnuels.length) counts.push(`${mapped.objectifsAnnuels.length} budgets`);
+
+        const summary = counts.length
+          ? `Synchro auto SOGEDIPROMA (rév. #${revLabel}) : ${counts.join(', ')}.`
+          : `Synchro auto SOGEDIPROMA (rév. #${revLabel}) à jour.`;
+
+        try {
+          localStorage.setItem(
+            'sogediproma_last_sync_v1',
+            JSON.stringify({
+              at: new Date().toISOString(),
+              revision: typeof payload.revision === 'number' ? payload.revision : undefined,
+              summary,
+              url: cfg.pairedUrl || cfg.defaultUrl || 'https://pc-informatique.taild86fee.ts.net',
+            })
+          );
+        } catch {
+          // Ignorer erreur localStorage
+        }
+
+        const prevSerialized = JSON.stringify(dataRef.current);
+        const nextSerialized = JSON.stringify(result.nextData);
+        hasAutoSyncedRef.current = true;
+
+        if (nextSerialized !== prevSerialized && !cancelled) {
+          isAutoSyncRef.current = true;
+          setData(result.nextData);
+          showToast(summary);
+        }
+      } catch {
+        // Silencieux si proxy/tunnel indisponible à l'ouverture
+      }
+    };
+
+    const timer = setTimeout(() => {
+      void runStartupAutoSync();
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [showToast]);
+
   const handleCloudSnapshotReceived = useCallback(
     (snapshot: CloudWorkbookSnapshot, isInitialLoad: boolean) => {
       const normalizedCloud = normalizeWorkbookData(snapshot.data);
@@ -613,7 +749,7 @@ export default function App() {
         return;
       }
 
-      // Vérifier s'il y a des modifications locales non synchronisées
+      // Vérifier s'il y a des modifications manuelles locales non synchronisées
       const meta = syncMetaRef.current;
       const hasUnsyncedLocalEdits =
         meta.localDirty &&
@@ -626,6 +762,26 @@ export default function App() {
           localUpdatedAt: meta.lastLocalModifiedAt,
           cloudUpdatedAt: snapshot.updatedAt,
         });
+        return;
+      }
+
+      // Si l'auto-sync SOGEDIPROMA a déjà enrichi les données live avant l'arrivée du snapshot initial Firestore,
+      // fusionner sans conflit pour préserver à la fois les données Cloud manuelles et les données live SOGEDIPROMA.
+      if (hasAutoSyncedRef.current && localSerialized !== initialBaselineSerializedRef.current) {
+        const merged = mergeWorkbookData(dataRef.current, normalizedCloud);
+        isApplyingCloudRef.current = true;
+        lastCloudSnapshotRef.current = cloudSerialized;
+        const nextMeta: SyncMeta = {
+          localDirty: false,
+          lastLocalModifiedAt: new Date().toISOString(),
+          lastSyncedHash: JSON.stringify(merged),
+        };
+        syncMetaRef.current = nextMeta;
+        writeSyncMeta(nextMeta);
+        setData(merged);
+        if (isInitialLoad) {
+          showToast('Données Cloud et SOGEDIPROMA fusionnées automatiquement.');
+        }
         return;
       }
 

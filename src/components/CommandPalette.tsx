@@ -230,7 +230,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           tab: 'bilans',
           group: 'Projets & Retour sur Investissement',
           title: r.nomProjet,
-          subtitle: `${r.categorie} · +${r.economiesFinancieresAnnuellesEuros} €/an · ${r.gainTempsEstimeHeuresParAn} h/an`,
+          subtitle: `${r.categorie} · +${Math.round(r.economiesFinancieresAnnuellesEuros || 0).toLocaleString('fr-FR')} Ar/an · ${r.gainTempsEstimeHeuresParAn} h/an`,
           icon: <TrendingUp className="w-4 h-4 text-emerald-600 shrink-0" />,
         });
       });

@@ -11,6 +11,7 @@ import {
   Server,
   CheckCircle2,
   Gauge,
+  Zap,
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
@@ -62,14 +63,23 @@ const DEFAULT_INCIDENT = (): Partial<IncidentReseau> => ({
 
 const DEFAULT_TEST_DEBIT = (): Partial<TestDebitReseau> => ({
   dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
-  ligneConcernee: 'WAN 1 - Fibre Principale',
-  debitDescendantMbps: 920,
-  debitMontantMbps: 880,
-  latenceMs: 8,
-  gigueMs: 1,
+  ligneConcernee: 'WAN 1 - Fibre Principale SOGEDIPROMA',
+  debitDescendantMbps: 300,
+  debitMontantMbps: 250,
+  latenceMs: 12,
+  gigueMs: 2,
   statutConformite: 'Conforme SLA',
   observations: 'Mesure conforme au contrat opérateur.',
 });
+
+function computeSuggestedSla(
+  downMbps: number,
+  latencyMs: number
+): TestDebitReseau['statutConformite'] {
+  if (downMbps <= 15 || latencyMs >= 150) return 'Anormalement bas';
+  if (downMbps < 60 || latencyMs >= 80) return 'Dégradé';
+  return 'Conforme SLA';
+}
 
 export const NetworkSection: React.FC<NetworkSectionProps> = ({
   equipements,
@@ -288,6 +298,58 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
     notify('Mesure de débit supprimée.');
   };
 
+  const openTemplateTest = (preset: Partial<TestDebitReseau>) => {
+    setEditingTestId(null);
+    setTestForm({
+      ...DEFAULT_TEST_DEBIT(),
+      ...preset,
+    });
+    setTestModalOpen(true);
+  };
+
+  const openTemplateIncident = (preset: Partial<IncidentReseau>) => {
+    setEditingIncId(null);
+    setIncForm({
+      ...DEFAULT_INCIDENT(),
+      ...preset,
+    });
+    setIncModalOpen(true);
+  };
+
+  const networkStats = useMemo(() => {
+    const latestTest = testsDebit[0] || null;
+    const onlineEquip = equipements.filter((e) => e.etat === 'En ligne').length;
+    const openIncidents = incidents.filter((i) => i.statut !== 'Résolu').length;
+    const totalDowntime = incidents.reduce(
+      (sum, i) => sum + (Number(i.dureeInterruptionMin) || 0),
+      0
+    );
+    const switchesCount = equipements.filter((e) => e.type === 'Switch').length;
+    const wifiCount = equipements.filter((e) => e.type === "Point d'accès Wi-Fi").length;
+    const routersFwCount = equipements.filter(
+      (e) => e.type === 'Routeur' || e.type === 'Firewall'
+    ).length;
+
+    return {
+      latestTest,
+      onlineEquip,
+      openIncidents,
+      totalDowntime,
+      switchesCount,
+      wifiCount,
+      routersFwCount,
+    };
+  }, [equipements, incidents, testsDebit]);
+
+  const suggestedSla = useMemo(
+    () =>
+      computeSuggestedSla(
+        Number(testForm.debitDescendantMbps) || 0,
+        Number(testForm.latenceMs) || 0
+      ),
+    [testForm.debitDescendantMbps, testForm.latenceMs]
+  );
+
   return (
     <div className="space-y-8">
       {/* En-tête */}
@@ -300,7 +362,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
             <span>Gestion des Réseaux Informatiques &amp; Télécoms</span>
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Topologie LAN/WAN, plan d&apos;adressage IP, équipements d&apos;interconnexion, registre des incidents et tests de débit.
+            Topologie LAN/WAN SOGEDIPROMA, plan d&apos;adressage IP, équipements d&apos;interconnexion, registre des incidents et tests de débit.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -319,42 +381,148 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
         </div>
       </div>
 
-      {/* Synthèse Architecture Réseau */}
+      {/* Modèles rapides Speedtests & Incidents WAN */}
+      <div className="bg-white rounded-xl border border-slate-200 p-3.5 flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 mr-1">
+          <Zap className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          Modèles rapides :
+        </span>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateTest({
+              ligneConcernee: 'WAN Starlink Entreprise — SOGEDIPROMA',
+              debitDescendantMbps: 185,
+              debitMontantMbps: 32,
+              latenceMs: 44,
+              gigueMs: 6,
+              statutConformite: 'Conforme SLA',
+              observations: 'Test hebdomadaire liaison satellite Starlink sans perte de paquets.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Speedtest Starlink
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateTest({
+              ligneConcernee: 'WAN Fibre Principale — SOGEDIPROMA',
+              debitDescendantMbps: 320,
+              debitMontantMbps: 280,
+              latenceMs: 11,
+              gigueMs: 2,
+              statutConformite: 'Conforme SLA',
+              observations: 'Débit nominal vérifié sur passerelle principale.',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Speedtest Fibre
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateIncident({
+              equipementOuLiaison: 'Liaison WAN Principale / Failover',
+              typeIncident: 'Coupure Internet',
+              dureeInterruptionMin: 12,
+              impactUtilisateurs: 'Général',
+              cause: 'Micro-coupure opérateur WAN nécessitant bascule vers lien secondaire.',
+              actionCorrective: 'Vérification passerelle failover, relance DHCP/PPPoE et test navigation.',
+              statut: 'Résolu',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Coupure / Bascule WAN
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            openTemplateIncident({
+              equipementOuLiaison: 'Switch PoE / VLAN 200 Vidéosurveillance',
+              typeIncident: 'Perte ping switch',
+              dureeInterruptionMin: 20,
+              impactUtilisateurs: 'Service complet',
+              cause: 'Perte de ping sur port PoE caméra ou alimentation NVR.',
+              actionCorrective: 'Redémarrage port PoE, contrôle brassage RJ45 et vérification flux NVR.',
+              statut: 'Résolu',
+            })
+          }
+          className={secondaryButtonClass}
+        >
+          Perte Ping Switch / Caméras
+        </button>
+      </div>
+
+      {/* Synthèse Architecture Réseau Temps Réel SOGEDIPROMA */}
       <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xs">
         <h3 className="text-xs font-bold uppercase tracking-wider text-blue-300 mb-3 flex items-center gap-2">
           <Network className="w-4 h-4" />
-          <span>Synthèse de l&apos;Architecture Réseau &amp; Liaisons Opérateur</span>
+          <span>Synthèse Réseau &amp; Indicateurs Temps Réel SOGEDIPROMA</span>
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
           <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1">
-            <span className="text-blue-300 block font-semibold">Connexion WAN 1 (Fibre Pro)</span>
-            <strong className="text-sm block">Orange Fibre 1 Gbps Symétrique</strong>
-            <span className="text-slate-300 block">IP Fixe Publique · SLA GTR 4h</span>
-            <span className="text-emerald-400 font-semibold text-[11px]">Ligne Active Principale</span>
+            <span className="text-blue-300 block font-semibold">Dernière Mesure WAN / SLA</span>
+            {networkStats.latestTest ? (
+              <>
+                <strong className="text-sm block truncate">
+                  {networkStats.latestTest.ligneConcernee}
+                </strong>
+                <span className="text-slate-200 block font-mono tabular-nums">
+                  {networkStats.latestTest.debitDescendantMbps} / {networkStats.latestTest.debitMontantMbps} Mbps · {networkStats.latestTest.latenceMs} ms
+                </span>
+                <span
+                  className={`font-semibold text-[11px] block ${
+                    networkStats.latestTest.statutConformite === 'Conforme SLA'
+                      ? 'text-emerald-400'
+                      : 'text-amber-300'
+                  }`}
+                >
+                  {networkStats.latestTest.statutConformite} ({networkStats.latestTest.dateHeure})
+                </span>
+              </>
+            ) : (
+              <>
+                <strong className="text-sm block text-slate-200">Aucune mesure enregistrée</strong>
+                <span className="text-slate-400 block">
+                  Utilisez « Speedtest Starlink » ou « Speedtest Fibre » ci-dessus.
+                </span>
+              </>
+            )}
           </div>
+
           <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1">
-            <span className="text-blue-300 block font-semibold">Connexion WAN 2 (Secours SD-WAN)</span>
-            <strong className="text-sm block">SFR Fibre Dédiée 500 Mbps</strong>
-            <span className="text-slate-300 block">Failover automatique FortiGate</span>
-            <span className="text-emerald-400 font-semibold text-[11px]">Redondance Opérationnelle</span>
-          </div>
-          <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1 font-mono tabular-nums text-[11px]">
-            <span className="text-blue-300 block font-sans font-semibold text-xs">
-              Plan de VLANs &amp; Routage
-            </span>
-            <span className="block">VLAN 10 : Admin (192.168.10.0/24)</span>
-            <span className="block">VLAN 20 : Utilisateurs (192.168.20.0/23)</span>
-            <span className="block">VLAN 30 : Wi-Fi Corporate 802.1X</span>
-            <span className="block">VLAN 40 : Invités · VLAN 50 : VoIP</span>
-          </div>
-          <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1">
-            <span className="text-blue-300 block font-semibold">Inventaire Actif</span>
-            <strong className="text-lg font-extrabold font-mono tabular-nums text-emerald-400 block">
-              {equipements.length} équipement{equipements.length > 1 ? 's' : ''}
+            <span className="text-blue-300 block font-semibold">Disponibilité &amp; Incidents WAN</span>
+            <strong className="text-lg font-extrabold font-mono tabular-nums text-white block">
+              {networkStats.openIncidents === 0
+                ? 'Liaisons Stables'
+                : `${networkStats.openIncidents} incident(s) ouvert(s)`}
             </strong>
             <span className="text-slate-300 block font-mono tabular-nums">
-              {incidents.length} incident{incidents.length > 1 ? 's' : ''} · {testsDebit.length}{' '}
-              mesure{testsDebit.length > 1 ? 's' : ''}
+              {incidents.length} incident(s) consigné(s) · {networkStats.totalDowntime} min cumulées
+            </span>
+          </div>
+
+          <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1 font-mono tabular-nums text-[11px]">
+            <span className="text-blue-300 block font-sans font-semibold text-xs">
+              Segmentation VLAN SOGEDIPROMA
+            </span>
+            <span className="block">VLAN 10 : Admin &amp; Serveurs</span>
+            <span className="block">VLAN 20 : Postes Bureaux</span>
+            <span className="block">VLAN 30 : Wi-Fi Collaborateurs</span>
+            <span className="block">VLAN 200 : Vidéosurveillance IP &amp; NVR</span>
+          </div>
+
+          <div className="bg-white/10 rounded-xl p-3 border border-white/10 space-y-1">
+            <span className="text-blue-300 block font-semibold">Équipements &amp; Baies</span>
+            <strong className="text-lg font-extrabold font-mono tabular-nums text-emerald-400 block">
+              {networkStats.onlineEquip} / {equipements.length} en ligne
+            </strong>
+            <span className="text-slate-300 block font-mono tabular-nums text-[11px]">
+              {networkStats.switchesCount} switches · {networkStats.wifiCount} Wi-Fi · {networkStats.routersFwCount} routeurs/FW
             </span>
           </div>
         </div>
@@ -960,6 +1128,32 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
                   className={`${fieldInputClass} font-mono tabular-nums`}
                 />
               </FormField>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <span className="text-slate-600">
+                Diagnostic SLA suggéré :{' '}
+                <strong
+                  className={
+                    suggestedSla === 'Conforme SLA'
+                      ? 'text-emerald-700'
+                      : suggestedSla === 'Dégradé'
+                        ? 'text-amber-700'
+                        : 'text-red-700'
+                  }
+                >
+                  {suggestedSla}
+                </strong>
+              </span>
+              {testForm.statutConformite !== suggestedSla && (
+                <button
+                  type="button"
+                  onClick={() => setTestForm({ ...testForm, statutConformite: suggestedSla })}
+                  className="font-semibold text-blue-700 hover:underline"
+                >
+                  Appliquer
+                </button>
+              )}
             </div>
 
             <FormField label="Conformité SLA">

@@ -439,7 +439,7 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
               <FormField label="Coût renouvellement estimé">
                 <input
                   type="text"
-                  placeholder="Ex: 2 400 € / an"
+                  placeholder="Ex: 2 400 000 Ar / an"
                   value={formLic.coutRenouvellementEstime || ''}
                   onChange={(e) =>
                     setFormLic({ ...formLic, coutRenouvellementEstime: e.target.value })
