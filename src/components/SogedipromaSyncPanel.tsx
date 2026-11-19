@@ -55,7 +55,7 @@ interface ServerConfigStatus {
   defaultUsername: string;
 }
 
-const PAIRED_SOGEDIPROMA_URL = 'https://pc-informatique.taild86fee.ts.net';
+const PAIRED_SOGEDIPROMA_URL = 'https://win-rmt226g06rg.taild86fee.ts.net';
 const LAST_SYNC_META_KEY = 'sogediproma_last_sync_v1';
 
 interface LastSogedipromaSyncMeta {
@@ -182,7 +182,11 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         typeof window !== 'undefined' &&
         window.location.hostname !== 'localhost' &&
         window.location.hostname !== '127.0.0.1';
-      if (!stored.trim() || (isCloudHost && isPrivateLanUrl(stored))) {
+      if (
+        !stored.trim() ||
+        stored.includes('pc-informatique.taild86fee.ts.net') ||
+        (isCloudHost && isPrivateLanUrl(stored))
+      ) {
         return PAIRED_SOGEDIPROMA_URL;
       }
       return stored;
@@ -212,7 +216,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   const [pendingDelta, setPendingDelta] = useState<SogedipromaMappedDelta | null>(null);
   const [selectedModules, setSelectedModules] =
     useState<Record<SogedipromaSyncModuleKey, boolean>>(DEFAULT_SELECTED_MODULES);
-  const [mergeMode, setMergeMode] = useState<'merge' | 'replace-sog'>('merge');
+  const [mergeMode, setMergeMode] = useState<'merge' | 'replace-sog'>('replace-sog');
   const [showEndpoints, setShowEndpoints] = useState(false);
 
   const jsonInputRef = useRef<HTMLInputElement>(null);
@@ -231,13 +235,17 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       .then((cfg: ServerConfigStatus | null) => {
         if (!cfg) return;
         setServerConfig(cfg);
-        const resolvedDefault = cfg.defaultUrl || cfg.pairedUrl || PAIRED_SOGEDIPROMA_URL;
+        const resolvedDefault = cfg.pairedUrl || cfg.defaultUrl || PAIRED_SOGEDIPROMA_URL;
         const isCloudHost =
           typeof window !== 'undefined' &&
           window.location.hostname !== 'localhost' &&
           window.location.hostname !== '127.0.0.1';
         if (resolvedDefault) {
-          if (!baseUrl || (isCloudHost && !cfg.isDefaultUrlPrivateLan && isPrivateLanUrl(baseUrl))) {
+          if (
+            !baseUrl ||
+            baseUrl.includes('pc-informatique.taild86fee.ts.net') ||
+            (isCloudHost && !cfg.isDefaultUrlPrivateLan && isPrivateLanUrl(baseUrl))
+          ) {
             persistServerUrl(resolvedDefault);
           }
         }
@@ -839,7 +847,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
             <span>
-              Vous utilisez actuellement l&apos;hébergement <strong>statique</strong> (le proxy backend <code className="font-mono">/api/sogediproma/*</code> renvoie HTTP 404/405). Pour synchroniser en direct avec <code className="font-mono">https://pc-informatique.taild86fee.ts.net</code> sans erreur CORS, ouvrez l&apos;application via son <strong>URL serveur active (ais-dev)</strong> ou autorisez les requêtes CORS sur votre serveur SOGEDIPROMA.
+              Vous utilisez actuellement l&apos;hébergement <strong>statique</strong> (le proxy backend <code className="font-mono">/api/sogediproma/*</code> renvoie HTTP 404/405). Pour synchroniser en direct avec <code className="font-mono">https://win-rmt226g06rg.taild86fee.ts.net</code> sans erreur CORS, ouvrez l&apos;application via son <strong>URL serveur active (ais-dev)</strong> ou autorisez les requêtes CORS sur votre serveur SOGEDIPROMA.
             </span>
           </div>
         )}

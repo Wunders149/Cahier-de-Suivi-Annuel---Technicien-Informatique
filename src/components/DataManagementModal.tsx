@@ -45,6 +45,7 @@ interface DataManagementModalProps {
   initialTab?: 'backup' | 'sogediproma';
   data: CahierSuiviData;
   onUpdateData: (newData: CahierSuiviData) => void;
+  onApplySogedipromaData?: (newData: CahierSuiviData) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -56,6 +57,7 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
   initialTab = 'backup',
   data,
   onUpdateData,
+  onApplySogedipromaData,
   onShowToast,
 }) => {
   const { user, saveDataToCloud } = useFirebase();
@@ -330,7 +332,11 @@ export const DataManagementModal: React.FC<DataManagementModalProps> = ({
           <SogedipromaSyncPanel
             currentData={data}
             onApplySyncedData={(nextData, summaryMsg) => {
-              onUpdateData(nextData);
+              if (onApplySogedipromaData) {
+                onApplySogedipromaData(nextData);
+              } else {
+                onUpdateData(nextData);
+              }
               onShowToast(summaryMsg);
               onClose();
             }}

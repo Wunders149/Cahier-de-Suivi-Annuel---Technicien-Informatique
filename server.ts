@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3000);
 const UPSTREAM_TIMEOUT_MS = 12000;
 const TEST_TIMEOUT_MS = 6000;
-const PAIRED_SOGEDIPROMA_URL = 'https://pc-informatique.taild86fee.ts.net';
+const PAIRED_SOGEDIPROMA_URL = 'https://win-rmt226g06rg.taild86fee.ts.net';
 
 interface SyncRequestBody {
   baseUrl?: string;
@@ -51,6 +51,8 @@ function normalizeBaseUrl(rawUrl: string): string {
   return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
 }
 
+const LEGACY_TAILSCALE_HOSTS = new Set(['pc-informatique.taild86fee.ts.net']);
+
 function resolveEffectiveBaseUrl(requestedUrl?: string): string {
   const explicit = String(requestedUrl || '').trim();
   if (explicit) {
@@ -65,8 +67,11 @@ function resolveEffectiveBaseUrl(requestedUrl?: string): string {
   try {
     const normalizedEnv = normalizeBaseUrl(envUrl);
     const parsedEnv = new URL(normalizedEnv);
-    // Si SOGEDIPROMA_BASE_URL pointe vers une IP privée LAN, basculer automatiquement sur l'instance appairée Tailscale Funnel
-    if (isPrivateLanHostname(parsedEnv.hostname)) {
+    // Si SOGEDIPROMA_BASE_URL pointe vers une IP privée LAN ou l'ancien nœud Tailscale, basculer sur l'URL active par défaut
+    if (
+      isPrivateLanHostname(parsedEnv.hostname) ||
+      LEGACY_TAILSCALE_HOSTS.has(parsedEnv.hostname.toLowerCase())
+    ) {
       return PAIRED_SOGEDIPROMA_URL;
     }
     return normalizedEnv;

@@ -156,7 +156,7 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={onOpenSogedipromaSync}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold transition"
-            title="Synchroniser avec SOGEDIPROMA (https://pc-informatique.taild86fee.ts.net)"
+            title="Synchroniser avec SOGEDIPROMA (https://win-rmt226g06rg.taild86fee.ts.net)"
           >
             <PlugZap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span className="hidden md:inline">SOGEDIPROMA</span>

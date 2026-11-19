@@ -79,6 +79,7 @@ function writeSyncMeta(meta: SyncMeta): void {
 function CahierContent({
   data,
   setData,
+  onApplySogedipromaData,
   showToast,
   isGeneratingDocx,
   handleDownloadDocx,
@@ -93,6 +94,7 @@ function CahierContent({
 }: {
   data: CahierSuiviData;
   setData: React.Dispatch<React.SetStateAction<CahierSuiviData>>;
+  onApplySogedipromaData: (newData: CahierSuiviData) => void;
   showToast: (msg: string) => void;
   isGeneratingDocx: boolean;
   handleDownloadDocx: () => Promise<void>;
@@ -153,9 +155,8 @@ function CahierContent({
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      lastCloudSnapshotRef.current = serialized;
       saveDataToCloud(data).catch(() => {
-        // Erreur gérée par le contexte
+        // Erreur gérée par le contexte ; lastCloudSnapshotRef n'est mis à jour qu'en cas de succès (via onCloudSynced)
       });
     }, 1500);
 
@@ -225,6 +226,7 @@ function CahierContent({
         initialTab={dataModalTab}
         data={data}
         onUpdateData={(newData) => setData(newData)}
+        onApplySogedipromaData={onApplySogedipromaData}
         onShowToast={showToast}
       />
 
@@ -653,12 +655,37 @@ export default function App() {
     writeSyncMeta(nextMeta);
   }, []);
 
+  const handleApplySogedipromaData = useCallback((nextData: CahierSuiviData) => {
+    hasAutoSyncedRef.current = true;
+    if (!syncMetaRef.current.localDirty) {
+      isAutoSyncRef.current = true;
+    }
+    setData(nextData);
+  }, []);
+
   // Synchronisation automatique et non bloquante depuis SOGEDIPROMA à l'ouverture
   useEffect(() => {
     if (didRunStartupAutoSyncRef.current) return;
     didRunStartupAutoSyncRef.current = true;
 
     let cancelled = false;
+
+    const isPrivateLanUrl = (urlStr: string): boolean => {
+      try {
+        const h = new URL(urlStr.trim()).hostname.toLowerCase();
+        if (h === 'localhost' || h === '::1' || h.endsWith('.local')) return true;
+        if (h.startsWith('127.') || h.startsWith('10.') || h.startsWith('192.168.')) return true;
+        const m = /^172\.(\d+)\./.exec(h);
+        if (m) {
+          const n = Number(m[1]);
+          return n >= 16 && n <= 31;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
     const runStartupAutoSync = async () => {
       try {
         const cfgRes = await fetch('/api/sogediproma/config');
@@ -671,11 +698,46 @@ export default function App() {
         };
         if (!cfg?.hasDefaultUrl && !cfg?.hasDefaultCredentials) return;
 
-        const syncRes = await fetch('/api/sogediproma/sync', {
+        const pairedDefault =
+          cfg.pairedUrl || cfg.defaultUrl || 'https://win-rmt226g06rg.taild86fee.ts.net';
+
+        let preferredUrl = pairedDefault;
+        try {
+          const storedUrl = (localStorage.getItem('sogediproma_server_url') || '').trim();
+          const isCloudHost =
+            typeof window !== 'undefined' &&
+            window.location.hostname !== 'localhost' &&
+            window.location.hostname !== '127.0.0.1';
+          if (
+            storedUrl &&
+            !storedUrl.includes('pc-informatique.taild86fee.ts.net') &&
+            !(isCloudHost && isPrivateLanUrl(storedUrl))
+          ) {
+            preferredUrl = storedUrl;
+          } else if (storedUrl.includes('pc-informatique.taild86fee.ts.net')) {
+            localStorage.setItem('sogediproma_server_url', pairedDefault);
+          }
+        } catch {
+          // Ignorer erreur localStorage
+        }
+
+        let usedUrl = preferredUrl;
+        let syncRes = await fetch('/api/sogediproma/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ baseUrl: preferredUrl }),
         });
+
+        // Repli automatique sur l'URL serveur de secours si le nœud appairé principal est indisponible
+        if (!syncRes.ok && cfg.defaultUrl && cfg.defaultUrl !== preferredUrl && !cancelled) {
+          usedUrl = cfg.defaultUrl;
+          syncRes = await fetch('/api/sogediproma/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ baseUrl: cfg.defaultUrl }),
+          });
+        }
+
         if (!syncRes.ok || cancelled) return;
 
         const payload = (await syncRes.json()) as {
@@ -698,11 +760,12 @@ export default function App() {
           jalonsCalendrier: mapped.jalonsCalendrier.length > 0,
         };
 
+        // Mode 'replace-sog' : remplace proprement les anciennes entrées sog-* sans supprimer les saisies manuelles
         const result = applySogedipromaMerge(
           dataRef.current,
           mapped,
           populatedSel,
-          'merge'
+          'replace-sog'
         );
         if (result.estimatedBytes >= 950 * 1024) return;
 
@@ -725,7 +788,7 @@ export default function App() {
               at: new Date().toISOString(),
               revision: typeof payload.revision === 'number' ? payload.revision : undefined,
               summary,
-              url: cfg.pairedUrl || cfg.defaultUrl || 'https://pc-informatique.taild86fee.ts.net',
+              url: usedUrl,
             })
           );
         } catch {
@@ -783,10 +846,12 @@ export default function App() {
         return;
       }
 
-      // Si l'auto-sync SOGEDIPROMA a déjà enrichi les données live avant l'arrivée du snapshot initial Firestore,
-      // fusionner sans conflit pour préserver à la fois les données Cloud manuelles et les données live SOGEDIPROMA.
+      // Si une synchro SOGEDIPROMA fraîche a déjà été appliquée dans cette session,
+      // fusionner en gardant la source sog-* locale comme autoritaire pour ne pas ressusciter d'anciennes entrées fantômes depuis le Cloud.
       if (hasAutoSyncedRef.current && localSerialized !== initialBaselineSerializedRef.current) {
-        const merged = mergeWorkbookData(dataRef.current, normalizedCloud);
+        const merged = mergeWorkbookData(dataRef.current, normalizedCloud, {
+          authoritativeSogSource: 'local',
+        });
         isApplyingCloudRef.current = true;
         lastCloudSnapshotRef.current = cloudSerialized;
         const nextMeta: SyncMeta = {
@@ -817,7 +882,9 @@ export default function App() {
   const handleResolveMerge = useCallback(
     async (saveFn: (d: CahierSuiviData) => Promise<void>) => {
       if (!conflict) return;
-      const merged = mergeWorkbookData(conflict.localData, conflict.cloudData);
+      const merged = mergeWorkbookData(conflict.localData, conflict.cloudData, {
+        authoritativeSogSource: hasAutoSyncedRef.current ? 'local' : 'union',
+      });
       setConflict(null);
       isApplyingCloudRef.current = true;
       setData(merged);
@@ -961,6 +1028,7 @@ export default function App() {
       <CahierContent
         data={data}
         setData={setData}
+        onApplySogedipromaData={handleApplySogedipromaData}
         showToast={showToast}
         isGeneratingDocx={isGeneratingDocx}
         handleDownloadDocx={handleDownloadDocx}

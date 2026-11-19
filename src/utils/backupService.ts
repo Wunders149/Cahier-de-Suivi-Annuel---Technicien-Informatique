@@ -110,9 +110,49 @@ export function estimateWorkbookSizeBytes(data: CahierSuiviData): number {
 
 /**
  * Fusionne une liste d'enregistrements identifiés par `id` en priorisant les entrées locales sur les collisions d'ID,
- * tout en conservant les entrées uniquement présentes côté Cloud (zéro perte silencieuse).
+ * tout en conservant les entrées uniquement présentes côté Cloud (zéro perte silencieuse),
+ * sauf pour les entrées `sog-*` lorsqu'une source SOGEDIPROMA fraîche fait autorité.
  */
-function mergeArraysById<T extends { id: string }>(localArr: T[], cloudArr: T[]): T[] {
+function mergeArraysById<T extends { id: string }>(
+  localArr: T[],
+  cloudArr: T[],
+  authoritativeSogSource: 'local' | 'cloud' | 'union' = 'union'
+): T[] {
+  const isSogItem = (item: T) => String(item?.id || '').startsWith('sog-');
+
+  if (authoritativeSogSource === 'local') {
+    const localHasSog = localArr.some(isSogItem);
+    const byId = new Map<string, T>();
+    cloudArr.forEach((item) => {
+      if (!item || !item.id) return;
+      // Si local dispose d'une synchro SOGEDIPROMA fraîche pour cette collection, ne pas ressusciter les sog-* absents du snapshot live
+      if (localHasSog && isSogItem(item)) return;
+      byId.set(item.id, item);
+    });
+    localArr.forEach((item) => {
+      if (item && item.id) {
+        byId.set(item.id, item);
+      }
+    });
+    return Array.from(byId.values());
+  }
+
+  if (authoritativeSogSource === 'cloud') {
+    const cloudHasSog = cloudArr.some(isSogItem);
+    const byId = new Map<string, T>();
+    cloudArr.forEach((item) => {
+      if (item && item.id) {
+        byId.set(item.id, item);
+      }
+    });
+    localArr.forEach((item) => {
+      if (!item || !item.id) return;
+      if (cloudHasSog && isSogItem(item)) return;
+      byId.set(item.id, item);
+    });
+    return Array.from(byId.values());
+  }
+
   const byId = new Map<string, T>();
   cloudArr.forEach((item) => {
     if (item && item.id) {
@@ -127,15 +167,21 @@ function mergeArraysById<T extends { id: string }>(localArr: T[], cloudArr: T[])
   return Array.from(byId.values());
 }
 
+export interface MergeWorkbookOptions {
+  authoritativeSogSource?: 'local' | 'cloud' | 'union';
+}
+
 /**
  * Fusionne intelligemment un cahier local modifié hors ligne et un cahier Cloud divergent.
  */
 export function mergeWorkbookData(
   localRaw: CahierSuiviData,
-  cloudRaw: CahierSuiviData
+  cloudRaw: CahierSuiviData,
+  options: MergeWorkbookOptions = {}
 ): CahierSuiviData {
   const local = normalizeWorkbookData(localRaw);
   const cloud = normalizeWorkbookData(cloudRaw);
+  const sogAuth = options.authoritativeSogSource || 'union';
 
   const mergedRapports = local.rapportsMensuels.map((lRep) => {
     const cRep = cloud.rapportsMensuels.find((r) => r.moisIndex === lRep.moisIndex);
@@ -189,25 +235,26 @@ export function mergeWorkbookData(
 
   const mergedProjetsRoi = mergeArraysById(
     local.bilanAnnuel?.projetsRoi || [],
-    cloud.bilanAnnuel?.projetsRoi || []
+    cloud.bilanAnnuel?.projetsRoi || [],
+    sogAuth
   );
 
   return normalizeWorkbookData({
     generalInfo: mergeGeneralInfoWithFallback(local.generalInfo, cloud.generalInfo),
-    objectifsAnnuels: mergeArraysById(local.objectifsAnnuels, cloud.objectifsAnnuels),
-    jalonsCalendrier: mergeArraysById(local.jalonsCalendrier, cloud.jalonsCalendrier),
-    journalTaches: mergeArraysById(local.journalTaches, cloud.journalTaches),
-    interventions: mergeArraysById(local.interventions, cloud.interventions),
-    maintenances: mergeArraysById(local.maintenances, cloud.maintenances),
-    reseauEquipements: mergeArraysById(local.reseauEquipements, cloud.reseauEquipements),
-    reseauIncidents: mergeArraysById(local.reseauIncidents, cloud.reseauIncidents),
-    reseauTestsDebit: mergeArraysById(local.reseauTestsDebit, cloud.reseauTestsDebit),
-    parcEquipements: mergeArraysById(local.parcEquipements, cloud.parcEquipements),
-    logicielsLicences: mergeArraysById(local.logicielsLicences, cloud.logicielsLicences),
-    sauvegardes: mergeArraysById(local.sauvegardes, cloud.sauvegardes),
-    incidentsSecurite: mergeArraysById(local.incidentsSecurite, cloud.incidentsSecurite),
-    consommables: mergeArraysById(local.consommables, cloud.consommables),
-    demandesAchat: mergeArraysById(local.demandesAchat, cloud.demandesAchat),
+    objectifsAnnuels: mergeArraysById(local.objectifsAnnuels, cloud.objectifsAnnuels, sogAuth),
+    jalonsCalendrier: mergeArraysById(local.jalonsCalendrier, cloud.jalonsCalendrier, sogAuth),
+    journalTaches: mergeArraysById(local.journalTaches, cloud.journalTaches, sogAuth),
+    interventions: mergeArraysById(local.interventions, cloud.interventions, sogAuth),
+    maintenances: mergeArraysById(local.maintenances, cloud.maintenances, sogAuth),
+    reseauEquipements: mergeArraysById(local.reseauEquipements, cloud.reseauEquipements, sogAuth),
+    reseauIncidents: mergeArraysById(local.reseauIncidents, cloud.reseauIncidents, sogAuth),
+    reseauTestsDebit: mergeArraysById(local.reseauTestsDebit, cloud.reseauTestsDebit, sogAuth),
+    parcEquipements: mergeArraysById(local.parcEquipements, cloud.parcEquipements, sogAuth),
+    logicielsLicences: mergeArraysById(local.logicielsLicences, cloud.logicielsLicences, sogAuth),
+    sauvegardes: mergeArraysById(local.sauvegardes, cloud.sauvegardes, sogAuth),
+    incidentsSecurite: mergeArraysById(local.incidentsSecurite, cloud.incidentsSecurite, sogAuth),
+    consommables: mergeArraysById(local.consommables, cloud.consommables, sogAuth),
+    demandesAchat: mergeArraysById(local.demandesAchat, cloud.demandesAchat, sogAuth),
     rapportsMensuels: mergedRapports,
     bilansTrimestriels: mergedTrimestres,
     bilanAnnuel: {
