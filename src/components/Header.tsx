@@ -44,7 +44,8 @@ const TAB_TITLES: Record<string, string> = {
   securite: '09. Sauvegardes & PRA',
   consommables: '10. Consommables & Achats',
   rapports: '11. Rapports & Livraison Mensuelle',
-  bilans: '12. Bilans & Calculateur ROI',
+  bilans: '12. Bilans T1-T4 & Annuel',
+  roi: '13. Calculateur ROI & Budgets',
   livret: '📖 Livret Complet A4',
 };
 

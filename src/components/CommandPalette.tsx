@@ -11,6 +11,7 @@ import {
   FileBadge,
   CalendarRange,
   ShieldCheck,
+  Calculator,
 } from 'lucide-react';
 import { CahierSuiviData } from '../types/it-tracker';
 
@@ -78,6 +79,14 @@ const QUICK_NAV_ITEMS: PaletteItem[] = [
     title: 'Rapports Mensuels & Livraison',
     subtitle: 'Cahiers mensuels Janvier – Décembre',
     icon: <CalendarRange className="w-4 h-4 text-sky-600 shrink-0" />,
+  },
+  {
+    id: 'nav-roi',
+    tab: 'roi',
+    group: 'Accès rapide aux modules',
+    title: 'Calculateur ROI & Budgets 2027 (Ar)',
+    subtitle: 'Analyse coûts SOGEDIPROMA, économies et convertisseur Ar',
+    icon: <Calculator className="w-4 h-4 text-emerald-600 shrink-0" />,
   },
 ];
 
@@ -227,7 +236,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       .forEach((r) => {
         list.push({
           id: `roi-${r.id}`,
-          tab: 'bilans',
+          tab: 'roi',
           group: 'Projets & Retour sur Investissement',
           title: r.nomProjet,
           subtitle: `${r.categorie} · +${Math.round(r.economiesFinancieresAnnuellesEuros || 0).toLocaleString('fr-FR')} Ar/an · ${r.gainTempsEstimeHeuresParAn} h/an`,

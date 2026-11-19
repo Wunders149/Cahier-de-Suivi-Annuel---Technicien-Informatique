@@ -34,25 +34,25 @@ import {
   secondaryButtonClass,
 } from '../ui/formStyles';
 
+import {
+  DEFAULT_FX_RATES,
+  FxRates,
+  RoiCurrency,
+  convertFromAriary,
+  convertToAriary,
+  formatCompactAriaryAxis,
+  loadFxRates,
+} from '../../utils/currencyConverter';
+
 interface RoiProjectsSectionProps {
   projets: ProjetRoiIT[];
   onUpdateProjets: (projets: ProjetRoiIT[]) => void;
   objectifsAnnuels?: ObjectifAnnuel[];
+  fxRates?: FxRates;
   onShowToast?: (msg: string) => void;
 }
 
 const DEFAULT_HOURLY_RATE_AR = 25000;
-
-function formatCompactAriaryAxis(val: number): string {
-  const num = Number(val) || 0;
-  if (Math.abs(num) >= 1_000_000) {
-    return `${(num / 1_000_000).toFixed(1).replace('.0', '').replace('.', ',')}M`;
-  }
-  if (Math.abs(num) >= 1_000) {
-    return `${Math.round(num / 1_000)}k`;
-  }
-  return `${num}`;
-}
 
 function parseAmountAr(text?: string): number {
   if (!text) return 0;
@@ -85,12 +85,19 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
   projets = [],
   onUpdateProjets,
   objectifsAnnuels = [],
+  fxRates,
   onShowToast,
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [investCurrency, setInvestCurrency] = useState<RoiCurrency>('Ar');
+  const [investRawInput, setInvestRawInput] = useState<number>(1500000);
+  const [savingsCurrency, setSavingsCurrency] = useState<RoiCurrency>('Ar');
+  const [savingsRawInput, setSavingsRawInput] = useState<number>(900000);
+
+  const activeRates = fxRates || loadFxRates() || DEFAULT_FX_RATES;
 
   const sogBudgets = useMemo(() => {
     return (objectifsAnnuels || [])
@@ -213,6 +220,10 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
 
   const handleOpenAddModal = () => {
     setEditingId(null);
+    setInvestCurrency('Ar');
+    setInvestRawInput(1500000);
+    setSavingsCurrency('Ar');
+    setSavingsRawInput(900000);
     setFormData({
       nomProjet: '',
       description: '',
@@ -229,17 +240,23 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
   };
 
   const handleImportBudgetAsRoi = (budget: (typeof sogBudgets)[number]) => {
+    const allocatedAr = budget.allocatedAr || 0;
+    const ecoAr = Math.round(allocatedAr * 0.25);
     setEditingId(null);
     setShowBudgetModal(false);
+    setInvestCurrency('Ar');
+    setInvestRawInput(allocatedAr);
+    setSavingsCurrency('Ar');
+    setSavingsRawInput(ecoAr);
     setFormData({
       nomProjet: budget.titre,
       description: `${budget.description}\n${budget.resultatsAttendus}`.trim(),
       categorie: budget.categorie,
-      coutInvestissementEuros: budget.allocatedAr || 0,
-      economiesFinancieresAnnuellesEuros: Math.round((budget.allocatedAr || 0) * 0.35),
+      coutInvestissementEuros: allocatedAr,
+      economiesFinancieresAnnuellesEuros: ecoAr,
       gainTempsEstimeHeuresParAn: 40,
       tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
-      impactQualitatif: `Ligne budgétaire SOGEDIPROMA importée (${budget.allocatedAr.toLocaleString('fr-FR')} Ar).`,
+      impactQualitatif: `Ligne budgétaire SOGEDIPROMA importée (${allocatedAr.toLocaleString('fr-FR')} Ar).`,
       dateMiseEnService: new Date().toISOString().split('T')[0],
       statut: 'En cours',
     });
@@ -251,6 +268,10 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
 
   const handleOpenEditModal = (proj: ProjetRoiIT) => {
     setEditingId(proj.id);
+    setInvestCurrency('Ar');
+    setInvestRawInput(Number(proj.coutInvestissementEuros) || 0);
+    setSavingsCurrency('Ar');
+    setSavingsRawInput(Number(proj.economiesFinancieresAnnuellesEuros) || 0);
     setFormData({ ...proj });
     setShowModal(true);
   };
@@ -693,42 +714,87 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <FormField
-                label="Coût d'investissement (Ar)"
+                label="Coût d'investissement (converti auto en Ar)"
                 required
-                hint="Matériel, licences, formation, prestation"
+                hint={`Matériel, licences, prestation · Équivaut à ${Math.round(formData.coutInvestissementEuros || 0).toLocaleString('fr-FR')} Ar`}
               >
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  step={50000}
-                  value={formData.coutInvestissementEuros ?? 0}
-                  onChange={(e) =>
-                    setFormData({ ...formData, coutInvestissementEuros: Number(e.target.value) })
-                  }
-                  className={`${fieldInputClass} font-mono tabular-nums`}
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={investCurrency === 'Ar' ? 50000 : 10}
+                    value={investRawInput}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0;
+                      setInvestRawInput(val);
+                      setFormData({
+                        ...formData,
+                        coutInvestissementEuros: convertToAriary(val, investCurrency, activeRates),
+                      });
+                    }}
+                    className={`${fieldInputClass} font-mono tabular-nums flex-1`}
+                  />
+                  <select
+                    aria-label="Devise du coût d'investissement"
+                    value={investCurrency}
+                    onChange={(e) => {
+                      const nextCur = e.target.value as RoiCurrency;
+                      const currentAr = Number(formData.coutInvestissementEuros) || 0;
+                      setInvestCurrency(nextCur);
+                      setInvestRawInput(convertFromAriary(currentAr, nextCur, activeRates));
+                    }}
+                    className={`${fieldSelectClass} w-24 shrink-0 font-mono font-bold`}
+                  >
+                    <option value="Ar">Ar</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
               </FormField>
 
               <FormField
-                label="Économies financières directes (Ar / an)"
+                label="Économies financières directes / an (converti auto en Ar)"
                 required
-                hint="Coûts de licences résiliées, électricité, maintenance évitée"
+                hint={`Contrats résiliés, coûts évités · Équivaut à ${Math.round(formData.economiesFinancieresAnnuellesEuros || 0).toLocaleString('fr-FR')} Ar/an`}
               >
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  step={50000}
-                  value={formData.economiesFinancieresAnnuellesEuros ?? 0}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      economiesFinancieresAnnuellesEuros: Number(e.target.value),
-                    })
-                  }
-                  className={`${fieldInputClass} font-mono tabular-nums`}
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={savingsCurrency === 'Ar' ? 50000 : 10}
+                    value={savingsRawInput}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0;
+                      setSavingsRawInput(val);
+                      setFormData({
+                        ...formData,
+                        economiesFinancieresAnnuellesEuros: convertToAriary(
+                          val,
+                          savingsCurrency,
+                          activeRates
+                        ),
+                      });
+                    }}
+                    className={`${fieldInputClass} font-mono tabular-nums flex-1`}
+                  />
+                  <select
+                    aria-label="Devise des économies annuelles"
+                    value={savingsCurrency}
+                    onChange={(e) => {
+                      const nextCur = e.target.value as RoiCurrency;
+                      const currentAr = Number(formData.economiesFinancieresAnnuellesEuros) || 0;
+                      setSavingsCurrency(nextCur);
+                      setSavingsRawInput(convertFromAriary(currentAr, nextCur, activeRates));
+                    }}
+                    className={`${fieldSelectClass} w-24 shrink-0 font-mono font-bold`}
+                  >
+                    <option value="Ar">Ar</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="USD">USD ($)</option>
+                  </select>
+                </div>
               </FormField>
             </div>
 

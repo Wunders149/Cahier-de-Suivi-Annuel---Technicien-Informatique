@@ -16,6 +16,7 @@ import { BackupSecuritySection } from './components/sections/BackupSecuritySecti
 import { ConsumablesSection } from './components/sections/ConsumablesSection';
 import { MonthlyReportsSection } from './components/sections/MonthlyReportsSection';
 import { QuarterlyAnnualSection } from './components/sections/QuarterlyAnnualSection';
+import { RoiCalculatorSection } from './components/sections/RoiCalculatorSection';
 import { PrintBooklet } from './components/PrintBooklet';
 import { DataManagementModal } from './components/DataManagementModal';
 import { CloudConflictModal, CloudConflictState } from './components/CloudConflictModal';
@@ -450,6 +451,23 @@ function CahierContent({
                     setData({ ...data, bilanAnnuel })
                   }
                   onShowToast={showToast}
+                />
+              )}
+
+              {activeTab === 'roi' && (
+                <RoiCalculatorSection
+                  data={data}
+                  onUpdateProjets={(projetsRoi) =>
+                    setData({
+                      ...data,
+                      bilanAnnuel: {
+                        ...data.bilanAnnuel,
+                        projetsRoi,
+                      },
+                    })
+                  }
+                  onShowToast={showToast}
+                  onOpenSogedipromaSync={() => openDataModal('sogediproma')}
                 />
               )}
             </main>
