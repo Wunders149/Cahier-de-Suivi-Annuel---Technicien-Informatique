@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const PORT = Number(process.env.PORT || 3000);
 const UPSTREAM_TIMEOUT_MS = 12000;
 const TEST_TIMEOUT_MS = 6000;
+const PAIRED_SOGEDIPROMA_URL = 'https://pc-informatique.taild86fee.ts.net';
 
 interface SyncRequestBody {
   baseUrl?: string;
@@ -33,7 +34,9 @@ function isPrivateLanHostname(hostname: string): boolean {
 function normalizeBaseUrl(rawUrl: string): string {
   const trimmed = String(rawUrl || '').trim();
   if (!trimmed) {
-    throw new Error('Veuillez saisir l’URL du serveur SOGEDIPROMA (ex: http://192.168.100.3:8080 ou https://it.votre-domaine.com).');
+    throw new Error(
+      `Veuillez saisir l’URL du serveur SOGEDIPROMA (ex: ${PAIRED_SOGEDIPROMA_URL}).`
+    );
   }
   let parsed: URL;
   try {
@@ -46,6 +49,30 @@ function normalizeBaseUrl(rawUrl: string): string {
   }
   // Remove trailing slash cleanly
   return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '');
+}
+
+function resolveEffectiveBaseUrl(requestedUrl?: string): string {
+  const explicit = String(requestedUrl || '').trim();
+  if (explicit) {
+    return normalizeBaseUrl(explicit);
+  }
+
+  const envUrl = String(process.env.SOGEDIPROMA_BASE_URL || '').trim();
+  if (!envUrl) {
+    return PAIRED_SOGEDIPROMA_URL;
+  }
+
+  try {
+    const normalizedEnv = normalizeBaseUrl(envUrl);
+    const parsedEnv = new URL(normalizedEnv);
+    // Si SOGEDIPROMA_BASE_URL pointe vers une IP privée LAN, basculer automatiquement sur l'instance appairée Tailscale Funnel
+    if (isPrivateLanHostname(parsedEnv.hostname)) {
+      return PAIRED_SOGEDIPROMA_URL;
+    }
+    return normalizedEnv;
+  } catch {
+    return PAIRED_SOGEDIPROMA_URL;
+  }
 }
 
 function extractCookies(headers: Headers): Map<string, string> {
@@ -204,21 +231,20 @@ async function startServer(): Promise<void> {
 
   // Indique au frontend si des variables serveur SOGEDIPROMA sont préconfigurées (sans exposer les secrets)
   app.get('/api/sogediproma/config', (_req: Request, res: Response) => {
-    const envUrl = process.env.SOGEDIPROMA_BASE_URL || '';
+    const effectiveDefaultUrl = resolveEffectiveBaseUrl();
     const hasDefaultCredentials = Boolean(
       process.env.SOGEDIPROMA_USERNAME && process.env.SOGEDIPROMA_PASSWORD
     );
     let isPrivateLan = false;
-    if (envUrl) {
-      try {
-        isPrivateLan = isPrivateLanHostname(new URL(envUrl).hostname);
-      } catch {
-        isPrivateLan = false;
-      }
+    try {
+      isPrivateLan = isPrivateLanHostname(new URL(effectiveDefaultUrl).hostname);
+    } catch {
+      isPrivateLan = false;
     }
     res.json({
-      hasDefaultUrl: Boolean(envUrl),
-      defaultUrl: envUrl ? maskUrl(envUrl) : '',
+      hasDefaultUrl: Boolean(effectiveDefaultUrl),
+      defaultUrl: maskUrl(effectiveDefaultUrl),
+      pairedUrl: PAIRED_SOGEDIPROMA_URL,
       isDefaultUrlPrivateLan: isPrivateLan,
       hasDefaultCredentials,
       defaultUsername: process.env.SOGEDIPROMA_USERNAME || '',
@@ -229,7 +255,7 @@ async function startServer(): Promise<void> {
   app.post('/api/sogediproma/test', async (req: Request, res: Response) => {
     try {
       const body = (req.body || {}) as SyncRequestBody;
-      const baseUrl = normalizeBaseUrl(body.baseUrl || process.env.SOGEDIPROMA_BASE_URL || '');
+      const baseUrl = resolveEffectiveBaseUrl(body.baseUrl);
       const username = String(body.username || process.env.SOGEDIPROMA_USERNAME || '').trim();
       const password = String(body.password || process.env.SOGEDIPROMA_PASSWORD || '');
 
@@ -294,7 +320,7 @@ async function startServer(): Promise<void> {
 
     try {
       const body = (req.body || {}) as SyncRequestBody;
-      normalizedBaseUrl = normalizeBaseUrl(body.baseUrl || process.env.SOGEDIPROMA_BASE_URL || '');
+      normalizedBaseUrl = resolveEffectiveBaseUrl(body.baseUrl);
       const username = String(body.username || process.env.SOGEDIPROMA_USERNAME || '').trim();
       const password = String(body.password || process.env.SOGEDIPROMA_PASSWORD || '');
 

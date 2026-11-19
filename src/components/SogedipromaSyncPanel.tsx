@@ -30,6 +30,9 @@ import {
   X,
   Copy,
   Zap,
+  ExternalLink,
+  Target,
+  Calendar,
 } from 'lucide-react';
 import {
   emeraldButtonClass,
@@ -46,9 +49,20 @@ interface SogedipromaSyncPanelProps {
 interface ServerConfigStatus {
   hasDefaultUrl: boolean;
   defaultUrl: string;
+  pairedUrl?: string;
   isDefaultUrlPrivateLan?: boolean;
   hasDefaultCredentials: boolean;
   defaultUsername: string;
+}
+
+const PAIRED_SOGEDIPROMA_URL = 'https://pc-informatique.taild86fee.ts.net';
+const LAST_SYNC_META_KEY = 'sogediproma_last_sync_v1';
+
+interface LastSogedipromaSyncMeta {
+  at: string;
+  revision?: number;
+  summary: string;
+  url: string;
 }
 
 function isPrivateLanUrl(urlStr: string): boolean {
@@ -117,9 +131,21 @@ const MODULE_LABELS: Array<{
   },
   {
     key: 'logicielsLicences',
-    label: 'Abonnements & Logiciels',
-    sourceCollection: 'subscriptions + itTracking',
+    label: 'Logiciels, Licences & Accès RBAC',
+    sourceCollection: 'subscriptions + softwareAssignment + accesses',
     icon: KeyRound,
+  },
+  {
+    key: 'objectifsAnnuels',
+    label: 'Budgets IT → Objectifs Annuels',
+    sourceCollection: 'budgets',
+    icon: Target,
+  },
+  {
+    key: 'jalonsCalendrier',
+    label: 'Campagnes → Jalons Calendrier',
+    sourceCollection: 'itTracking (inventaire annuel)',
+    icon: Calendar,
   },
 ];
 
@@ -132,6 +158,8 @@ const DEFAULT_SELECTED_MODULES: Record<SogedipromaSyncModuleKey, boolean> = {
   interventions: true,
   journalTaches: true,
   logicielsLicences: true,
+  objectifsAnnuels: true,
+  jalonsCalendrier: true,
 };
 
 export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
@@ -139,17 +167,35 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   onApplySyncedData,
 }) => {
   const [serverConfig, setServerConfig] = useState<ServerConfigStatus>({
-    hasDefaultUrl: false,
-    defaultUrl: '',
+    hasDefaultUrl: true,
+    defaultUrl: PAIRED_SOGEDIPROMA_URL,
+    pairedUrl: PAIRED_SOGEDIPROMA_URL,
+    isDefaultUrlPrivateLan: false,
     hasDefaultCredentials: false,
     defaultUsername: '',
   });
   const [backendProxyAvailable, setBackendProxyAvailable] = useState<boolean>(true);
   const [baseUrl, setBaseUrl] = useState<string>(() => {
     try {
-      return localStorage.getItem('sogediproma_server_url') || '';
+      const stored = localStorage.getItem('sogediproma_server_url') || '';
+      const isCloudHost =
+        typeof window !== 'undefined' &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1';
+      if (!stored.trim() || (isCloudHost && isPrivateLanUrl(stored))) {
+        return PAIRED_SOGEDIPROMA_URL;
+      }
+      return stored;
     } catch {
-      return '';
+      return PAIRED_SOGEDIPROMA_URL;
+    }
+  });
+  const [lastSyncMeta, setLastSyncMeta] = useState<LastSogedipromaSyncMeta | null>(() => {
+    try {
+      const raw = localStorage.getItem(LAST_SYNC_META_KEY);
+      return raw ? (JSON.parse(raw) as LastSogedipromaSyncMeta) : null;
+    } catch {
+      return null;
     }
   });
   const [username, setUsername] = useState<string>('');
@@ -185,13 +231,14 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       .then((cfg: ServerConfigStatus | null) => {
         if (!cfg) return;
         setServerConfig(cfg);
+        const resolvedDefault = cfg.defaultUrl || cfg.pairedUrl || PAIRED_SOGEDIPROMA_URL;
         const isCloudHost =
           typeof window !== 'undefined' &&
           window.location.hostname !== 'localhost' &&
           window.location.hostname !== '127.0.0.1';
-        if (cfg.defaultUrl) {
+        if (resolvedDefault) {
           if (!baseUrl || (isCloudHost && !cfg.isDefaultUrlPrivateLan && isPrivateLanUrl(baseUrl))) {
-            persistServerUrl(cfg.defaultUrl);
+            persistServerUrl(resolvedDefault);
           }
         }
         if (!username && cfg.defaultUsername) {
@@ -208,6 +255,15 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     setBaseUrl(val);
     try {
       localStorage.setItem('sogediproma_server_url', val);
+    } catch {
+      // Ignorer
+    }
+  };
+
+  const saveLastSyncMeta = (meta: LastSogedipromaSyncMeta) => {
+    setLastSyncMeta(meta);
+    try {
+      localStorage.setItem(LAST_SYNC_META_KEY, JSON.stringify(meta));
     } catch {
       // Ignorer
     }
@@ -374,6 +430,8 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     interventions: mapped.interventions.length > 0,
     journalTaches: mapped.journalTaches.length > 0,
     logicielsLicences: mapped.logicielsLicences.length > 0,
+    objectifsAnnuels: mapped.objectifsAnnuels.length > 0,
+    jalonsCalendrier: mapped.jalonsCalendrier.length > 0,
   });
 
   const selectPopulatedModules = (mapped: SogedipromaMappedDelta) => {
@@ -437,12 +495,21 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         if (mapped.consommables.length) counts.push(`${mapped.consommables.length} art.`);
         if (mapped.demandesAchat.length) counts.push(`${mapped.demandesAchat.length} achats`);
         if (mapped.reseauEquipements.length) counts.push(`${mapped.reseauEquipements.length} réseau`);
+        if (mapped.logicielsLicences.length) counts.push(`${mapped.logicielsLicences.length} licences`);
+        if (mapped.objectifsAnnuels.length) counts.push(`${mapped.objectifsAnnuels.length} budgets`);
+        if (mapped.jalonsCalendrier.length) counts.push(`${mapped.jalonsCalendrier.length} jalon(s)`);
         const summary = counts.length
           ? `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée : ${counts.join(', ')}.`
           : `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée.`;
 
         setPendingDelta(null);
         setStatusNotice(summary);
+        saveLastSyncMeta({
+          at: new Date().toISOString(),
+          revision: typeof payload.revision === 'number' ? payload.revision : undefined,
+          summary,
+          url: baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL,
+        });
         onApplySyncedData(result.nextData, summary);
         return;
       }
@@ -639,11 +706,29 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     if (selectedModules.journalTaches && pendingDelta.journalTaches.length > 0) {
       counts.push(`${pendingDelta.journalTaches.length} tâches`);
     }
+    if (selectedModules.maintenances && pendingDelta.maintenances.length > 0) {
+      counts.push(`${pendingDelta.maintenances.length} maintenances`);
+    }
+    if (selectedModules.logicielsLicences && pendingDelta.logicielsLicences.length > 0) {
+      counts.push(`${pendingDelta.logicielsLicences.length} licences/accès`);
+    }
+    if (selectedModules.objectifsAnnuels && pendingDelta.objectifsAnnuels.length > 0) {
+      counts.push(`${pendingDelta.objectifsAnnuels.length} budgets/objectifs`);
+    }
+    if (selectedModules.jalonsCalendrier && pendingDelta.jalonsCalendrier.length > 0) {
+      counts.push(`${pendingDelta.jalonsCalendrier.length} jalon(s)`);
+    }
 
     const summary = counts.length
       ? `Synchronisation SOGEDIPROMA appliquée (${counts.join(', ')}).`
       : 'Synchronisation SOGEDIPROMA appliquée.';
 
+    saveLastSyncMeta({
+      at: new Date().toISOString(),
+      revision: sourceRevision ?? undefined,
+      summary,
+      url: baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL,
+    });
     onApplySyncedData(previewMergeResult.nextData, summary);
   };
 
@@ -660,26 +745,50 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Bandeau d'explication */}
-      <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2">
+      {/* Bandeau d'appairage permanent */}
+      <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <PlugZap className="w-4 h-4 text-blue-600 shrink-0" />
             <h4 className="font-bold text-slate-900 text-[13px]">
-              Connecteur API SOGEDIPROMA · Gestion informatique
+              Connecteur API SOGEDIPROMA · Appairage Actif
             </h4>
           </div>
-          <span className="text-[11px] font-mono font-semibold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
-            GET /api/state · Proxy Express
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-mono font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              {serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL}
+            </span>
+            <a
+              href={baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-white hover:bg-blue-50 px-2.5 py-0.5 rounded border border-blue-200 transition"
+            >
+              <span>Ouvrir SOGEDIPROMA</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Récupérez en une requête sécurisée côté serveur vos{' '}
+          Ce cahier fonctionne en paire directe avec votre instance SOGEDIPROMA (<code className="font-mono text-[11px]">GET /api/state</code>) pour synchroniser{' '}
           <strong className="font-semibold text-slate-800">consommables &amp; achats</strong>,{' '}
           <strong className="font-semibold text-slate-800">matériels &amp; équipements</strong>,{' '}
-          tickets, suivis du travail, maintenances et abonnements depuis votre instance SOGEDIPROMA, ou importez un fichier d&apos;export{' '}
-          <span className="font-mono text-[11px]">/api/backup</span>.
+          tickets, suivis du travail, maintenances et abonnements.
         </p>
+        {lastSyncMeta && (
+          <div className="text-[11px] text-slate-600 bg-white/80 border border-blue-200/80 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Dernière synchro appliquée le{' '}
+              <strong className="text-slate-800">
+                {new Date(lastSyncMeta.at).toLocaleString('fr-FR')}
+              </strong>
+              {lastSyncMeta.revision !== undefined ? ` · Rév. #${lastSyncMeta.revision}` : ''}
+            </span>
+            <span className="font-mono text-[10px] text-slate-500 truncate max-w-xs">
+              {lastSyncMeta.summary}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Alertes erreur / succès */}

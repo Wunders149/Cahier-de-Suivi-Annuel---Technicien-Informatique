@@ -7,7 +7,9 @@ import {
   FicheIntervention,
   InterventionType,
   ItemMaintenance,
+  JalonCalendrier,
   LogicielLicence,
+  ObjectifAnnuel,
   TacheJournal,
 } from '../types/it-tracker';
 import { estimateWorkbookSizeBytes, normalizeWorkbookData } from './backupService';
@@ -302,6 +304,7 @@ export interface SogedipromaSubscription {
   owner?: string;
   autoRenew?: string;
   status?: string;
+  licenseCount?: number;
   notes?: string;
 }
 
@@ -314,6 +317,44 @@ export interface SogedipromaItTrackingItem {
   version?: string;
   licenseCount?: number;
   notes?: string;
+  // Champs softwareAssignment
+  softwareId?: string;
+  employeeId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  // Champs cameraCheck
+  date?: string;
+  assetId?: string;
+  checkedAt?: string;
+  checkedBy?: string;
+  cameraStatus?: string;
+  note?: string;
+  // Champs annualInventoryCampaign
+  year?: number;
+  startDate?: string;
+  endDate?: string;
+  scopeLabel?: string;
+  location?: string;
+  counter?: string;
+  reviewer?: string;
+  status?: string;
+  items?: Array<{ checkedAt?: string; resultStatus?: string }>;
+}
+
+export interface SogedipromaAccessItem {
+  id: string;
+  system?: string;
+  category?: string;
+  account?: string;
+  role?: string;
+  scope?: string;
+  status?: string;
+  grantedAt?: string;
+  approvedBy?: string;
+  employeeId?: string;
+  departmentId?: string;
+  reviewDate?: string;
+  notes?: string;
 }
 
 export interface SogedipromaBudget {
@@ -322,6 +363,12 @@ export interface SogedipromaBudget {
   category?: string;
   fiscalYear?: number;
   allocated?: number;
+  committed?: number;
+  spent?: number;
+  period?: string;
+  status?: string;
+  owner?: string;
+  notes?: string;
 }
 
 export interface SogedipromaSettings {
@@ -345,6 +392,7 @@ export interface SogedipromaStateData {
   maintenance?: SogedipromaMaintenance[];
   subscriptions?: SogedipromaSubscription[];
   itTracking?: SogedipromaItTrackingItem[];
+  accesses?: SogedipromaAccessItem[];
   budgets?: SogedipromaBudget[];
 }
 
@@ -356,7 +404,9 @@ export type SogedipromaSyncModuleKey =
   | 'maintenances'
   | 'interventions'
   | 'journalTaches'
-  | 'logicielsLicences';
+  | 'logicielsLicences'
+  | 'objectifsAnnuels'
+  | 'jalonsCalendrier';
 
 export interface SogedipromaMappedDelta {
   companyMeta: {
@@ -377,6 +427,8 @@ export interface SogedipromaMappedDelta {
   interventions: FicheIntervention[];
   journalTaches: TacheJournal[];
   logicielsLicences: LogicielLicence[];
+  objectifsAnnuels: ObjectifAnnuel[];
+  jalonsCalendrier: JalonCalendrier[];
 }
 
 function buildNormalizedKeyMap(rec: Record<string, unknown>): Map<string, unknown> {
@@ -651,7 +703,10 @@ export function parseSogedipromaJsonPayload(rawJsonText: string): {
       Array.isArray(rawCandidate.tickets) ||
       Array.isArray(rawCandidate.workLogs) ||
       Array.isArray(rawCandidate.maintenance) ||
-      Array.isArray(rawCandidate.subscriptions);
+      Array.isArray(rawCandidate.subscriptions) ||
+      Array.isArray(rawCandidate.budgets) ||
+      Array.isArray(rawCandidate.accesses) ||
+      Array.isArray(rawCandidate.itTracking);
 
     if (!hasKnownCollections) {
       return {
@@ -899,6 +954,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
   const maintenance = Array.isArray(raw.maintenance) ? raw.maintenance : [];
   const subscriptions = Array.isArray(raw.subscriptions) ? raw.subscriptions : [];
   const itTracking = Array.isArray(raw.itTracking) ? raw.itTracking : [];
+  const accesses = Array.isArray(raw.accesses) ? raw.accesses : [];
 
   const employeeMap = new Map(employees.map((e) => [String(e.id), e]));
   const departmentMap = new Map(departments.map((d) => [String(d.id), d]));
@@ -1100,8 +1156,8 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       };
     });
 
-  // 5. Maintenances
-  const maintenances: ItemMaintenance[] = maintenance.map((m, idx) => {
+  // 5. Maintenances (enregistrements maintenance + contrôles quotidiens caméras IP cameraCheck)
+  const directMaintenances: ItemMaintenance[] = maintenance.map((m, idx) => {
     const asset = m.assetId ? assetMap.get(String(m.assetId)) : undefined;
     const isDone = m.status === 'Terminée';
     const typeMaint: ItemMaintenance['typeMaintenance'] =
@@ -1111,8 +1167,6 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
         ? 'Conforme'
         : m.status === 'Annulée'
         ? 'Non applicable'
-        : m.status === 'En cours'
-        ? 'À traiter'
         : 'À traiter';
 
     return {
@@ -1132,6 +1186,63 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       valide: isDone,
     };
   });
+
+  // Contrôles caméras IP groupés par date (itTracking.type === 'cameraCheck')
+  const cameraCheckGroups = new Map<
+    string,
+    { total: number; okCount: number; issues: string[]; checkers: Set<string> }
+  >();
+  itTracking
+    .filter((row) => row && row.type === 'cameraCheck')
+    .forEach((chk) => {
+      const checkDate = chk.date || (chk.checkedAt ? chk.checkedAt.slice(0, 10) : new Date().toISOString().split('T')[0]);
+      const group = cameraCheckGroups.get(checkDate) || {
+        total: 0,
+        okCount: 0,
+        issues: [],
+        checkers: new Set<string>(),
+      };
+      group.total += 1;
+      const statusLabel = (chk.cameraStatus || '').trim();
+      if (!statusLabel || statusLabel.toLowerCase() === 'marche' || statusLabel.toLowerCase() === 'ok') {
+        group.okCount += 1;
+      } else {
+        const camAsset = chk.assetId ? assetMap.get(String(chk.assetId)) : undefined;
+        const camLabel = camAsset ? `${camAsset.assetTag || ''} ${camAsset.name}`.trim() : String(chk.assetId || 'Caméra');
+        group.issues.push(`${camLabel} (${statusLabel}${chk.note ? ` : ${chk.note}` : ''})`);
+      }
+      if (chk.checkedBy?.trim()) group.checkers.add(chk.checkedBy.trim());
+      cameraCheckGroups.set(checkDate, group);
+    });
+
+  const cameraMaintenances: ItemMaintenance[] = Array.from(cameraCheckGroups.entries())
+    .sort(([d1], [d2]) => d2.localeCompare(d1))
+    .slice(0, 15)
+    .map(([checkDate, group]) => {
+      const hasIssues = group.issues.length > 0;
+      const nextDayIso = (() => {
+        const t = Date.parse(checkDate);
+        return Number.isFinite(t) ? new Date(t + 86400000).toISOString().split('T')[0] : checkDate;
+      })();
+      return {
+        id: `sog-camchk-${checkDate}`,
+        categorie: 'Équipements réseau',
+        typeMaintenance: hasIssues ? 'Corrective' : 'Préventive',
+        tacheControle: `Contrôle Vidéosurveillance IP — ${group.total} caméras vérifiées (${group.okCount}/${group.total} en marche)`,
+        frequence: 'Quotidienne',
+        dernierControle: checkDate,
+        prochainControle: nextDayIso,
+        statut: hasIssues ? 'Critique' : 'Conforme',
+        responsableOuEquipement:
+          Array.from(group.checkers).join(', ') || 'Technicien IT · Vidéosurveillance',
+        observations: hasIssues
+          ? `Anomalies détectées : ${group.issues.slice(0, 8).join(' | ')}`
+          : `Contrôle complet SOGEDIPROMA du ${checkDate} : ${group.okCount}/${group.total} caméras opérationnelles (statut Marche).`,
+        valide: !hasIssues,
+      };
+    });
+
+  const maintenances: ItemMaintenance[] = [...directMaintenances, ...cameraMaintenances];
 
   // 6. Tickets de support -> Interventions IT
   const interventions: FicheIntervention[] = tickets.map((t, idx) => {
@@ -1201,30 +1312,224 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     };
   });
 
-  // 8. Abonnements & Catalogue logiciels -> Logiciels & Licences
+  // 8. Abonnements + Affectations logicielles (itTracking.softwareAssignment) + Habilitations RBAC (accesses) -> Logiciels & Licences
   const todayIso = new Date().toISOString().split('T')[0];
   const cutoff30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
 
+  const SOFTWARE_META: Record<
+    string,
+    { name: string; editor: string; type: LogicielLicence['typeLicence'] }
+  > = {
+    'software-default-anydesk': { name: 'AnyDesk', editor: 'AnyDesk Software', type: 'Abonnement SaaS' },
+    'software-default-outlook': { name: 'Microsoft Outlook', editor: 'Microsoft', type: 'Abonnement SaaS' },
+    'software-default-workspace': { name: 'Google Workspace', editor: 'Google', type: 'Abonnement SaaS' },
+    'software-default-dropbox': { name: 'Dropbox', editor: 'Dropbox', type: 'Abonnement SaaS' },
+    'software-default-onedrive': { name: 'Microsoft OneDrive', editor: 'Microsoft', type: 'Abonnement SaaS' },
+    'software-default-open-vpn': { name: 'OpenVPN', editor: 'OpenVPN Inc.', type: 'Open Source' },
+    'software-default-avira': { name: 'Avira Antivirus', editor: 'Avira / Gen Digital', type: 'Volume VL' },
+    'software-default-domaine': { name: 'Active Directory (Domaine)', editor: 'Microsoft Windows Server', type: 'Volume VL' },
+    'software-default-whatsapp': { name: 'WhatsApp Desktop', editor: 'Meta', type: 'Open Source' },
+    'software-default-office-365': { name: 'Microsoft 365 / Office', editor: 'Microsoft', type: 'Abonnement SaaS' },
+    'software-default-teams': { name: 'Microsoft Teams', editor: 'Microsoft', type: 'Abonnement SaaS' },
+    'software-default-chatgpt': { name: 'ChatGPT', editor: 'OpenAI', type: 'Abonnement SaaS' },
+    'software-default-pointage': { name: 'Logiciel de Pointage RH', editor: 'SOGEDIPROMA', type: 'Perpétuelle' },
+    'software-default-foxy-pdf-reader': { name: 'Foxit PDF Reader', editor: 'Foxit Software', type: 'Open Source' },
+    'software-default-ticket': { name: 'Portail Tickets Support', editor: 'SOGEDIPROMA IT', type: 'Open Source' },
+  };
+
+  // Agréger les affectations logicielles (93 entrées)
+  const swAssignMap = new Map<
+    string,
+    { count: number; employees: string[]; latestAt: string }
+  >();
+  itTracking
+    .filter((row) => row && row.type === 'softwareAssignment' && row.softwareId)
+    .forEach((row) => {
+      const swId = String(row.softwareId);
+      const bucket = swAssignMap.get(swId) || { count: 0, employees: [], latestAt: '' };
+      bucket.count += 1;
+      const emp = resolveEmployeeName(row.employeeId);
+      if (emp && !bucket.employees.includes(emp)) bucket.employees.push(emp);
+      if (row.createdAt && row.createdAt > bucket.latestAt) bucket.latestAt = row.createdAt;
+      swAssignMap.set(swId, bucket);
+    });
+
+  // Agréger les accès RBAC par système (194 entrées)
+  const accessBySystem = new Map<
+    string,
+    {
+      systemLabel: string;
+      total: number;
+      active: number;
+      roles: Map<string, number>;
+      approvers: Set<string>;
+      latestGranted: string;
+      sampleAccounts: string[];
+    }
+  >();
+  accesses.forEach((acc) => {
+    const sysLabel = (acc.system || acc.category || 'Système IT').trim();
+    const sysKey = sysLabel.toUpperCase();
+    const bucket = accessBySystem.get(sysKey) || {
+      systemLabel: sysLabel,
+      total: 0,
+      active: 0,
+      roles: new Map<string, number>(),
+      approvers: new Set<string>(),
+      latestGranted: '',
+      sampleAccounts: [],
+    };
+    bucket.total += 1;
+    if (!acc.status || acc.status === 'Actif') bucket.active += 1;
+    const role = (acc.role || 'Utilisateur').trim();
+    bucket.roles.set(role, (bucket.roles.get(role) || 0) + 1);
+    if (acc.approvedBy?.trim()) bucket.approvers.add(acc.approvedBy.trim());
+    if (acc.grantedAt && acc.grantedAt > bucket.latestGranted) bucket.latestGranted = acc.grantedAt;
+    if (acc.account?.trim() && bucket.sampleAccounts.length < 4 && !bucket.sampleAccounts.includes(acc.account.trim())) {
+      bucket.sampleAccounts.push(acc.account.trim());
+    }
+    accessBySystem.set(sysKey, bucket);
+  });
+
+  const formatAccessRbacSummary = (sysKey: string): string => {
+    const b = accessBySystem.get(sysKey);
+    if (!b) return '';
+    const rolesTxt = Array.from(b.roles.entries())
+      .map(([r, n]) => `${r}: ${n}`)
+      .join(', ');
+    const approversTxt = Array.from(b.approvers).join(', ');
+    return `${b.active}/${b.total} comptes RBAC actifs (${rolesTxt})${approversTxt ? ` · Validé par ${approversTxt}` : ''}`;
+  };
+
+  const consumedSwIds = new Set<string>();
+  const consumedAccessKeys = new Set<string>();
+
   const subLicences: LogicielLicence[] = subscriptions.map((s, idx) => {
     const isExpiring = Boolean(s.renewalDate && s.renewalDate >= todayIso && s.renewalDate <= cutoff30);
+    const normName = (s.name || '').trim().toLowerCase();
+
+    let linkedSwId: string | undefined;
+    let linkedAccessKey: string | undefined;
+    if (normName.includes('dropbox')) linkedSwId = 'software-default-dropbox';
+    else if (normName.includes('chatgpt')) linkedSwId = 'software-default-chatgpt';
+    else if (normName === 'microsoft' || normName.includes('office')) {
+      linkedSwId = 'software-default-office-365';
+      linkedAccessKey = 'COMPTE MICROSOFT';
+    } else if (normName.includes('google workspace')) {
+      linkedSwId = 'software-default-workspace';
+      linkedAccessKey = 'GOOGLE WORKSPACE';
+    }
+
+    const swBucket = linkedSwId ? swAssignMap.get(linkedSwId) : undefined;
+    if (linkedSwId && swBucket) consumedSwIds.add(linkedSwId);
+    const accBucket = linkedAccessKey ? accessBySystem.get(linkedAccessKey) : undefined;
+    if (linkedAccessKey && accBucket) consumedAccessKeys.add(linkedAccessKey);
+
+    const assignedFromSw = swBucket?.count || 0;
+    const assignedFromAcc = accBucket?.active || 0;
+    const basePurchased = Number(s.licenseCount) || 1;
+    const attribuees = Math.max(
+      assignedFromSw,
+      assignedFromAcc,
+      s.status === 'Active' || s.status === 'Essai' ? basePurchased : 0
+    );
+    const achetees = Math.max(basePurchased, attribuees);
+
+    const droitsText =
+      (linkedAccessKey && formatAccessRbacSummary(linkedAccessKey)) ||
+      (swBucket
+        ? `${swBucket.count} postes affectés (${swBucket.employees.slice(0, 4).join(', ')}${swBucket.employees.length > 4 ? '…' : ''})`
+        : s.owner
+        ? `Responsable : ${s.owner}`
+        : 'Administration DSI');
+
     return {
       id: `sog-sub-${s.id || idx}`,
       nomLogiciel: s.name || 'Abonnement SaaS',
       editeur: s.provider || 'Fournisseur',
       version: s.plan || s.category || 'Standard',
       typeLicence: 'Abonnement SaaS',
-      nombreLicencesAchetees: 1,
-      nombreLicencesAttribuees: s.status === 'Active' || s.status === 'Essai' ? 1 : 0,
+      nombreLicencesAchetees: achetees,
+      nombreLicencesAttribuees: attribuees,
       dateExpiration: s.renewalDate || 'À définir',
       coutRenouvellementEstime: s.amount ? `${s.amount} ${currency} / ${s.billingCycle || 'Mensuel'}` : '—',
       procedureInstallation: s.notes || 'Géré via console prestataire.',
-      gestionComptesEtDroits: s.owner ? `Responsable : ${s.owner}` : 'Administration DSI',
+      gestionComptesEtDroits: droitsText,
       statutConformite: isExpiring ? 'Expire sous 30j' : 'Conforme',
-      observations: `Statut SOGEDIPROMA : ${s.status || 'Active'} · Renouvellement : ${
-        s.autoRenew === 'Oui' ? 'Automatique' : 'Manuel'
-      }`,
+      observations: [
+        `Statut SOGEDIPROMA : ${s.status || 'Active'} · Renouvellement : ${s.autoRenew === 'Oui' ? 'Automatique' : 'Manuel'}`,
+        swBucket ? `Affectations logicielles : ${swBucket.count} utilisateur(s)` : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
     };
   });
+
+  // Affectations logicielles itTracking.softwareAssignment restantes (ex: AnyDesk, Outlook, Workspace, OpenVPN, Avira, Domaine, etc.)
+  const assignedSwLicences: LogicielLicence[] = Array.from(swAssignMap.entries())
+    .filter(([swId]) => !consumedSwIds.has(swId))
+    .map(([swId, bucket]) => {
+      const meta = SOFTWARE_META[swId] || {
+        name: swId.replace(/^software-default-/, '').replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        editor: 'Éditeur tiers',
+        type: 'Volume VL' as const,
+      };
+      let matchingAccessKey: string | undefined;
+      if (swId === 'software-default-workspace') matchingAccessKey = 'GOOGLE WORKSPACE';
+      else if (swId === 'software-default-open-vpn') matchingAccessKey = 'OPENVPN';
+      else if (swId === 'software-default-domaine') matchingAccessKey = 'DOMAINE';
+      else if (swId === 'software-default-outlook') matchingAccessKey = 'EMAIL';
+
+      const accBucket = matchingAccessKey ? accessBySystem.get(matchingAccessKey) : undefined;
+      if (matchingAccessKey && accBucket) consumedAccessKeys.add(matchingAccessKey);
+
+      const rbacTxt = matchingAccessKey ? formatAccessRbacSummary(matchingAccessKey) : '';
+      const totalAssigned = Math.max(bucket.count, accBucket?.active || 0);
+      const usersPreview = bucket.employees.slice(0, 4).join(', ') + (bucket.employees.length > 4 ? ` (+${bucket.employees.length - 4})` : '');
+
+      return {
+        id: `sog-swa-${swId}`,
+        nomLogiciel: meta.name,
+        editeur: meta.editor,
+        version: 'Déploiement actif',
+        typeLicence: meta.type,
+        nombreLicencesAchetees: totalAssigned,
+        nombreLicencesAttribuees: totalAssigned,
+        dateExpiration: 'Actif / Suivi annuel',
+        coutRenouvellementEstime: 'Inclus parc / voir abonnements',
+        procedureInstallation: 'Déploiement poste standard SOGEDIPROMA.',
+        gestionComptesEtDroits: rbacTxt || `${bucket.count} postes déployés (${usersPreview || 'voir inventaire'})`,
+        statutConformite: 'Conforme',
+        observations: `Suivi applicatif SOGEDIPROMA : ${bucket.count} affectation(s) poste${accBucket ? ` · ${accBucket.total} comptes d'accès recensés` : ''}.`,
+      };
+    });
+
+  // Systèmes d'accès RBAC restants non rattachés à un logiciel (ex: WIFI, MAIL, EMAIL si non consommé)
+  const accessSystemLicences: LogicielLicence[] = Array.from(accessBySystem.entries())
+    .filter(([sysKey]) => !consumedAccessKeys.has(sysKey))
+    .map(([sysKey, bucket]) => {
+      const slug = sysKey.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      return {
+        id: `sog-acc-${slug}`,
+        nomLogiciel: `Accès ${bucket.systemLabel}`,
+        editeur: 'SOGEDIPROMA · Habilitations RBAC',
+        version: Array.from(bucket.roles.keys()).join(' / ') || 'Actif',
+        typeLicence: 'Volume VL',
+        nombreLicencesAchetees: bucket.total,
+        nombreLicencesAttribuees: bucket.active,
+        dateExpiration: 'Revue annuelle RBAC',
+        coutRenouvellementEstime: 'Interne / Infrastructure',
+        procedureInstallation: 'Attribution validée par la DSI.',
+        gestionComptesEtDroits: formatAccessRbacSummary(sysKey),
+        statutConformite: 'Conforme',
+        observations: [
+          `Comptes réels : ${bucket.sampleAccounts.join(', ')}${bucket.total > bucket.sampleAccounts.length ? '…' : ''}`,
+          bucket.latestGranted ? `Dernier accès accordé : ${bucket.latestGranted}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      };
+    });
 
   const trackedSoftware = itTracking.filter((row) => row && row.type === 'software' && row.name);
   const trackedLicences: LogicielLicence[] = trackedSoftware.map((sw, idx) => ({
@@ -1242,6 +1547,83 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     statutConformite: 'Conforme',
     observations: sw.notes || '',
   }));
+
+  // 9. Budgets IT -> Objectifs Annuels (Planification & KPI)
+  const fmtMoney = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0));
+  const objectifsAnnuels: ObjectifAnnuel[] = budgets.map((b, idx) => {
+    const allocated = Number(b.allocated) || 0;
+    const committed = Number(b.committed) || 0;
+    const spent = Number(b.spent) || 0;
+    const pct = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : 0;
+    const year = Number(b.fiscalYear) || new Date().getFullYear() + 1;
+    const priorite: ObjectifAnnuel['priorite'] =
+      allocated >= 15000000 ? 'Haute' : allocated >= 5000000 ? 'Moyenne' : 'Basse';
+    const statut: ObjectifAnnuel['statut'] =
+      b.status === 'Clôturé' || b.status === 'Terminé'
+        ? 'Atteint'
+        : spent > 0 || committed > 0
+        ? 'En cours'
+        : 'Non démarré';
+
+    return {
+      id: `sog-bdg-${b.id || idx}`,
+      titre: b.name || `Budget IT ${idx + 1}`,
+      description: [
+        b.category ? `Catégorie : ${b.category}` : '',
+        `Exercice budgétaire : ${year}`,
+        b.owner ? `Responsable : ${b.owner}` : '',
+        b.notes || '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      missionsPrevue: `Pilotage et exécution du budget ${b.category || 'IT'} (${fmtMoney(allocated)} ${currency} prévus)`,
+      resultatsAttendus: `Alloué : ${fmtMoney(allocated)} ${currency} · Engagé : ${fmtMoney(committed)} ${currency} · Dépensé : ${fmtMoney(spent)} ${currency}`,
+      ressourcesNecessaires: `${fmtMoney(allocated)} ${currency}`,
+      echeance: `${year}-12-31`,
+      priorite,
+      kpi: `Taux consommation budget : ${pct}%`,
+      avancement: pct,
+      statut,
+    };
+  });
+
+  // 10. Campagnes d'inventaire annuel -> Jalons Calendrier
+  const jalonsCalendrier: JalonCalendrier[] = itTracking
+    .filter((row) => row && row.type === 'annualInventoryCampaign')
+    .map((camp, idx) => {
+      const items = Array.isArray(camp.items) ? camp.items : [];
+      const totalItems = items.length;
+      const checkedItems = items.filter((it) => it && (it.checkedAt || it.resultStatus)).length;
+      const monthFromDate = (() => {
+        if (camp.startDate && /^\d{4}-(\d{2})-\d{2}/.test(camp.startDate)) {
+          const m = parseInt(camp.startDate.slice(5, 7), 10);
+          if (m >= 1 && m <= 12) return m;
+        }
+        return new Date().getMonth() + 1;
+      })();
+      const isDone =
+        camp.status === 'Clôturée' ||
+        camp.status === 'Terminée' ||
+        (totalItems > 0 && checkedItems === totalItems);
+
+      return {
+        id: `sog-camp-${camp.id || idx}`,
+        mois: monthFromDate,
+        titre: `${camp.name || `Campagne Inventaire ${camp.year || ''}`} (${checkedItems}/${totalItems} pointés)`,
+        description: [
+          `Périmètre : ${camp.scopeLabel || 'Matériels'}`,
+          `Statut : ${camp.status || 'En cours'}`,
+          camp.counter || camp.createdBy ? `Comptage : ${camp.counter || camp.createdBy}` : '',
+          camp.reviewer ? `Valideur : ${camp.reviewer}` : '',
+          camp.startDate ? `Démarrée le ${camp.startDate}` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        categorie: 'Inventaire',
+        priorite: 'Haute',
+        estComplete: isDone,
+      };
+    });
 
   const resolvedEmployeesCount =
     employees.length ||
@@ -1283,7 +1665,14 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     maintenances,
     interventions,
     journalTaches,
-    logicielsLicences: [...subLicences, ...trackedLicences],
+    logicielsLicences: [
+      ...subLicences,
+      ...assignedSwLicences,
+      ...accessSystemLicences,
+      ...trackedLicences,
+    ],
+    objectifsAnnuels,
+    jalonsCalendrier,
   };
 }
 
@@ -1359,6 +1748,12 @@ export function applySogedipromaMerge(
     logicielsLicences: selectedModules.logicielsLicences
       ? upsertBySogPrefix(currentData.logicielsLicences, delta.logicielsLicences, replaceSog)
       : currentData.logicielsLicences,
+    objectifsAnnuels: selectedModules.objectifsAnnuels
+      ? upsertBySogPrefix(currentData.objectifsAnnuels, delta.objectifsAnnuels, replaceSog)
+      : currentData.objectifsAnnuels,
+    jalonsCalendrier: selectedModules.jalonsCalendrier
+      ? upsertBySogPrefix(currentData.jalonsCalendrier, delta.jalonsCalendrier, replaceSog)
+      : currentData.jalonsCalendrier,
   });
 
   return {

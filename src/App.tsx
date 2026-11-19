@@ -257,6 +257,7 @@ function CahierContent({
               onDownloadPdf={handleDownloadPdf}
               onPrintPreview={handlePrintPreview}
               isGeneratingDocx={isGeneratingDocx}
+              onOpenSogedipromaSync={() => openDataModal('sogediproma')}
             />
 
             {/* Notification persistante discrète si connecté (Thème Clair unifié) */}

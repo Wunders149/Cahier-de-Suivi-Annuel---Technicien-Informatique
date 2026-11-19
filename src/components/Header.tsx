@@ -13,7 +13,8 @@ import {
   LogOut,
   Shield,
   ChevronDown,
-  Check
+  Check,
+  PlugZap
 } from 'lucide-react';
 import { CahierSuiviData } from '../types/it-tracker';
 import { useFirebase } from '../context/FirebaseContext';
@@ -28,6 +29,7 @@ interface HeaderProps {
   onDownloadPdf: () => void;
   onPrintPreview: () => void;
   isGeneratingDocx: boolean;
+  onOpenSogedipromaSync?: () => void;
 }
 
 const TAB_TITLES: Record<string, string> = {
@@ -55,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   onDownloadPdf,
   onPrintPreview,
   isGeneratingDocx,
+  onOpenSogedipromaSync,
 }) => {
   const { generalInfo } = data;
   const {
@@ -145,6 +148,19 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Search className="w-4 h-4" />
         </button>
+
+        {/* Raccourci 1-clic vers le connecteur appairé SOGEDIPROMA */}
+        {onOpenSogedipromaSync && (
+          <button
+            type="button"
+            onClick={onOpenSogedipromaSync}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold transition"
+            title="Synchroniser avec SOGEDIPROMA (https://pc-informatique.taild86fee.ts.net)"
+          >
+            <PlugZap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            <span className="hidden md:inline">SOGEDIPROMA</span>
+          </button>
+        )}
 
         {/* Indicateur Cloud Firestore discret (icône compacte) */}
         {user ? (
