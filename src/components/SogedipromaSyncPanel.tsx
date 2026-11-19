@@ -144,6 +144,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     hasDefaultCredentials: false,
     defaultUsername: '',
   });
+  const [backendProxyAvailable, setBackendProxyAvailable] = useState<boolean>(true);
   const [baseUrl, setBaseUrl] = useState<string>(() => {
     try {
       return localStorage.getItem('sogediproma_server_url') || '';
@@ -172,7 +173,15 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
   useEffect(() => {
     fetch('/api/sogediproma/config')
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (r.status === 404 || r.status === 405) {
+          setBackendProxyAvailable(false);
+          return null;
+        }
+        if (!r.ok) return null;
+        setBackendProxyAvailable(true);
+        return (await r.json()) as ServerConfigStatus;
+      })
       .then((cfg: ServerConfigStatus | null) => {
         if (!cfg) return;
         setServerConfig(cfg);
@@ -190,7 +199,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         }
       })
       .catch(() => {
-        // Ignorer si backend non joignable en preview statique
+        setBackendProxyAvailable(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -201,6 +210,102 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       localStorage.setItem('sogediproma_server_url', val);
     } catch {
       // Ignorer
+    }
+  };
+
+  const safeParseJson = async <T,>(res: Response): Promise<T | null> => {
+    try {
+      const txt = await res.text();
+      return txt ? (JSON.parse(txt) as T) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const tryDirectBrowserFetch = async (
+    targetBaseUrl: string,
+    mode: 'test' | 'sync'
+  ): Promise<{
+    reachable?: boolean;
+    authenticated?: boolean;
+    settings?: { company?: string };
+    revision?: number;
+    data?: SogedipromaStateData;
+  }> => {
+    const cleanUrl = targetBaseUrl.trim().replace(/\/+$/, '');
+    if (!cleanUrl) {
+      throw new Error(
+        "Cet hébergement statique n'exécute pas le serveur proxy (/api/*). Ouvrez l'application via son URL serveur (ais-dev / localhost) ou saisissez l'URL complète https://... ci-dessus."
+      );
+    }
+
+    try {
+      const statusRes = await fetch(`${cleanUrl}/api/status`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const statusData = await safeParseJson<{
+        authenticated?: boolean;
+        settings?: { company?: string };
+      }>(statusRes);
+      if (!statusRes.ok) {
+        throw new Error(`HTTP ${statusRes.status} sur ${cleanUrl}/api/status`);
+      }
+
+      let authenticated = Boolean(statusData?.authenticated);
+      let loginPayload: { revision?: number; data?: SogedipromaStateData } | null = null;
+
+      if (username.trim() && password) {
+        const loginRes = await fetch(`${cleanUrl}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ username: username.trim(), password }),
+        });
+        if (!loginRes.ok) {
+          throw new Error('Identifiants SOGEDIPROMA refusés par le serveur distant.');
+        }
+        authenticated = true;
+        loginPayload = await safeParseJson<{ revision?: number; data?: SogedipromaStateData }>(loginRes);
+      }
+
+      if (mode === 'test') {
+        return {
+          reachable: true,
+          authenticated,
+          settings: statusData?.settings,
+        };
+      }
+
+      if (loginPayload?.data) {
+        return {
+          revision: loginPayload.revision,
+          data: loginPayload.data,
+        };
+      }
+
+      const stateRes = await fetch(`${cleanUrl}/api/state`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      const stateJson = await safeParseJson<{ revision?: number; data?: SogedipromaStateData }>(
+        stateRes
+      );
+      if (!stateRes.ok || !stateJson?.data) {
+        throw new Error(`Impossible de lire /api/state (HTTP ${stateRes.status}).`);
+      }
+      return {
+        revision: stateJson.revision,
+        data: stateJson.data,
+      };
+    } catch (directErr) {
+      const msg = directErr instanceof Error ? directErr.message : '';
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || !msg) {
+        throw new Error(
+          "Hébergement statique (sans serveur Express /api/sogediproma/*) et blocage CORS par le serveur distant. Solution immédiate : utilisez l'URL complète avec serveur Express actif (ais-dev-... ou exécution locale), ou l'Option B (export JSON)."
+        );
+      }
+      throw directErr;
     }
   };
 
@@ -218,19 +323,32 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           password: password || undefined,
         }),
       });
-      const payload = (await res.json()) as {
+
+      if (res.status === 404 || res.status === 405) {
+        setBackendProxyAvailable(false);
+        const direct = await tryDirectBrowserFetch(baseUrl || serverConfig.defaultUrl, 'test');
+        const companyName = direct.settings?.company || 'SOGEDIPROMA';
+        setStatusNotice(
+          direct.authenticated
+            ? `Connexion directe réussie au serveur ${companyName}.`
+            : `Serveur ${companyName} joignable (/api/status OK).`
+        );
+        return;
+      }
+
+      const payload = await safeParseJson<{
         error?: string;
         reachable?: boolean;
         authenticated?: boolean;
         needsSetup?: boolean;
         settings?: { company?: string };
-      };
+      }>(res);
       if (!res.ok) {
-        throw new Error(payload.error || `Erreur HTTP ${res.status}`);
+        throw new Error(payload?.error || `Erreur HTTP ${res.status}`);
       }
-      const companyName = payload.settings?.company || 'SOGEDIPROMA';
+      const companyName = payload?.settings?.company || 'SOGEDIPROMA';
       setStatusNotice(
-        payload.authenticated
+        payload?.authenticated
           ? `Connexion authentifiée réussie au serveur ${companyName}.`
           : `Serveur ${companyName} joignable (/api/status OK).`
       );
@@ -267,6 +385,8 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     setStatusNotice(null);
     try {
       setIsSyncing(true);
+      let payload: { error?: string; revision?: number; data?: SogedipromaStateData } | null = null;
+
       const res = await fetch('/api/sogediproma/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -276,13 +396,23 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           password: password || undefined,
         }),
       });
-      const payload = (await res.json()) as {
-        error?: string;
-        revision?: number;
-        data?: SogedipromaStateData;
-      };
-      if (!res.ok || !payload.data) {
-        throw new Error(payload.error || `Erreur HTTP ${res.status} sur /api/sogediproma/sync`);
+
+      if (res.status === 404 || res.status === 405) {
+        setBackendProxyAvailable(false);
+        payload = await tryDirectBrowserFetch(baseUrl || serverConfig.defaultUrl, 'sync');
+      } else {
+        payload = await safeParseJson<{
+          error?: string;
+          revision?: number;
+          data?: SogedipromaStateData;
+        }>(res);
+        if (!res.ok || !payload?.data) {
+          throw new Error(payload?.error || `Erreur HTTP ${res.status} sur /api/sogediproma/sync`);
+        }
+      }
+
+      if (!payload?.data) {
+        throw new Error('Réponse vide reçue depuis SOGEDIPROMA.');
       }
 
       const mapped = mapSogedipromaToWorkbookDelta(payload.data);
@@ -595,6 +725,15 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
             </span>
           )}
         </div>
+
+        {!backendProxyAvailable && (
+          <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+            <span>
+              Vous utilisez actuellement l&apos;hébergement <strong>statique</strong> (le proxy backend <code className="font-mono">/api/sogediproma/*</code> renvoie HTTP 404/405). Pour synchroniser en direct avec <code className="font-mono">https://pc-informatique.taild86fee.ts.net</code> sans erreur CORS, ouvrez l&apos;application via son <strong>URL serveur active (ais-dev)</strong> ou autorisez les requêtes CORS sur votre serveur SOGEDIPROMA.
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-3 space-y-1.5">
