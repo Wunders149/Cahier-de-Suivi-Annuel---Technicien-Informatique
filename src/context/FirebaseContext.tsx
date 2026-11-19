@@ -208,7 +208,12 @@ export function FirebaseProvider({
     } catch (err) {
       console.error('Erreur connexion Google:', err);
       const e = err as { code?: string; message?: string };
-      if (e.code !== 'auth/popup-closed-by-user') {
+      if (e.code === 'auth/unauthorized-domain') {
+        const host = typeof window !== 'undefined' ? window.location.hostname : 'ce domaine';
+        setErrorMessage(
+          `Domaine « ${host} » non autorisé par Firebase Auth. Ajoutez « ${host} » dans Firebase Console → Authentication → Settings → Domaines autorisés.`
+        );
+      } else if (e.code !== 'auth/popup-closed-by-user') {
         setErrorMessage(`Connexion échouée : ${e.message || 'Erreur inconnue'}`);
       }
     }

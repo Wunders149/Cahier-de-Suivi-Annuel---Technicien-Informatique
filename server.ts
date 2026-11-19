@@ -105,6 +105,7 @@ async function fetchUpstreamJson(
   try {
     const headers: Record<string, string> = {
       Accept: 'application/json',
+      'ngrok-skip-browser-warning': '1',
     };
     const cookieHeader = serializeCookies(options.jar);
     if (cookieHeader) {

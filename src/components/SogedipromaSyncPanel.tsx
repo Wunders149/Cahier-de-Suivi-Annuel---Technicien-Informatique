@@ -28,6 +28,8 @@ import {
   PlugZap,
   FileJson,
   X,
+  Copy,
+  Zap,
 } from 'lucide-react';
 import {
   emeraldButtonClass,
@@ -154,6 +156,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadingPreset, setLoadingPreset] = useState<'full' | 'assets-18' | 'inventory-18' | null>(null);
+  const [copiedTunnelCmd, setCopiedTunnelCmd] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
 
@@ -173,8 +176,14 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       .then((cfg: ServerConfigStatus | null) => {
         if (!cfg) return;
         setServerConfig(cfg);
-        if (!baseUrl && cfg.defaultUrl) {
-          setBaseUrl(cfg.defaultUrl);
+        const isCloudHost =
+          typeof window !== 'undefined' &&
+          window.location.hostname !== 'localhost' &&
+          window.location.hostname !== '127.0.0.1';
+        if (cfg.defaultUrl) {
+          if (!baseUrl || (isCloudHost && !cfg.isDefaultUrlPrivateLan && isPrivateLanUrl(baseUrl))) {
+            persistServerUrl(cfg.defaultUrl);
+          }
         }
         if (!username && cfg.defaultUsername) {
           setUsername(cfg.defaultUsername);
@@ -236,21 +245,24 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     }
   };
 
+  const buildPopulatedSelection = (
+    mapped: SogedipromaMappedDelta
+  ): Record<SogedipromaSyncModuleKey, boolean> => ({
+    consommables: mapped.consommables.length > 0,
+    demandesAchat: mapped.demandesAchat.length > 0,
+    parcEquipements: mapped.parcEquipements.length > 0,
+    reseauEquipements: mapped.reseauEquipements.length > 0,
+    maintenances: mapped.maintenances.length > 0,
+    interventions: mapped.interventions.length > 0,
+    journalTaches: mapped.journalTaches.length > 0,
+    logicielsLicences: mapped.logicielsLicences.length > 0,
+  });
+
   const selectPopulatedModules = (mapped: SogedipromaMappedDelta) => {
-    setSelectedModules({
-      consommables: mapped.consommables.length > 0,
-      demandesAchat: mapped.demandesAchat.length > 0,
-      parcEquipements: mapped.parcEquipements.length > 0,
-      reseauEquipements: mapped.reseauEquipements.length > 0,
-      maintenances: mapped.maintenances.length > 0,
-      interventions: mapped.interventions.length > 0,
-      journalTaches: mapped.journalTaches.length > 0,
-      logicielsLicences: mapped.logicielsLicences.length > 0,
-    });
+    setSelectedModules(buildPopulatedSelection(mapped));
   };
 
-  const handleFetchLiveState = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeLiveFetch = async (applyImmediately: boolean) => {
     setErrorMsg(null);
     setStatusNotice(null);
     try {
@@ -274,12 +286,43 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       }
 
       const mapped = mapSogedipromaToWorkbookDelta(payload.data);
+      const populatedSel = buildPopulatedSelection(mapped);
+      const revLabel = payload.revision ?? '—';
+
+      if (applyImmediately) {
+        const result = applySogedipromaMerge(currentData, mapped, populatedSel, mergeMode);
+        if (result.estimatedBytes >= 950 * 1024) {
+          setPendingDelta(mapped);
+          setSelectedModules(populatedSel);
+          setSourceRevision(typeof payload.revision === 'number' ? payload.revision : null);
+          setSourceOriginLabel(`Serveur live (${baseUrl || serverConfig.defaultUrl || 'env'})`);
+          setErrorMsg(
+            `Taille Firestore élevée (${Math.round(result.estimatedBytes / 1024)} Ko / 1 024 Ko). Sélectionnez manuellement les modules ci-dessous avant d'appliquer.`
+          );
+          return;
+        }
+
+        const counts: string[] = [];
+        if (mapped.parcEquipements.length) counts.push(`${mapped.parcEquipements.length} mat.`);
+        if (mapped.consommables.length) counts.push(`${mapped.consommables.length} art.`);
+        if (mapped.demandesAchat.length) counts.push(`${mapped.demandesAchat.length} achats`);
+        if (mapped.reseauEquipements.length) counts.push(`${mapped.reseauEquipements.length} réseau`);
+        const summary = counts.length
+          ? `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée : ${counts.join(', ')}.`
+          : `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée.`;
+
+        setPendingDelta(null);
+        setStatusNotice(summary);
+        onApplySyncedData(result.nextData, summary);
+        return;
+      }
+
       setPendingDelta(mapped);
-      selectPopulatedModules(mapped);
+      setSelectedModules(populatedSel);
       setSourceRevision(typeof payload.revision === 'number' ? payload.revision : null);
       setSourceOriginLabel(`Serveur live (${baseUrl || serverConfig.defaultUrl || 'env'})`);
       setStatusNotice(
-        `Snapshot GET /api/state récupéré (révision ${payload.revision ?? '—'}). Sélectionnez les modules à importer ci-dessous.`
+        `Snapshot GET /api/state récupéré (révision ${revLabel}). Sélectionnez les modules à importer ci-dessous.`
       );
     } catch (err) {
       setErrorMsg(
@@ -290,6 +333,11 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleFetchLiveState = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeLiveFetch(false);
   };
 
   const handleUploadSogedipromaJson = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -550,9 +598,20 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="sm:col-span-3 space-y-1.5">
-            <label className="block text-[11px] font-semibold text-slate-700">
-              URL du serveur SOGEDIPROMA
-            </label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="block text-[11px] font-semibold text-slate-700">
+                URL du serveur SOGEDIPROMA
+              </label>
+              {serverConfig.hasDefaultUrl && baseUrl.trim() !== serverConfig.defaultUrl && (
+                <button
+                  type="button"
+                  onClick={() => persistServerUrl(serverConfig.defaultUrl)}
+                  className="text-[11px] font-semibold text-blue-700 hover:underline"
+                >
+                  Rétablir URL serveur ({serverConfig.defaultUrl})
+                </button>
+              )}
+            </div>
             <input
               type="url"
               value={baseUrl}
@@ -563,14 +622,56 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
               required={!serverConfig.hasDefaultUrl}
               className={`${fieldInputClass} font-mono text-xs`}
             />
-            {isPrivateLanUrl(baseUrl.trim() || serverConfig.defaultUrl) && (
-              <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
-                <span>
-                  L&apos;adresse <code className="font-mono font-semibold">{baseUrl.trim() || serverConfig.defaultUrl}</code> est une IP privée locale (LAN). Un navigateur ou serveur hébergé dans le Cloud ne peut pas l&apos;atteindre sans tunnel HTTPS (ex. Cloudflare Tunnel) ou exécution locale sur le même réseau. En alternative immédiate, utilisez l&apos;<strong>Option B</strong> ci-dessous avec un export JSON <code className="font-mono">/api/backup</code>.
-                </span>
-              </div>
-            )}
+            {(() => {
+              const targetUrl = baseUrl.trim() || serverConfig.defaultUrl;
+              const isLocalRuntime =
+                typeof window !== 'undefined' &&
+                (window.location.hostname === 'localhost' ||
+                  window.location.hostname === '127.0.0.1');
+              const tunnelCmd = `cloudflared tunnel --url ${targetUrl || 'http://192.168.100.3:8080'}`;
+
+              if (!isPrivateLanUrl(targetUrl)) return null;
+
+              if (isLocalRuntime) {
+                return (
+                  <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] leading-relaxed flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      Mode exécution locale détecté (<code className="font-mono font-semibold">{window.location.hostname}</code>) : connexion directe prête vers <code className="font-mono font-semibold">{targetUrl}</code> sans tunnel.
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                    <span>
+                      Depuis l&apos;application en ligne (Cloud), l&apos;IP locale <code className="font-mono font-semibold">{targetUrl}</code> nécessite un tunnel HTTPS actif sur un PC du bureau. Lancez cette commande puis collez l&apos;URL <code className="font-mono font-semibold">https://...</code> obtenue ci-dessus :
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-amber-200 rounded-md px-2.5 py-1.5">
+                    <code className="font-mono text-[11px] text-slate-800 select-all break-all">
+                      {tunnelCmd}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(tunnelCmd).then(() => {
+                          setCopiedTunnelCmd(true);
+                          setTimeout(() => setCopiedTunnelCmd(false), 2000);
+                        });
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold text-[10px] shrink-0 transition"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>{copiedTunnelCmd ? 'Copié !' : 'Copier'}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div>
@@ -610,16 +711,29 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
+            type="button"
+            disabled={isSyncing || isTesting}
+            onClick={(e) => {
+              if (e.currentTarget.form && !e.currentTarget.form.reportValidity()) return;
+              executeLiveFetch(true);
+            }}
+            className={emeraldButtonClass}
+          >
+            <Zap className={`w-3.5 h-3.5 ${isSyncing ? 'animate-pulse' : ''}`} />
+            <span>
+              {isSyncing
+                ? 'Synchronisation en cours...'
+                : 'Sync directe (Live → Cloud)'}
+            </span>
+          </button>
+
+          <button
             type="submit"
             disabled={isSyncing || isTesting}
             className={primaryButtonClass}
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>
-              {isSyncing
-                ? 'Interrogation /api/state...'
-                : 'Récupérer les données (/api/state)'}
-            </span>
+            <span>Prévisualiser (/api/state)</span>
           </button>
 
           <button
