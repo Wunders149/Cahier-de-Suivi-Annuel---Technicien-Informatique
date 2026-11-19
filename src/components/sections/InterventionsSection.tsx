@@ -6,6 +6,7 @@ import {
   InterventionEquipementDetail,
   InterventionType,
   NatureIntervention,
+  TacheJournal,
 } from '../../types/it-tracker';
 import {
   Plus,
@@ -25,6 +26,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Lightbulb,
+  BookCheck,
 } from 'lucide-react';
 import {
   combineDurationToMinutes,
@@ -35,6 +37,11 @@ import {
   formatInterventionStatusLabel,
   getInterventionVocabulary,
 } from '../../utils/interventionLabels';
+import {
+  buildJournalTaskFromIntervention,
+  getLocalDateTimeStamp,
+  getLocalTodayIso,
+} from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import {
@@ -49,6 +56,7 @@ interface InterventionsSectionProps {
   interventions: FicheIntervention[];
   onUpdateInterventions: (interventions: FicheIntervention[]) => void;
   generalInfo?: GeneralInfo;
+  onLogToJournal?: (task: TacheJournal) => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -59,7 +67,7 @@ const NATURE_OPTIONS: NatureIntervention[] = [
 ];
 
 const DEFAULT_NEW_TICKET = (): Partial<FicheIntervention> => ({
-  dateReception: new Date().toISOString().split('T')[0],
+  dateReception: getLocalTodayIso(),
   heureReception: '10:00',
   nomDemandeur: '',
   serviceDemandeur: '',
@@ -88,6 +96,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
   interventions,
   onUpdateInterventions,
   generalInfo,
+  onLogToJournal,
   onShowToast,
 }) => {
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -215,8 +224,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       ? interventions.find((it) => it.id === editingId)
       : undefined;
 
-    const dateRec =
-      formTicket.dateReception || new Date().toISOString().split('T')[0];
+    const dateRec = formTicket.dateReception || getLocalTodayIso();
     const heureRec = formTicket.heureReception || '10:00';
     const isValidated = Boolean(formTicket.validationDemandeur);
 
@@ -275,12 +283,17 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
       : [item, ...interventions];
 
     onUpdateInterventions(updated);
+    if (!editingId && item.resultat === 'Résolu' && onLogToJournal) {
+      onLogToJournal(buildJournalTaskFromIntervention(item));
+    }
     setSelectedId(item.id);
     setShowModal(false);
     setEditingId(null);
     notify(
       editingId
         ? `Fiche ${item.numeroReference} mise à jour.`
+        : item.resultat === 'Résolu' && onLogToJournal
+        ? `Fiche ${item.numeroReference} enregistrée et consignée au journal.`
         : `Fiche ${item.numeroReference} enregistrée.`
     );
   };
@@ -296,7 +309,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
   };
 
   const handleToggleValidation = (id: string) => {
-    const nowStamp = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const nowStamp = getLocalDateTimeStamp();
     const updated = interventions.map((it) => {
       if (it.id !== id) return it;
       const nextVal = !it.validationDemandeur;
@@ -1315,6 +1328,19 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
                         {isExportingDocx ? 'Génération...' : 'Exporter Word'}
                       </span>
                     </button>
+                    {onLogToJournal && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onLogToJournal(buildJournalTaskFromIntervention(selectedIntervention));
+                          notify(`Intervention ${selectedIntervention.numeroReference} consignée au journal quotidien.`);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-medium transition"
+                      >
+                        <BookCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Consigner au journal</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">

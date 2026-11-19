@@ -16,6 +16,7 @@ import {
   PageNumber,
 } from 'docx';
 import { saveAs } from 'file-saver';
+import { getLocalTodayIso } from './coherenceUtils';
 import {
   CahierSuiviData,
   FicheIntervention,
@@ -443,7 +444,7 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
   doc.setTextColor(51, 65, 85);
   doc.text(
     `Livré par : ${techName}   |   Date de remise : ${
-      rapport.dateLivraison || new Date().toISOString().split('T')[0]
+      rapport.dateLivraison || getLocalTodayIso()
     }`,
     margin + 4,
     y + 13

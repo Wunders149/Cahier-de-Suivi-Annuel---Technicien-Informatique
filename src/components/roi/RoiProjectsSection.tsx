@@ -43,6 +43,7 @@ import {
   formatCompactAriaryAxis,
   loadFxRates,
 } from '../../utils/currencyConverter';
+import { getLocalTodayIso } from '../../utils/coherenceUtils';
 
 interface RoiProjectsSectionProps {
   projets: ProjetRoiIT[];
@@ -123,7 +124,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
     gainTempsEstimeHeuresParAn: 60,
     tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
     impactQualitatif: '',
-    dateMiseEnService: new Date().toISOString().split('T')[0],
+    dateMiseEnService: getLocalTodayIso(),
     statut: 'En production',
   });
 
@@ -233,7 +234,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       gainTempsEstimeHeuresParAn: 50,
       tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
       impactQualitatif: '',
-      dateMiseEnService: new Date().toISOString().split('T')[0],
+      dateMiseEnService: getLocalTodayIso(),
       statut: 'En production',
     });
     setShowModal(true);
@@ -257,7 +258,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
       gainTempsEstimeHeuresParAn: 40,
       tauxHoraireMoyenValorise: DEFAULT_HOURLY_RATE_AR,
       impactQualitatif: `Ligne budgétaire SOGEDIPROMA importée (${allocatedAr.toLocaleString('fr-FR')} Ar).`,
-      dateMiseEnService: new Date().toISOString().split('T')[0],
+      dateMiseEnService: getLocalTodayIso(),
       statut: 'En cours',
     });
     setShowModal(true);
@@ -303,7 +304,7 @@ export const RoiProjectsSection: React.FC<RoiProjectsSectionProps> = ({
         gainTempsEstimeHeuresParAn: Number(formData.gainTempsEstimeHeuresParAn) || 0,
         tauxHoraireMoyenValorise: Number(formData.tauxHoraireMoyenValorise) || DEFAULT_HOURLY_RATE_AR,
         impactQualitatif: formData.impactQualitatif || '',
-        dateMiseEnService: formData.dateMiseEnService || new Date().toISOString().split('T')[0],
+        dateMiseEnService: formData.dateMiseEnService || getLocalTodayIso(),
         statut: (formData.statut as any) || 'En production',
       };
       onUpdateProjets([...projets, newProj]);

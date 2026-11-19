@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { ItemMaintenance } from '../../types/it-tracker';
-import { CheckSquare, Plus, Search, Wrench } from 'lucide-react';
+import { ItemMaintenance, TacheJournal } from '../../types/it-tracker';
+import { CheckSquare, Plus, Search, Wrench, Video, AlertTriangle, BookCheck } from 'lucide-react';
+import { useSogedipromaLiveSnapshot } from '../../utils/sogedipromaLiveStore';
+import {
+  computeNextControlDate,
+  getLinkedJournalIdForMaintenance,
+  getLocalTodayIso,
+} from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
@@ -15,7 +21,9 @@ import {
 
 interface MaintenanceSectionProps {
   maintenances: ItemMaintenance[];
+  journalTaches?: TacheJournal[];
   onUpdateMaintenances: (maintenances: ItemMaintenance[]) => void;
+  onSyncAllToJournal?: () => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -33,27 +41,38 @@ const CATEGORIES: ItemMaintenance['categorie'][] = [
   'Contrôle sauvegardes',
 ];
 
-const DEFAULT_MAINTENANCE = (): Partial<ItemMaintenance> => ({
-  categorie: 'Ordinateurs',
-  typeMaintenance: 'Préventive',
-  tacheControle: '',
-  frequence: 'Mensuelle',
-  dernierControle: new Date().toISOString().split('T')[0],
-  prochainControle: `${new Date().getFullYear()}-12-31`,
-  statut: 'Conforme',
-  responsableOuEquipement: 'Parc bureautique',
-  observations: '',
-  valide: true,
-});
+const DEFAULT_MAINTENANCE = (): Partial<ItemMaintenance> => {
+  const today = getLocalTodayIso();
+  return {
+    categorie: 'Ordinateurs',
+    typeMaintenance: 'Préventive',
+    tacheControle: '',
+    frequence: 'Mensuelle',
+    dernierControle: today,
+    prochainControle: computeNextControlDate(today, 'Mensuelle'),
+    statut: 'Conforme',
+    responsableOuEquipement: 'Parc bureautique',
+    observations: '',
+    valide: true,
+  };
+};
 
 export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
   maintenances,
+  journalTaches = [],
   onUpdateMaintenances,
+  onSyncAllToJournal,
   onShowToast,
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('Tous');
   const [typeFilter, setTypeFilter] = useState<'Tous' | 'Préventive' | 'Corrective'>('Tous');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Onglet Vidéosurveillance IP (66 caméras & 128 contrôles SOGEDIPROMA)
+  const liveSnapshot = useSogedipromaLiveSnapshot();
+  const [activeTab, setActiveTab] = useState<'grid' | 'cameras'>('grid');
+  const [camSearch, setCamSearch] = useState('');
+  const [camOnlyIssues, setCamOnlyIssues] = useState(false);
 
   // États CRUD
   const [modalOpen, setModalOpen] = useState(false);
@@ -77,6 +96,22 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
     [maintenances, deletingId]
   );
 
+  const loggedJournalIds = useMemo(
+    () => new Set(journalTaches.map((t) => t.id)),
+    [journalTaches]
+  );
+
+  const unloggedValidatedCount = useMemo(
+    () =>
+      maintenances.filter(
+        (m) =>
+          m.valide &&
+          Boolean(m.dernierControle) &&
+          !loggedJournalIds.has(getLinkedJournalIdForMaintenance(m.id))
+      ).length,
+    [maintenances, loggedJournalIds]
+  );
+
   const openCreateModal = () => {
     setEditingId(null);
     setIsDuplicating(false);
@@ -94,11 +129,13 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
   const openDuplicateModal = (item: ItemMaintenance) => {
     setEditingId(null);
     setIsDuplicating(true);
+    const today = getLocalTodayIso();
     setFormItem({
       ...item,
       id: undefined,
       tacheControle: `${item.tacheControle} (copie)`,
-      dernierControle: new Date().toISOString().split('T')[0],
+      dernierControle: today,
+      prochainControle: computeNextControlDate(today, item.frequence),
       valide: false,
       statut: 'À traiter',
     });
@@ -106,21 +143,46 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
   };
 
   const handleToggleValide = (id: string) => {
-    const updated = maintenances.map((m) =>
-      m.id === id
-        ? {
-            ...m,
-            valide: !m.valide,
-            statut: (!m.valide ? 'Conforme' : 'À traiter') as ItemMaintenance['statut'],
-          }
-        : m
-    );
+    const today = getLocalTodayIso();
+    const target = maintenances.find((m) => m.id === id);
+    const becomingValid = target ? !target.valide : true;
+
+    const updated = maintenances.map((m) => {
+      if (m.id !== id) return m;
+      const nextValide = !m.valide;
+      if (nextValide) {
+        return {
+          ...m,
+          valide: true,
+          statut: 'Conforme' as ItemMaintenance['statut'],
+          dernierControle: today,
+          prochainControle: computeNextControlDate(today, m.frequence),
+        };
+      }
+      return {
+        ...m,
+        valide: false,
+        statut: 'À traiter' as ItemMaintenance['statut'],
+      };
+    });
     onUpdateMaintenances(updated);
+    notify(
+      becomingValid
+        ? 'Maintenance validée et consignée dans le journal quotidien.'
+        : 'Maintenance marquée « À traiter » et mise à jour dans le journal.'
+    );
   };
 
   const handleSaveMaintenance = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formItem.tacheControle?.trim()) return;
+
+    const today = getLocalTodayIso();
+    const frequence = (formItem.frequence as ItemMaintenance['frequence']) || 'Mensuelle';
+    const isValid = Boolean(formItem.valide);
+    const dernierControle = formItem.dernierControle || today;
+    const prochainControle =
+      formItem.prochainControle || computeNextControlDate(dernierControle, frequence);
 
     const payload: ItemMaintenance = {
       id: editingId || `MNT-${Date.now()}`,
@@ -128,23 +190,32 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
       typeMaintenance:
         (formItem.typeMaintenance as ItemMaintenance['typeMaintenance']) || 'Préventive',
       tacheControle: formItem.tacheControle.trim(),
-      frequence: (formItem.frequence as ItemMaintenance['frequence']) || 'Mensuelle',
-      dernierControle: formItem.dernierControle || new Date().toISOString().split('T')[0],
-      prochainControle: formItem.prochainControle || `${new Date().getFullYear()}-12-31`,
-      statut: (formItem.statut as ItemMaintenance['statut']) || 'Conforme',
+      frequence,
+      dernierControle,
+      prochainControle:
+        isValid && prochainControle <= dernierControle
+          ? computeNextControlDate(dernierControle, frequence)
+          : prochainControle,
+      statut: (formItem.statut as ItemMaintenance['statut']) || (isValid ? 'Conforme' : 'À traiter'),
       responsableOuEquipement: formItem.responsableOuEquipement?.trim() || 'Parc global',
       observations: formItem.observations?.trim() || '',
-      valide: Boolean(formItem.valide),
+      valide: isValid,
     };
 
     if (editingId) {
       onUpdateMaintenances(maintenances.map((m) => (m.id === editingId ? payload : m)));
-      notify('Tâche de maintenance mise à jour.');
+      notify(
+        isValid
+          ? 'Contrôle mis à jour et consigné dans le journal quotidien.'
+          : 'Tâche de maintenance mise à jour.'
+      );
     } else {
       onUpdateMaintenances([...maintenances, payload]);
       notify(
         isDuplicating
           ? 'Tâche de maintenance dupliquée.'
+          : isValid
+          ? 'Contrôle enregistré et consigné dans le journal quotidien.'
           : 'Nouveau contrôle de maintenance enregistré.'
       );
     }
@@ -177,6 +248,33 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
 
   const countConformes = maintenances.filter((m) => m.valide).length;
 
+  const filteredCameras = useMemo(() => {
+    const rows = liveSnapshot?.cameraHealth || [];
+    const q = camSearch.trim().toLowerCase();
+    return rows.filter((c) => {
+      const hasIssue = c.issueCount > 0;
+      if (camOnlyIssues && !hasIssue) return false;
+      if (!q) return true;
+      return (
+        c.assetTag.toLowerCase().includes(q) ||
+        c.name.toLowerCase().includes(q) ||
+        c.ip.toLowerCase().includes(q) ||
+        c.location.toLowerCase().includes(q) ||
+        c.lastCheckedBy.toLowerCase().includes(q)
+      );
+    });
+  }, [liveSnapshot?.cameraHealth, camSearch, camOnlyIssues]);
+
+  const cameraStats = useMemo(() => {
+    const rows = liveSnapshot?.cameraHealth || [];
+    const withChecks = rows.filter((c) => c.totalChecks > 0);
+    const avgAvail = withChecks.length
+      ? Math.round(withChecks.reduce((s, c) => s + c.availabilityPct, 0) / withChecks.length)
+      : 100;
+    const issues = rows.filter((c) => c.issueCount > 0).length;
+    return { total: rows.length, withChecks: withChecks.length, avgAvail, issues };
+  }, [liveSnapshot?.cameraHealth]);
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -192,95 +290,144 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
             Grilles de contrôle périodiques, check-lists de conformité et distinction stricte Préventif vs Correctif.
           </p>
         </div>
-        <button type="button" onClick={openCreateModal} className={primaryButtonClass}>
-          <Plus className="w-4 h-4" />
-          <span>Ajouter une Tâche de Maintenance</span>
-        </button>
-      </div>
-
-      {/* Barre de métriques rapides */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-slate-500 block">Total points de contrôle</span>
-            <strong className="text-lg font-bold font-mono tabular-nums text-slate-900">
-              {maintenances.length}
-            </strong>
-          </div>
-          <span className="text-xs font-semibold text-blue-700">11 Domaines</span>
-        </div>
-        <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-emerald-800 block">Contrôles conformes</span>
-            <strong className="text-lg font-bold font-mono tabular-nums text-emerald-950">
-              {countConformes} / {maintenances.length}
-            </strong>
-          </div>
-          <span className="text-xs font-mono tabular-nums font-bold text-emerald-800">
-            {Math.round((countConformes / (maintenances.length || 1)) * 100)}% OK
-          </span>
-        </div>
-        <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between">
-          <div>
-            <span className="text-xs text-amber-800 block">À traiter ou vérifier</span>
-            <strong className="text-lg font-bold font-mono tabular-nums text-amber-950">
-              {maintenances.filter((m) => !m.valide).length}
-            </strong>
-          </div>
-          <span className="text-xs font-bold text-amber-800">Suivi actif</span>
-        </div>
-      </div>
-
-      {/* Filtres par domaine et type */}
-      <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-            {(['Tous', 'Préventive', 'Corrective'] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTypeFilter(t)}
-                className={`px-3 py-1 rounded-md font-semibold whitespace-nowrap shrink-0 transition ${
-                  typeFilter === t
-                    ? 'bg-white text-slate-900 shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {t === 'Tous' ? 'Toutes les maintenances' : `Maintenance ${t}`}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Rechercher tâche, matériel, note..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs"
-            />
-          </div>
-        </div>
-
-        {/* Boutons des 11 domaines */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-          {filterCategories.map((cat) => (
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          {unloggedValidatedCount > 0 && onSyncAllToJournal && (
             <button
-              key={cat}
               type="button"
-              onClick={() => setActiveCategory(cat)}
-              className={`px-2.5 py-1 rounded-md whitespace-nowrap font-medium transition ${
-                activeCategory === cat
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
-              }`}
+              onClick={onSyncAllToJournal}
+              className={secondaryButtonClass}
+              title="Consigner dans le journal quotidien les maintenances validées manquantes"
             >
-              {cat}
+              <BookCheck className="w-4 h-4 text-emerald-600" />
+              <span>Consigner {unloggedValidatedCount} au journal</span>
             </button>
-          ))}
+          )}
+          <button type="button" onClick={openCreateModal} className={primaryButtonClass}>
+            <Plus className="w-4 h-4" />
+            <span>Ajouter une Tâche de Maintenance</span>
+          </button>
         </div>
       </div>
+
+      {/* Sélecteur segmenté : Grille Maintenances vs Vidéosurveillance IP */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('grid')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'grid'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Grille Maintenances ({maintenances.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('cameras')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'cameras'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Video className="w-3.5 h-3.5 text-blue-600" />
+            <span>
+              Vidéosurveillance IP ({liveSnapshot?.cameraHealth.length || 0} caméras ·{' '}
+              {liveSnapshot?.counts.cameraChecks || 0} contrôles)
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'grid' && (
+        <>
+          {/* Barre de métriques rapides */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block">Total points de contrôle</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-slate-900">
+                  {maintenances.length}
+                </strong>
+              </div>
+              <span className="text-xs font-semibold text-blue-700">11 Domaines</span>
+            </div>
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-emerald-800 block">Contrôles conformes</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-emerald-950">
+                  {countConformes} / {maintenances.length}
+                </strong>
+              </div>
+              <span className="text-xs font-mono tabular-nums font-bold text-emerald-800">
+                {Math.round((countConformes / (maintenances.length || 1)) * 100)}% OK
+              </span>
+            </div>
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-amber-800 block">À traiter ou vérifier</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-amber-950">
+                  {maintenances.filter((m) => !m.valide).length}
+                </strong>
+              </div>
+              <span className="text-xs font-bold text-amber-800">Suivi actif</span>
+            </div>
+          </div>
+
+          {/* Filtres par domaine et type */}
+          <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                {(['Tous', 'Préventive', 'Corrective'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTypeFilter(t)}
+                    className={`px-3 py-1 rounded-md font-semibold whitespace-nowrap shrink-0 transition ${
+                      typeFilter === t
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {t === 'Tous' ? 'Toutes les maintenances' : `Maintenance ${t}`}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Rechercher tâche, matériel, note..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Boutons des 11 domaines */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+              {filterCategories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`px-2.5 py-1 rounded-md whitespace-nowrap font-medium transition ${
+                    activeCategory === cat
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal Création / Édition / Duplication */}
       <Modal
@@ -587,132 +734,291 @@ export const MaintenanceSection: React.FC<MaintenanceSectionProps> = ({
         }
       />
 
-      {/* Grille des tâches de maintenance */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-900 text-white">
-                <th className="p-3 font-semibold whitespace-nowrap">Valide</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Domaine &amp; Équipement</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Type</th>
-                <th className="p-3 font-semibold">Tâche de Contrôle &amp; Procédure</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Fréquence</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Dernier / Prochain</th>
-                <th className="p-3 font-semibold">Observations &amp; Statut</th>
-                <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center">
-                    <div className="max-w-md mx-auto space-y-2">
-                      <p className="text-slate-600 font-medium">
-                        {maintenances.length === 0
-                          ? 'Aucune ligne de maintenance enregistrée.'
-                          : 'Aucune tâche de maintenance ne correspond à votre filtre.'}
-                      </p>
-                      {maintenances.length === 0 && (
-                        <button
-                          type="button"
-                          onClick={openCreateModal}
-                          className={primaryButtonClass}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Créer un contrôle</span>
-                        </button>
-                      )}
-                    </div>
-                  </td>
+      {activeTab === 'cameras' ? (
+        <div className="space-y-4">
+          {/* Métriques Santé Caméras IP */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-slate-500 block">Caméras IP suivies</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-slate-900">
+                  {cameraStats.total}
+                </strong>
+              </div>
+              <span className="text-xs font-mono tabular-nums font-semibold text-blue-700">
+                {liveSnapshot?.counts.cameraChecks || 0} contrôles
+              </span>
+            </div>
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-emerald-800 block">Disponibilité moyenne</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-emerald-950">
+                  {cameraStats.avgAvail}%
+                </strong>
+              </div>
+              <span className="text-xs font-mono tabular-nums text-emerald-800">
+                {cameraStats.withChecks} contrôlée(s)
+              </span>
+            </div>
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between">
+              <div>
+                <span className="text-xs text-amber-800 block">Caméras avec incident</span>
+                <strong className="text-lg font-bold font-mono tabular-nums text-amber-950">
+                  {cameraStats.issues}
+                </strong>
+              </div>
+              <span className="text-xs font-semibold text-amber-800">Historique CCTV</span>
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={camSearch}
+                onChange={(e) => setCamSearch(e.target.value)}
+                placeholder="Rechercher par code caméra, nom, adresse IP, emplacement, contrôleur..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              />
+            </div>
+            <label className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 cursor-pointer select-none font-semibold text-slate-700">
+              <input
+                type="checkbox"
+                checked={camOnlyIssues}
+                onChange={(e) => setCamOnlyIssues(e.target.checked)}
+                className="rounded border-slate-300 text-blue-600"
+              />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>Anomalies uniquement</span>
+            </label>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-3 font-semibold whitespace-nowrap">Code / Caméra</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Adresse IP</th>
+                    <th className="p-3 font-semibold">Emplacement</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Disponibilité</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Dernier Contrôle</th>
+                    <th className="p-3 font-semibold">Statut &amp; Observations</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {filteredCameras.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                        {liveSnapshot
+                          ? 'Aucune caméra ne correspond à votre filtre.'
+                          : 'Synchronisez SOGEDIPROMA pour consulter la disponibilité par caméra IP.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredCameras.map((c) => (
+                      <tr key={c.assetId} className="hover:bg-slate-50 transition">
+                        <td className="p-3 align-top">
+                          <strong className="font-mono tabular-nums text-blue-900 block">
+                            {c.assetTag}
+                          </strong>
+                          <span className="text-slate-900 font-medium">{c.name}</span>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-slate-700">
+                          {c.ip || '—'}
+                        </td>
+                        <td className="p-3 align-top text-slate-700">{c.location}</td>
+                        <td className="p-3 align-top whitespace-nowrap">
+                          <div className="flex items-center gap-2 font-mono tabular-nums">
+                            <span
+                              className={`font-bold ${
+                                c.availabilityPct >= 90
+                                  ? 'text-emerald-700'
+                                  : c.availabilityPct >= 70
+                                  ? 'text-amber-700'
+                                  : 'text-red-700'
+                              }`}
+                            >
+                              {c.availabilityPct}%
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              ({c.okChecks}/{c.totalChecks} OK)
+                            </span>
+                          </div>
+                          <div className="w-24 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
+                            <div
+                              className={`h-full ${
+                                c.availabilityPct >= 90
+                                  ? 'bg-emerald-500'
+                                  : c.availabilityPct >= 70
+                                  ? 'bg-amber-500'
+                                  : 'bg-red-500'
+                              }`}
+                              style={{ width: `${c.availabilityPct}%` }}
+                            />
+                          </div>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap text-[11px]">
+                          <span className="font-mono tabular-nums block text-slate-800">
+                            {c.lastCheckDate || 'Aucun'}
+                          </span>
+                          <span className="text-slate-500">{c.lastCheckedBy || '—'}</span>
+                        </td>
+                        <td className="p-3 align-top text-[11px]">
+                          <span
+                            className={`font-semibold block ${
+                              c.issueCount > 0 ? 'text-amber-700' : 'text-emerald-700'
+                            }`}
+                          >
+                            {c.lastStatus || c.status}
+                          </span>
+                          {c.lastNote && (
+                            <p className="text-slate-500 italic mt-0.5 max-w-xs">{c.lastNote}</p>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Grille des tâches de maintenance */
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3 font-semibold whitespace-nowrap">Valide</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Domaine &amp; Équipement</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Type</th>
+                  <th className="p-3 font-semibold">Tâche de Contrôle &amp; Procédure</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Fréquence</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Dernier / Prochain</th>
+                  <th className="p-3 font-semibold">Observations &amp; Statut</th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
                 </tr>
-              ) : (
-                filtered.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleValide(item.id)}
-                        className={`w-5 h-5 rounded flex items-center justify-center border transition ${
-                          item.valide
-                            ? 'bg-emerald-600 border-emerald-700 text-white'
-                            : 'bg-white border-slate-300 hover:border-slate-400'
-                        }`}
-                        title={
-                          item.valide
-                            ? 'Marqué conforme (cliquer pour décocher)'
-                            : 'Cliquer pour valider'
-                        }
-                      >
-                        {item.valide && <CheckSquare className="w-3.5 h-3.5" />}
-                      </button>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <strong className="text-slate-900 block font-semibold">
-                        {item.categorie}
-                      </strong>
-                      <span className="text-[11px] text-slate-500">
-                        {item.responsableOuEquipement}
-                      </span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                          item.typeMaintenance === 'Préventive'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {item.typeMaintenance}
-                      </span>
-                    </td>
-                    <td className="p-3 align-top max-w-sm">
-                      <button
-                        type="button"
-                        onClick={() => setInspectingId(item.id)}
-                        className="text-left text-slate-900 hover:text-blue-700 font-medium leading-snug"
-                      >
-                        {item.tacheControle}
-                      </button>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap">
-                      <span className="text-slate-700 font-medium">{item.frequence}</span>
-                    </td>
-                    <td className="p-3 align-top whitespace-nowrap text-[11px] font-mono tabular-nums">
-                      <span className="text-slate-800 font-medium block">
-                        {item.dernierControle}
-                      </span>
-                      <span className="text-slate-400">→ {item.prochainControle}</span>
-                    </td>
-                    <td className="p-3 align-top text-[11px]">
-                      <span
-                        className={`font-semibold px-1.5 py-0.5 rounded inline-block mb-1 ${
-                          item.valide
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-800'
-                        }`}
-                      >
-                        {item.statut}
-                      </span>
-                      {item.observations && (
-                        <p className="text-slate-500 italic mt-0.5">{item.observations}</p>
-                      )}
-                    </td>
-                    <td className="p-3 align-top text-right whitespace-nowrap">
-                      <CrudRowActions
-                        onView={() => setInspectingId(item.id)}
-                        onEdit={() => openEditModal(item)}
-                        onDuplicate={() => openDuplicateModal(item)}
-                        onDelete={() => setDeletingId(item.id)}
-                      />
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-slate-700">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center">
+                      <div className="max-w-md mx-auto space-y-2">
+                        <p className="text-slate-600 font-medium">
+                          {maintenances.length === 0
+                            ? 'Aucune ligne de maintenance enregistrée.'
+                            : 'Aucune tâche de maintenance ne correspond à votre filtre.'}
+                        </p>
+                        {maintenances.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={openCreateModal}
+                            className={primaryButtonClass}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Créer un contrôle</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filtered.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/80 transition">
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleValide(item.id)}
+                          className={`w-5 h-5 rounded flex items-center justify-center border transition ${
+                            item.valide
+                              ? 'bg-emerald-600 border-emerald-700 text-white'
+                              : 'bg-white border-slate-300 hover:border-slate-400'
+                          }`}
+                          title={
+                            item.valide
+                              ? 'Marqué conforme (cliquer pour décocher)'
+                              : 'Cliquer pour valider'
+                          }
+                        >
+                          {item.valide && <CheckSquare className="w-3.5 h-3.5" />}
+                        </button>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <strong className="text-slate-900 block font-semibold">
+                          {item.categorie}
+                        </strong>
+                        <span className="text-[11px] text-slate-500">
+                          {item.responsableOuEquipement}
+                        </span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                            item.typeMaintenance === 'Préventive'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {item.typeMaintenance}
+                        </span>
+                      </td>
+                      <td className="p-3 align-top max-w-sm">
+                        <button
+                          type="button"
+                          onClick={() => setInspectingId(item.id)}
+                          className="text-left text-slate-900 hover:text-blue-700 font-medium leading-snug"
+                        >
+                          {item.tacheControle}
+                        </button>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap">
+                        <span className="text-slate-700 font-medium">{item.frequence}</span>
+                      </td>
+                      <td className="p-3 align-top whitespace-nowrap text-[11px] font-mono tabular-nums">
+                        <span className="text-slate-800 font-medium block">
+                          {item.dernierControle}
+                        </span>
+                        <span className="text-slate-400">→ {item.prochainControle}</span>
+                      </td>
+                      <td className="p-3 align-top text-[11px]">
+                        <div className="flex flex-col items-start gap-1">
+                          <span
+                            className={`font-semibold ${
+                              item.valide ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            {item.statut}
+                          </span>
+                          {loggedJournalIds.has(getLinkedJournalIdForMaintenance(item.id)) && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700">
+                              <BookCheck className="w-3 h-3 shrink-0" />
+                              Consignée au journal
+                            </span>
+                          )}
+                        </div>
+                        {item.observations && (
+                          <p className="text-slate-500 italic mt-0.5">{item.observations}</p>
+                        )}
+                      </td>
+                      <td className="p-3 align-top text-right whitespace-nowrap">
+                        <CrudRowActions
+                          onView={() => setInspectingId(item.id)}
+                          onEdit={() => openEditModal(item)}
+                          onDuplicate={() => openDuplicateModal(item)}
+                          onDelete={() => setDeletingId(item.id)}
+                        />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

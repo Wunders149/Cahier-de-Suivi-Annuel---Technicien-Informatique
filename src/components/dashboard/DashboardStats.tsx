@@ -24,6 +24,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { getMonthPrefix } from '../../utils/monthlyDeliverableGenerator';
+import { useSogedipromaLiveSnapshot } from '../../utils/sogedipromaLiveStore';
 
 interface DashboardStatsProps {
   data: CahierSuiviData;
@@ -81,6 +82,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   onNavigateTab,
 }) => {
   const annee = data.generalInfo.anneeReference || new Date().getFullYear();
+  const liveSnapshot = useSogedipromaLiveSnapshot();
 
   const {
     monthlySeries,
@@ -102,6 +104,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     const logiciels = data.logicielsLicences || [];
     const objectifs = data.objectifsAnnuels || [];
     const jalons = data.jalonsCalendrier || [];
+
+    const yearPrefix = `${annee}-`;
 
     const series = SHORT_MONTHS.map((shortName, idx) => {
       const moisIndex = idx + 1;
@@ -135,15 +139,19 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       };
     });
 
-    const totalTerminees = interventions.filter(
+    const yearInterventions = interventions.filter((i) =>
+      i.dateReception?.startsWith(yearPrefix)
+    );
+    const totalTerminees = yearInterventions.filter(
       (i) => i.resultat === 'Résolu'
     ).length;
-    const totalGlobal = interventions.length;
+    const totalGlobal = yearInterventions.length;
     const rate =
       totalGlobal > 0 ? Math.round((totalTerminees / totalGlobal) * 100) : 100;
 
-    const doneTasks = taches.filter((t) => t.statut === 'Terminé').length;
-    const totalMins = taches.reduce(
+    const yearTasks = taches.filter((t) => t.date?.startsWith(yearPrefix));
+    const doneTasks = yearTasks.filter((t) => t.statut === 'Terminé').length;
+    const totalMins = yearTasks.reduce(
       (acc, t) => acc + (t.dureeReelleMin || 0),
       0
     );
@@ -180,12 +188,17 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
     const cameraControls = maintenances.filter(
       (m) =>
+        m.id?.startsWith('sog-camchk-') ||
         m.id?.startsWith('sog-cam-') ||
         /cam[eé]ra|vid[eé]o|nvr/i.test(`${m.tacheControle} ${m.responsableOuEquipement}`)
     );
-    const cameraAlertCount = cameraControls.filter(
-      (m) => m.statut === 'À traiter' || !m.valide
-    ).length;
+    const liveCameras = liveSnapshot?.cameraHealth || [];
+    const cameraTotalCount =
+      liveCameras.length > 0 ? liveCameras.length : cameraControls.length;
+    const cameraAlertCount =
+      liveCameras.length > 0
+        ? liveCameras.filter((c) => c.issueCount > 0).length
+        : cameraControls.filter((m) => m.statut === 'À traiter' || !m.valide).length;
 
     const budgetObjectives = objectifs.filter((o) => o.id?.startsWith('sog-bdg-'));
     const totalBudgetAr = budgetObjectives.reduce(
@@ -235,7 +248,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         openTicketsCount: openTickets.length,
         urgentTicketsCount,
         expiringLicencesCount,
-        cameraTotalCount: cameraControls.length,
+        cameraTotalCount,
         cameraAlertCount,
         budgetCount: budgetObjectives.length,
         totalBudgetAr,
@@ -254,6 +267,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     data.logicielsLicences,
     data.objectifsAnnuels,
     data.jalonsCalendrier,
+    liveSnapshot,
     annee,
   ]);
 

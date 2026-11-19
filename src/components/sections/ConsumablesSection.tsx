@@ -1,11 +1,30 @@
 import React, { useMemo, useState } from 'react';
 import { ArticleConsommable, DemandeAchat } from '../../types/it-tracker';
-import { Package, ShoppingCart, Plus, AlertCircle, PlugZap } from 'lucide-react';
+import {
+  Package,
+  ShoppingCart,
+  Plus,
+  AlertCircle,
+  PlugZap,
+  ArrowUpDown,
+  Search,
+  Send,
+} from 'lucide-react';
+import {
+  saveSogedipromaLiveSnapshot,
+  useSogedipromaLiveSnapshot,
+} from '../../utils/sogedipromaLiveStore';
+import {
+  mapSogedipromaToWorkbookDelta,
+  SogedipromaStateData,
+} from '../../utils/sogedipromaSync';
+import { getLocalTodayIso } from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
 import { ConfirmDeleteModal } from '../ui/ConfirmDeleteModal';
 import {
+  emeraldButtonClass,
   fieldInputClass,
   fieldSelectClass,
   fieldTextareaClass,
@@ -71,6 +90,25 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   const [inspectingDaId, setInspectingDaId] = useState<string | null>(null);
   const [deletingDaId, setDeletingDaId] = useState<string | null>(null);
 
+  // 3. Onglet Mouvements SOGEDIPROMA (1 255 mouvements live) & Écriture directe
+  const liveSnapshot = useSogedipromaLiveSnapshot();
+  const [activeTab, setActiveTab] = useState<'stocks' | 'movements'>('stocks');
+  const [movSearch, setMovSearch] = useState('');
+  const [movTypeFilter, setMovTypeFilter] = useState<'Tous' | 'Entrée' | 'Sortie'>('Tous');
+  const [movLimit, setMovLimit] = useState(50);
+
+  const [sogMovModalOpen, setSogMovModalOpen] = useState(false);
+  const [sogMovItemId, setSogMovItemId] = useState('');
+  const [sogMovType, setSogMovType] = useState<'Entrée' | 'Sortie'>('Sortie');
+  const [sogMovQty, setSogMovQty] = useState(1);
+  const [sogMovDate, setSogMovDate] = useState(() => getLocalTodayIso());
+  const [sogMovReason, setSogMovReason] = useState('Attribution service / intervention IT');
+  const [sogMovRef, setSogMovRef] = useState('');
+  const [sogMovEmpId, setSogMovEmpId] = useState('');
+  const [sogMovDeptId, setSogMovDeptId] = useState('');
+  const [isPostingMov, setIsPostingMov] = useState(false);
+  const [movError, setMovError] = useState<string | null>(null);
+
   const notify = (msg: string) => {
     if (onShowToast) onShowToast(msg);
   };
@@ -88,12 +126,12 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
 
   const buildDefaultDA = (): Partial<DemandeAchat> => ({
     numeroCommande: getNextDaNumber(),
-    dateDemande: new Date().toISOString().split('T')[0],
+    dateDemande: getLocalTodayIso(),
     demandeur: 'Technicien IT',
     articlesDemandes: '',
     quantite: 1,
     fournisseur: '',
-    montantEstimeTTC: 150,
+    montantEstimeTTC: 0,
     priorite: 'Normale',
     statut: 'Brouillon',
     dateReception: '',
@@ -245,7 +283,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
       ...da,
       id: undefined,
       numeroCommande: getNextDaNumber(),
-      dateDemande: new Date().toISOString().split('T')[0],
+      dateDemande: getLocalTodayIso(),
       statut: 'Brouillon',
       dateReception: '',
     });
@@ -259,7 +297,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
     const payload: DemandeAchat = {
       id: editingDaId || `DA-${Date.now()}`,
       numeroCommande: formDA.numeroCommande?.trim() || getNextDaNumber(),
-      dateDemande: formDA.dateDemande || new Date().toISOString().split('T')[0],
+      dateDemande: formDA.dateDemande || getLocalTodayIso(),
       demandeur: formDA.demandeur?.trim() || 'Technicien IT',
       articlesDemandes: formDA.articlesDemandes.trim(),
       quantite: Number(formDA.quantite) || 1,
@@ -283,6 +321,24 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
       );
     }
 
+    // Cohérence DA <-> Stock consommable : marquer l'article correspondant comme "Commande en cours" si validée/commandée
+    if (payload.statut === 'Commandé' || payload.statut === 'Validé Direction') {
+      const targetText = payload.articlesDemandes.toLowerCase();
+      let didUpdateStock = false;
+      const syncedConsommables = consommables.map((c) => {
+        const refMatch = c.reference && targetText.includes(c.reference.toLowerCase());
+        const desMatch = c.designation && targetText.includes(c.designation.toLowerCase());
+        if ((refMatch || desMatch) && c.stockActuel <= c.stockMinimumAlerte && c.statut !== 'Commande en cours') {
+          didUpdateStock = true;
+          return { ...c, statut: 'Commande en cours' as ArticleConsommable['statut'] };
+        }
+        return c;
+      });
+      if (didUpdateStock) {
+        onUpdateConsommables(syncedConsommables);
+      }
+    }
+
     setDaModalOpen(false);
     setEditingDaId(null);
     setIsDuplicatingDa(false);
@@ -296,9 +352,105 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
     notify("Demande d'achat supprimée.");
   };
 
-  const alertes = consommables.filter((c) => c.stockActuel <= c.stockMinimumAlerte);
+  const filteredMovements = useMemo(() => {
+    const rows = liveSnapshot?.stockMovements || [];
+    const q = movSearch.trim().toLowerCase();
+    return rows.filter((m) => {
+      if (movTypeFilter !== 'Tous' && m.type !== movTypeFilter) return false;
+      if (!q) return true;
+      return (
+        m.itemName.toLowerCase().includes(q) ||
+        m.itemSku.toLowerCase().includes(q) ||
+        m.reason.toLowerCase().includes(q) ||
+        m.employeeName.toLowerCase().includes(q) ||
+        m.departmentName.toLowerCase().includes(q) ||
+        m.user.toLowerCase().includes(q) ||
+        m.reference.toLowerCase().includes(q)
+      );
+    });
+  }, [liveSnapshot?.stockMovements, movSearch, movTypeFilter]);
+
+  const openSogMovementModal = () => {
+    setMovError(null);
+    const firstItem = liveSnapshot?.inventoryItems?.[0]?.id || '';
+    if (!sogMovItemId && firstItem) setSogMovItemId(firstItem);
+    setSogMovQty(1);
+    setSogMovDate(getLocalTodayIso());
+    setSogMovModalOpen(true);
+  };
+
+  const handleSubmitSogMovement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sogMovItemId || sogMovQty <= 0) return;
+    setMovError(null);
+    try {
+      setIsPostingMov(true);
+      let serverUrl: string | undefined;
+      try {
+        serverUrl = localStorage.getItem('sogediproma_server_url') || undefined;
+      } catch {
+        serverUrl = undefined;
+      }
+
+      const res = await fetch('/api/sogediproma/inventory/movements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: serverUrl,
+          movement: {
+            id: `mov-cahier-${Date.now()}`,
+            itemId: sogMovItemId,
+            type: sogMovType,
+            quantity: Number(sogMovQty),
+            date: sogMovDate,
+            reason: sogMovReason.trim() || 'Ajustement depuis Cahier IT',
+            reference: sogMovRef.trim(),
+            assignedEmployeeId: sogMovEmpId || undefined,
+            departmentId: sogMovDeptId || undefined,
+          },
+        }),
+      });
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        throw new Error(payload?.error || `HTTP ${res.status}`);
+      }
+
+      // Rafraîchir le snapshot live après écriture
+      const syncRes = await fetch('/api/sogediproma/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl: serverUrl }),
+      });
+      if (syncRes.ok) {
+        const syncJson = (await syncRes.json()) as {
+          revision?: number;
+          data?: SogedipromaStateData;
+        };
+        if (syncJson?.data) {
+          saveSogedipromaLiveSnapshot(syncJson.data, syncJson.revision);
+          const delta = mapSogedipromaToWorkbookDelta(syncJson.data);
+          if (delta.consommables.length > 0) {
+            const manual = consommables.filter((c) => !c.id.startsWith('sog-'));
+            onUpdateConsommables([...manual, ...delta.consommables]);
+          }
+        }
+      }
+
+      setSogMovModalOpen(false);
+      notify(`Mouvement ${sogMovType} (${sogMovQty}) enregistré dans SOGEDIPROMA.`);
+    } catch (err) {
+      setMovError(err instanceof Error ? err.message : 'Erreur lors de l’envoi vers SOGEDIPROMA.');
+    } finally {
+      setIsPostingMov(false);
+    }
+  };
+
+  const alertes = consommables.filter(
+    (c) => c.stockActuel <= c.stockMinimumAlerte || c.statut === 'Rupture' || c.statut === 'Stock bas'
+  );
+
   const previewStock = Number(formArt.stockActuel) || 0;
-  const previewMin = Number(formArt.stockMinimumAlerte) || 0;
+  const previewMin = Number(formArt.stockMinimumAlerte) || 1;
   const previewStockStatus = computeArticleStatus(
     previewStock,
     previewMin,
@@ -306,7 +458,7 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* En-tête */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
@@ -317,10 +469,21 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
             <span>Gestion des Consommables &amp; Demandes d&apos;Achat</span>
           </h2>
           <p className="text-sm text-slate-500 mt-1">
-            Suivi des stocks d&apos;atelier (toners, câbles, périphériques, disques) et registre des demandes d&apos;achat (DA).
+            Suivi des stocks d&apos;atelier, mouvements SOGEDIPROMA ({liveSnapshot?.counts.stockMovements || 0} opérations) et demandes d&apos;achat.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {liveSnapshot && liveSnapshot.inventoryItems.length > 0 && (
+            <button
+              type="button"
+              onClick={openSogMovementModal}
+              className={emeraldButtonClass}
+              title="Enregistrer directement une Entrée ou Sortie de stock dans SOGEDIPROMA (/api/inventory/movements)"
+            >
+              <ArrowUpDown className="w-3.5 h-3.5" />
+              <span>Mouvement Stock Live</span>
+            </button>
+          )}
           {onOpenSogedipromaSync && (
             <button
               type="button"
@@ -346,6 +509,163 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Sélecteur segmenté : Stocks & Commandes vs Mouvements SOGEDIPROMA */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('stocks')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'stocks'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Stocks &amp; Commandes ({consommables.length} · {demandesAchat.length} DA)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('movements')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'movements'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Mouvements SOGEDIPROMA ({liveSnapshot?.counts.stockMovements || 0})
+          </button>
+        </div>
+      </div>
+
+      {/* Modal Mouvement Stock Direct SOGEDIPROMA */}
+      <Modal
+        isOpen={sogMovModalOpen}
+        onClose={() => setSogMovModalOpen(false)}
+        title="Enregistrer un Mouvement de Stock SOGEDIPROMA"
+        subtitle="Écriture directe sur POST /api/inventory/movements puis rafraîchissement automatique du stock."
+        icon={<ArrowUpDown className="w-4 h-4" />}
+        size="md"
+        onSubmit={handleSubmitSogMovement}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => setSogMovModalOpen(false)}
+              className={secondaryButtonClass}
+            >
+              Annuler
+            </button>
+            <button type="submit" disabled={isPostingMov} className={emeraldButtonClass}>
+              <Send className="w-3.5 h-3.5" />
+              <span>{isPostingMov ? 'Envoi...' : 'Valider dans SOGEDIPROMA'}</span>
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {movError && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-800">
+              {movError}
+            </div>
+          )}
+          <FormField label="Article de stock SOGEDIPROMA" required>
+            <select
+              required
+              value={sogMovItemId}
+              onChange={(e) => setSogMovItemId(e.target.value)}
+              className={fieldSelectClass}
+            >
+              {(liveSnapshot?.inventoryItems || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.sku ? `[${item.sku}] ` : ''}
+                  {item.name} (Stock : {item.quantity} {item.unit})
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <FormField label="Type" required>
+              <select
+                value={sogMovType}
+                onChange={(e) => setSogMovType(e.target.value as 'Entrée' | 'Sortie')}
+                className={fieldSelectClass}
+              >
+                <option value="Sortie">Sortie</option>
+                <option value="Entrée">Entrée</option>
+              </select>
+            </FormField>
+            <FormField label="Quantité" required>
+              <input
+                type="number"
+                min={1}
+                required
+                value={sogMovQty}
+                onChange={(e) => setSogMovQty(Math.max(1, Number(e.target.value) || 1))}
+                className={`${fieldInputClass} font-mono tabular-nums`}
+              />
+            </FormField>
+            <FormField label="Date" required>
+              <input
+                type="date"
+                required
+                value={sogMovDate}
+                onChange={(e) => setSogMovDate(e.target.value)}
+                className={`${fieldInputClass} font-mono tabular-nums`}
+              />
+            </FormField>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField label="Collaborateur bénéficiaire">
+              <select
+                value={sogMovEmpId}
+                onChange={(e) => setSogMovEmpId(e.target.value)}
+                className={fieldSelectClass}
+              >
+                <option value="">— Optionnel —</option>
+                {(liveSnapshot?.employees || []).map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.name} ({emp.department})
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            <FormField label="Département">
+              <select
+                value={sogMovDeptId}
+                onChange={(e) => setSogMovDeptId(e.target.value)}
+                className={fieldSelectClass}
+              >
+                <option value="">— Optionnel —</option>
+                {(liveSnapshot?.departments || []).map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <FormField label="Motif du mouvement">
+              <input
+                type="text"
+                value={sogMovReason}
+                onChange={(e) => setSogMovReason(e.target.value)}
+                className={fieldInputClass}
+              />
+            </FormField>
+            <FormField label="Référence bon / ticket">
+              <input
+                type="text"
+                placeholder="Ex: TIC-2026 / BL..."
+                value={sogMovRef}
+                onChange={(e) => setSogMovRef(e.target.value)}
+                className={`${fieldInputClass} font-mono`}
+              />
+            </FormField>
+          </div>
+        </div>
+      </Modal>
 
       {/* Alerte stock bas si besoin */}
       {alertes.length > 0 && (
@@ -950,6 +1270,130 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
         }
       />
 
+      {activeTab === 'movements' ? (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={movSearch}
+                onChange={(e) => {
+                  setMovSearch(e.target.value);
+                  setMovLimit(50);
+                }}
+                placeholder="Rechercher par article, SKU, employé, service, motif, opérateur..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              />
+            </div>
+            <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg shrink-0">
+              {(['Tous', 'Entrée', 'Sortie'] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    setMovTypeFilter(t);
+                    setMovLimit(50);
+                  }}
+                  className={`px-3 py-1 rounded-md font-semibold transition ${
+                    movTypeFilter === t
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-3 font-semibold whitespace-nowrap">Date</th>
+                    <th className="p-3 font-semibold">Article &amp; SKU</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Type / Qté</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Avant → Après</th>
+                    <th className="p-3 font-semibold">Motif &amp; Référence</th>
+                    <th className="p-3 font-semibold">Bénéficiaire / Service</th>
+                    <th className="p-3 font-semibold">Opérateur</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {filteredMovements.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-500">
+                        {liveSnapshot
+                          ? 'Aucun mouvement ne correspond à votre recherche.'
+                          : 'Synchronisez SOGEDIPROMA pour charger les 1 255 mouvements de stock réels.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredMovements.slice(0, movLimit).map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50 transition">
+                        <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-slate-800">
+                          {m.date || m.createdAt.slice(0, 10)}
+                        </td>
+                        <td className="p-3 align-top">
+                          <strong className="text-slate-900 block font-semibold">{m.itemName}</strong>
+                          {m.itemSku && (
+                            <span className="font-mono text-[11px] text-slate-500">{m.itemSku}</span>
+                          )}
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums font-bold">
+                          <span className={m.type === 'Entrée' ? 'text-emerald-700' : 'text-amber-700'}>
+                            {m.type === 'Entrée' ? '+' : '-'}
+                            {m.quantity} ({m.type})
+                          </span>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums text-slate-600">
+                          {m.previousQuantity !== undefined && m.newQuantity !== undefined
+                            ? `${m.previousQuantity} → ${m.newQuantity}`
+                            : '—'}
+                        </td>
+                        <td className="p-3 align-top text-slate-700 max-w-xs">
+                          <span>{m.reason || '—'}</span>
+                          {m.reference && (
+                            <span className="block font-mono text-[10px] text-slate-500">
+                              Réf : {m.reference}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 align-top text-slate-700">
+                          <span className="font-medium block">{m.employeeName || 'Atelier IT'}</span>
+                          {m.departmentName && (
+                            <span className="text-[11px] text-slate-500">{m.departmentName}</span>
+                          )}
+                        </td>
+                        <td className="p-3 align-top text-[11px] text-slate-600 whitespace-nowrap">
+                          {m.user || '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filteredMovements.length > movLimit && (
+              <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+                <span className="font-mono tabular-nums text-slate-600">
+                  Affichage {movLimit} / {filteredMovements.length} mouvements
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMovLimit((n) => n + 100)}
+                  className={secondaryButtonClass}
+                >
+                  Afficher +100 mouvements
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Tableau des consommables */}
       <div className="space-y-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -1208,6 +1652,8 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

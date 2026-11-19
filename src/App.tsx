@@ -37,6 +37,12 @@ import {
   applySogedipromaMerge,
   mapSogedipromaToWorkbookDelta,
 } from './utils/sogedipromaSync';
+import { saveSogedipromaLiveSnapshot } from './utils/sogedipromaLiveStore';
+import {
+  reconcileAllValidatedMaintenancesToJournal,
+  reconcileMaintenancesUpdate,
+  upsertJournalTask,
+} from './utils/coherenceUtils';
 
 const STORAGE_KEY = 'cahier_suivi_technicien_it_v2_prod';
 const SYNC_META_KEY = 'cahier_suivi_sync_meta_v1';
@@ -309,7 +315,20 @@ function CahierContent({
                 <GeneralInfoSection
                   data={data}
                   info={data.generalInfo}
-                  onUpdate={(info) => setData({ ...data, generalInfo: info })}
+                  onUpdate={(info) =>
+                    setData((prev) => ({
+                      ...prev,
+                      generalInfo: info,
+                      bilanAnnuel: {
+                        ...prev.bilanAnnuel,
+                        annee: info.anneeReference,
+                      },
+                      rapportsMensuels: prev.rapportsMensuels.map((r) => ({
+                        ...r,
+                        annee: info.anneeReference,
+                      })),
+                    }))
+                  }
                   onNavigateTab={setActiveTab}
                   onDownloadDocx={handleDownloadDocx}
                   onDownloadPdf={handleDownloadPdf}
@@ -347,6 +366,12 @@ function CahierContent({
                     setData({ ...data, interventions })
                   }
                   generalInfo={data.generalInfo}
+                  onLogToJournal={(task) =>
+                    setData((prev) => ({
+                      ...prev,
+                      journalTaches: upsertJournalTask(prev.journalTaches, task),
+                    }))
+                  }
                   onShowToast={showToast}
                 />
               )}
@@ -354,8 +379,38 @@ function CahierContent({
               {activeTab === 'maintenance' && (
                 <MaintenanceSection
                   maintenances={data.maintenances}
-                  onUpdateMaintenances={(maintenances) =>
-                    setData({ ...data, maintenances })
+                  journalTaches={data.journalTaches}
+                  onUpdateMaintenances={(nextMaintenances) =>
+                    setData((prev) => {
+                      const reconciled = reconcileMaintenancesUpdate(
+                        prev.maintenances,
+                        nextMaintenances,
+                        prev.journalTaches
+                      );
+                      return {
+                        ...prev,
+                        maintenances: nextMaintenances,
+                        journalTaches: reconciled.journalTaches,
+                      };
+                    })
+                  }
+                  onSyncAllToJournal={() =>
+                    setData((prev) => {
+                      const res = reconcileAllValidatedMaintenancesToJournal(
+                        prev.maintenances,
+                        prev.journalTaches
+                      );
+                      if (res.syncedCount > 0) {
+                        showToast(
+                          `${res.syncedCount} maintenance(s) validée(s) consignée(s) dans le journal quotidien.`
+                        );
+                        return { ...prev, journalTaches: res.journalTaches };
+                      }
+                      showToast(
+                        'Toutes les maintenances validées sont déjà consignées au journal.'
+                      );
+                      return prev;
+                    })
                   }
                   onShowToast={showToast}
                 />
@@ -374,6 +429,12 @@ function CahierContent({
                   }
                   onUpdateTestsDebit={(reseauTestsDebit) =>
                     setData({ ...data, reseauTestsDebit })
+                  }
+                  onLogToJournal={(task) =>
+                    setData((prev) => ({
+                      ...prev,
+                      journalTaches: upsertJournalTask(prev.journalTaches, task),
+                    }))
                   }
                   onShowToast={showToast}
                 />
@@ -409,6 +470,12 @@ function CahierContent({
                   }
                   onUpdateIncidentsSecurite={(incidentsSecurite) =>
                     setData({ ...data, incidentsSecurite })
+                  }
+                  onLogToJournal={(task) =>
+                    setData((prev) => ({
+                      ...prev,
+                      journalTaches: upsertJournalTask(prev.journalTaches, task),
+                    }))
                   }
                   onShowToast={showToast}
                 />
@@ -746,6 +813,7 @@ export default function App() {
         };
         if (!payload?.data || cancelled) return;
 
+        saveSogedipromaLiveSnapshot(payload.data, payload.revision);
         const mapped = mapSogedipromaToWorkbookDelta(payload.data);
         const populatedSel: Record<SogedipromaSyncModuleKey, boolean> = {
           consommables: mapped.consommables.length > 0,

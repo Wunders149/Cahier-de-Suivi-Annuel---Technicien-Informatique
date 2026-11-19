@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   EquipementReseau,
   IncidentReseau,
+  TacheJournal,
   TestDebitReseau,
 } from '../../types/it-tracker';
 import {
@@ -12,7 +13,14 @@ import {
   CheckCircle2,
   Gauge,
   Zap,
+  BookCheck,
 } from 'lucide-react';
+import {
+  buildJournalTaskFromNetworkIncident,
+  buildJournalTaskFromNetworkSpeedtest,
+  getLocalDateTimeStamp,
+  getLocalTodayIso,
+} from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
@@ -32,6 +40,7 @@ interface NetworkSectionProps {
   onUpdateEquipements: (equipements: EquipementReseau[]) => void;
   onUpdateIncidents: (incidents: IncidentReseau[]) => void;
   onUpdateTestsDebit: (tests: TestDebitReseau[]) => void;
+  onLogToJournal?: (task: TacheJournal) => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -46,12 +55,12 @@ const DEFAULT_EQUIPEMENT = (): Partial<EquipementReseau> => ({
   portsPoE: '24 ports PoE+',
   firmwareVersion: '',
   etat: 'En ligne',
-  dernierReboot: new Date().toISOString().split('T')[0],
+  dernierReboot: getLocalTodayIso(),
   observations: '',
 });
 
 const DEFAULT_INCIDENT = (): Partial<IncidentReseau> => ({
-  dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+  dateHeure: getLocalDateTimeStamp(),
   equipementOuLiaison: '',
   typeIncident: 'Coupure Internet',
   dureeInterruptionMin: 15,
@@ -62,7 +71,7 @@ const DEFAULT_INCIDENT = (): Partial<IncidentReseau> => ({
 });
 
 const DEFAULT_TEST_DEBIT = (): Partial<TestDebitReseau> => ({
-  dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+  dateHeure: getLocalDateTimeStamp(),
   ligneConcernee: 'WAN 1 - Fibre Principale SOGEDIPROMA',
   debitDescendantMbps: 300,
   debitMontantMbps: 250,
@@ -88,6 +97,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
   onUpdateEquipements,
   onUpdateIncidents,
   onUpdateTestsDebit,
+  onLogToJournal,
   onShowToast,
 }) => {
   // 1. CRUD Équipements réseau
@@ -219,8 +229,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
 
     const payload: IncidentReseau = {
       id: editingIncId || `INC-NET-${Date.now()}`,
-      dateHeure:
-        incForm.dateHeure || new Date().toISOString().replace('T', ' ').slice(0, 16),
+      dateHeure: incForm.dateHeure || getLocalDateTimeStamp(),
       equipementOuLiaison: incForm.equipementOuLiaison.trim(),
       typeIncident: incForm.typeIncident || 'Coupure Internet',
       dureeInterruptionMin: Math.max(0, Number(incForm.dureeInterruptionMin) || 0),
@@ -235,7 +244,14 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
       notify('Incident réseau mis à jour.');
     } else {
       onUpdateIncidents([payload, ...incidents]);
-      notify('Incident réseau enregistré.');
+      if (onLogToJournal) {
+        onLogToJournal(buildJournalTaskFromNetworkIncident(payload));
+      }
+      notify(
+        onLogToJournal
+          ? 'Incident réseau enregistré et consigné au journal quotidien.'
+          : 'Incident réseau enregistré.'
+      );
     }
     setIncModalOpen(false);
     setEditingIncId(null);
@@ -268,8 +284,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
 
     const payload: TestDebitReseau = {
       id: editingTestId || `SPD-${Date.now()}`,
-      dateHeure:
-        testForm.dateHeure || new Date().toISOString().replace('T', ' ').slice(0, 16),
+      dateHeure: testForm.dateHeure || getLocalDateTimeStamp(),
       ligneConcernee: testForm.ligneConcernee.trim(),
       debitDescendantMbps: Math.max(0, Number(testForm.debitDescendantMbps) || 0),
       debitMontantMbps: Math.max(0, Number(testForm.debitMontantMbps) || 0),
@@ -284,7 +299,14 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
       notify('Mesure de débit mise à jour.');
     } else {
       onUpdateTestsDebit([payload, ...testsDebit]);
-      notify('Nouveau test de débit enregistré.');
+      if (onLogToJournal) {
+        onLogToJournal(buildJournalTaskFromNetworkSpeedtest(payload));
+      }
+      notify(
+        onLogToJournal
+          ? 'Test de débit enregistré et consigné au journal quotidien.'
+          : 'Nouveau test de débit enregistré.'
+      );
     }
     setTestModalOpen(false);
     setEditingTestId(null);
@@ -965,7 +987,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
         size="md"
         footer={
           inspectingInc && (
-            <div className="w-full flex items-center justify-between gap-2">
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setDeletingIncId(inspectingInc.id)}
@@ -973,17 +995,32 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
               >
                 Supprimer
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = inspectingInc;
-                  setInspectingIncId(null);
-                  openEditInc(target);
-                }}
-                className={primaryButtonClass}
-              >
-                Modifier
-              </button>
+              <div className="flex items-center gap-2">
+                {onLogToJournal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogToJournal(buildJournalTaskFromNetworkIncident(inspectingInc));
+                      notify('Incident réseau consigné au journal quotidien.');
+                    }}
+                    className={secondaryButtonClass}
+                  >
+                    <BookCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Consigner au journal</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = inspectingInc;
+                    setInspectingIncId(null);
+                    openEditInc(target);
+                  }}
+                  className={primaryButtonClass}
+                >
+                  Modifier
+                </button>
+              </div>
             </div>
           )
         }
@@ -1196,7 +1233,7 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
         size="sm"
         footer={
           inspectingTest && (
-            <div className="w-full flex items-center justify-between gap-2">
+            <div className="w-full flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setDeletingTestId(inspectingTest.id)}
@@ -1204,17 +1241,32 @@ export const NetworkSection: React.FC<NetworkSectionProps> = ({
               >
                 Supprimer
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const target = inspectingTest;
-                  setInspectingTestId(null);
-                  openEditTest(target);
-                }}
-                className={primaryButtonClass}
-              >
-                Modifier
-              </button>
+              <div className="flex items-center gap-2">
+                {onLogToJournal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogToJournal(buildJournalTaskFromNetworkSpeedtest(inspectingTest));
+                      notify('Test de débit consigné au journal quotidien.');
+                    }}
+                    className={secondaryButtonClass}
+                  >
+                    <BookCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Consigner au journal</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = inspectingTest;
+                    setInspectingTestId(null);
+                    openEditTest(target);
+                  }}
+                  className={primaryButtonClass}
+                >
+                  Modifier
+                </button>
+              </div>
             </div>
           )
         }

@@ -10,6 +10,10 @@ import {
   parseSogedipromaJsonPayload,
 } from '../utils/sogedipromaSync';
 import {
+  saveSogedipromaLiveSnapshot,
+  useSogedipromaLiveSnapshot,
+} from '../utils/sogedipromaLiveStore';
+import {
   Server,
   RefreshCw,
   Upload,
@@ -33,6 +37,9 @@ import {
   ExternalLink,
   Target,
   Calendar,
+  Download,
+  Shield,
+  Mail,
 } from 'lucide-react';
 import {
   emeraldButtonClass,
@@ -218,7 +225,13 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     useState<Record<SogedipromaSyncModuleKey, boolean>>(DEFAULT_SELECTED_MODULES);
   const [mergeMode, setMergeMode] = useState<'merge' | 'replace-sog'>('replace-sog');
   const [showEndpoints, setShowEndpoints] = useState(false);
+  const [isDownloadingBackup, setIsDownloadingBackup] = useState(false);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
+  const [isTestingMail, setIsTestingMail] = useState(false);
+  const [auditEntries, setAuditEntries] = useState<Array<Record<string, unknown>>>([]);
+  const [showAuditViewer, setShowAuditViewer] = useState(false);
 
+  const liveSnapshot = useSogedipromaLiveSnapshot();
   const jsonInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -481,6 +494,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         throw new Error('Réponse vide reçue depuis SOGEDIPROMA.');
       }
 
+      saveSogedipromaLiveSnapshot(payload.data, payload.revision);
       const mapped = mapSogedipromaToWorkbookDelta(payload.data);
       const populatedSel = buildPopulatedSelection(mapped);
       const revLabel = payload.revision ?? '—';
@@ -557,6 +571,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       if (!parsed.success || !parsed.data) {
         throw new Error(parsed.error || 'Fichier JSON SOGEDIPROMA invalide.');
       }
+      saveSogedipromaLiveSnapshot(parsed.data, parsed.revision);
       const mapped = mapSogedipromaToWorkbookDelta(parsed.data);
       setPendingDelta(mapped);
       selectPopulatedModules(mapped);
@@ -672,6 +687,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         inventory: parsedInventory.data.inventory,
         exportDate: '2026-11-18',
       };
+      saveSogedipromaLiveSnapshot(mergedState);
       const mapped = mapSogedipromaToWorkbookDelta(mergedState);
       setPendingDelta(mapped);
       selectPopulatedModules(mapped);
@@ -738,6 +754,113 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
       url: baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL,
     });
     onApplySyncedData(previewMergeResult.nextData, summary);
+  };
+
+  const handleDownloadNativeBackup = async () => {
+    setErrorMsg(null);
+    setStatusNotice(null);
+    try {
+      setIsDownloadingBackup(true);
+      const res = await fetch('/api/sogediproma/backup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: baseUrl.trim() || undefined,
+          username: username.trim() || undefined,
+          password: password || undefined,
+        }),
+      });
+      const payload = await safeParseJson<{
+        error?: string;
+        backup?: unknown;
+        filename?: string;
+      }>(res);
+      if (!res.ok || !payload?.backup) {
+        throw new Error(payload?.error || `HTTP ${res.status} sur /api/backup`);
+      }
+      const blob = new Blob([JSON.stringify(payload.backup, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = payload.filename || `sogediproma-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setStatusNotice(`Backup natif SOGEDIPROMA téléchargé (${link.download}).`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur téléchargement backup SOGEDIPROMA.');
+    } finally {
+      setIsDownloadingBackup(false);
+    }
+  };
+
+  const handleLoadServerAudit = async () => {
+    setErrorMsg(null);
+    setStatusNotice(null);
+    try {
+      setIsLoadingAudit(true);
+      const res = await fetch('/api/sogediproma/audit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: baseUrl.trim() || undefined,
+          username: username.trim() || undefined,
+          password: password || undefined,
+        }),
+      });
+      const payload = await safeParseJson<{
+        error?: string;
+        entries?: Array<Record<string, unknown>>;
+      }>(res);
+      if (!res.ok) {
+        throw new Error(payload?.error || `HTTP ${res.status} sur /api/audit`);
+      }
+      const list = Array.isArray(payload?.entries) ? payload.entries : [];
+      setAuditEntries(list);
+      setShowAuditViewer(true);
+      setStatusNotice(
+        list.length > 0
+          ? `${list.length} entrée(s) du journal d'audit récupérées depuis SOGEDIPROMA.`
+          : 'Journal d’audit consulté (0 entrée visible avec ce niveau de permission ou historique vide).'
+      );
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : "Erreur lecture journal d'audit SOGEDIPROMA.");
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
+
+  const handleTestSmtpMail = async () => {
+    setErrorMsg(null);
+    setStatusNotice(null);
+    try {
+      setIsTestingMail(true);
+      const res = await fetch('/api/sogediproma/notifications/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          baseUrl: baseUrl.trim() || undefined,
+          username: username.trim() || undefined,
+          password: password || undefined,
+        }),
+      });
+      const payload = await safeParseJson<{
+        error?: string;
+        ok?: boolean;
+        mailConfigured?: boolean;
+      }>(res);
+      if (!res.ok) {
+        throw new Error(payload?.error || `HTTP ${res.status} sur /api/notifications/test`);
+      }
+      setStatusNotice('Test d’envoi e-mail SMTP SOGEDIPROMA exécuté avec succès.');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erreur test notification SMTP SOGEDIPROMA.');
+    } finally {
+      setIsTestingMail(false);
+    }
   };
 
   const toggleModule = (key: SogedipromaSyncModuleKey) => {
@@ -1001,7 +1124,120 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
             <span>{isTesting ? 'Test en cours...' : 'Tester (/api/status)'}</span>
           </button>
         </div>
+
+        {/* Barre d'outils API SOGEDIPROMA complémentaires */}
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11px] font-semibold text-slate-600">
+            Outils serveur SOGEDIPROMA :
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isDownloadingBackup || !backendProxyAvailable}
+              onClick={handleDownloadNativeBackup}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-800 disabled:opacity-50 transition"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              <span>{isDownloadingBackup ? 'Export...' : 'Backup Natif (/api/backup)'}</span>
+            </button>
+            <button
+              type="button"
+              disabled={isLoadingAudit || !backendProxyAvailable}
+              onClick={handleLoadServerAudit}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-800 disabled:opacity-50 transition"
+            >
+              <Shield className="w-3.5 h-3.5 text-amber-600" />
+              <span>{isLoadingAudit ? 'Chargement...' : 'Journal Audit (/api/audit)'}</span>
+            </button>
+            <button
+              type="button"
+              disabled={isTestingMail || !backendProxyAvailable}
+              onClick={handleTestSmtpMail}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[11px] font-semibold text-slate-800 disabled:opacity-50 transition"
+            >
+              <Mail className="w-3.5 h-3.5 text-emerald-600" />
+              <span>{isTestingMail ? 'Envoi...' : 'Tester SMTP (/api/notifications/test)'}</span>
+            </button>
+          </div>
+        </div>
       </form>
+
+      {/* Couverture intégrale des données live SOGEDIPROMA */}
+      {liveSnapshot && (
+        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="text-xs font-bold text-slate-900">
+                Couverture Intégrale SOGEDIPROMA ({liveSnapshot.company})
+              </h4>
+              <p className="text-[11px] text-slate-500">
+                Toutes les collections live extraites et exploitées dans les sections dédiées du cahier.
+              </p>
+            </div>
+            <span className="text-[11px] font-mono tabular-nums text-slate-500">
+              {liveSnapshot.revision !== undefined ? `Rév. #${liveSnapshot.revision} · ` : ''}
+              {new Date(liveSnapshot.syncedAt).toLocaleString('fr-FR')}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+            {[
+              { label: 'Actifs & QR', val: `${liveSnapshot.counts.assets} (${liveSnapshot.counts.assetsWithQr} QR)` },
+              { label: 'Mouvements Stock', val: `${liveSnapshot.counts.stockMovements} (${liveSnapshot.counts.inventoryItems} art.)` },
+              { label: 'Agents & Flotte', val: `${liveSnapshot.counts.employees} (${liveSnapshot.counts.fleetPhones} GSM)` },
+              { label: 'Chartes IT signées', val: `${liveSnapshot.counts.chartersSigned} / ${liveSnapshot.counts.employees}` },
+              { label: 'Habilitations RBAC', val: `${liveSnapshot.counts.accesses} (${liveSnapshot.counts.softwareAssignments} log.)` },
+              { label: 'Campagne 2026 & Caméras', val: `${liveSnapshot.counts.campaignChecked}/${liveSnapshot.counts.campaignTotal} · ${liveSnapshot.counts.cameraChecks} ctrl` },
+            ].map((stat) => (
+              <div key={stat.label} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200/80">
+                <span className="text-[10px] text-slate-500 block truncate">{stat.label}</span>
+                <strong className="font-mono tabular-nums text-slate-900 text-xs">{stat.val}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Visionneuse Journal d'Audit SOGEDIPROMA */}
+      {showAuditViewer && (
+        <div className="p-4 rounded-xl bg-white border border-slate-200 space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <h4 className="text-xs font-bold text-slate-900">
+              Journal d&apos;Audit Serveur SOGEDIPROMA ({auditEntries.length})
+            </h4>
+            <button
+              type="button"
+              onClick={() => setShowAuditViewer(false)}
+              className="text-slate-500 hover:text-slate-800 p-1"
+              aria-label="Fermer l'audit"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {auditEntries.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              Aucune entrée d&apos;audit retournée (l&apos;endpoint <code className="font-mono">/api/audit</code> peut être réservé au compte administrateur SOGEDIPROMA).
+            </p>
+          ) : (
+            <div className="max-h-60 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100 text-[11px]">
+              {auditEntries.map((entry, idx) => (
+                <div key={String(entry.id || idx)} className="px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="font-semibold text-slate-800 truncate">
+                      {String(entry.action || entry.type || 'Événement')} — {String(entry.target || entry.entity || '')}
+                    </div>
+                    <div className="text-slate-500 font-mono text-[10px]">
+                      {String(entry.user || entry.actor || 'Système')} · {String(entry.details || entry.summary || '')}
+                    </div>
+                  </div>
+                  <span className="font-mono tabular-nums text-[10px] text-slate-500 shrink-0">
+                    {String(entry.timestamp || entry.createdAt || entry.date || '')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Méthode B : Import direct JSON /api/backup, /api/state, export combiné ou export matériels */}
       <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">

@@ -41,6 +41,7 @@ import {
   loadFxRates,
   saveFxRates,
 } from '../../utils/currencyConverter';
+import { getLocalTodayIso } from '../../utils/coherenceUtils';
 
 interface RoiCalculatorSectionProps {
   data: CahierSuiviData;
@@ -506,7 +507,7 @@ export const RoiCalculatorSection: React.FC<RoiCalculatorSectionProps> = ({
       gainTempsEstimeHeuresParAn: 24,
       tauxHoraireMoyenValorise: hourlyRateAr,
       impactQualitatif: `Économie sur 3 ans estimée à +${formatAriary(quickCalc.threeYearsSavingsAr)}.`,
-      dateMiseEnService: new Date().toISOString().split('T')[0],
+      dateMiseEnService: getLocalTodayIso(),
       statut: 'En cours',
     };
 

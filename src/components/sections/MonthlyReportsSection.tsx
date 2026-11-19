@@ -21,6 +21,7 @@ import {
   getMonthlyActivitySnapshot,
 } from '../../utils/monthlyDeliverableGenerator';
 import { formatDuration } from '../../utils/durationFormatter';
+import { getLocalTodayIso } from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import {
@@ -55,9 +56,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
   const [deliveryRecipient, setDeliveryRecipient] = useState<string>(
     data.generalInfo.responsableHierarchique || 'Responsable des Systèmes d\'Information (RSI)'
   );
-  const [deliveryDate, setDeliveryDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
-  );
+  const [deliveryDate, setDeliveryDate] = useState<string>(() => getLocalTodayIso());
   const [deliveryNote, setDeliveryNote] = useState<string>('');
   const [autoDownloadOnDeliver, setAutoDownloadOnDeliver] = useState<boolean>(true);
 
@@ -333,7 +332,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
 
   const handleToggleValidation = () => {
     const nextVal = !currentReport.valideParHierarchie;
-    const today = new Date().toISOString().split('T')[0];
+    const today = getLocalTodayIso();
     const updated = rapports.map((r) => {
       if (r.moisIndex !== currentReport.moisIndex) return r;
       const { dateValidation: _removed, ...rest } = r;
@@ -390,9 +389,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
         data.generalInfo.responsableHierarchique ||
         "Responsable des Systèmes d'Information (RSI)"
     );
-    setDeliveryDate(
-      rep?.dateLivraison || new Date().toISOString().split('T')[0]
-    );
+    setDeliveryDate(rep?.dateLivraison || getLocalTodayIso());
     setDeliveryNote(rep?.noteLivraison || '');
     setAutoDownloadOnDeliver(true);
   };
@@ -810,7 +807,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
               </span>
             </div>
             <h3 className="text-2xl font-extrabold text-white mt-1">
-              {currentReport.nomMois.toUpperCase()} {currentReport.annee}
+              {currentReport.nomMois.toUpperCase()} {monthSnapshot.annee}
             </h3>
             {currentReport.statutLivraison === 'Livré' && (
               <p className="text-[11px] text-slate-300 mt-1">
@@ -880,7 +877,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
         <div className="px-6 py-3 bg-blue-50/70 border-b border-blue-100 flex flex-wrap items-center justify-between gap-2 text-xs text-blue-950">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold">
-              Données compilées pour {currentReport.nomMois} {currentReport.annee} :
+              Données compilées pour {currentReport.nomMois} {monthSnapshot.annee} :
             </span>
             <span className="font-mono tabular-nums text-blue-800">
               {monthSnapshot.interventions.length} fiche(s) d'intervention ({monthSnapshot.interventionsTerminees} terminée(s))
@@ -897,65 +894,76 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
         </div>
 
         {/* Métriques clés */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 bg-slate-50 border-b border-slate-200">
-          <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
-            <span className="text-xs text-slate-500 block font-medium">
-              Interventions
-            </span>
-            <strong className="text-2xl font-black text-slate-900 font-mono tabular-nums">
-              {Math.max(
-                currentReport.totalInterventions,
-                monthSnapshot.interventions.length
-              )}
-            </strong>
-            <span className="text-[11px] text-slate-500 block">
-              tickets sur le mois
-            </span>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
-            <span className="text-xs text-slate-500 block font-medium">
-              Terminées / En cours
-            </span>
-            <strong className="text-2xl font-black text-emerald-600 font-mono tabular-nums">
-              {Math.max(
-                currentReport.incidentsResolus,
-                monthSnapshot.interventionsTerminees
-              )}
-            </strong>
-            <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
-              {Math.max(
-                currentReport.incidentsEnCours,
-                monthSnapshot.interventionsEnCours
-              )}{' '}
-              en cours
-            </span>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
-            <span className="text-xs text-slate-500 block font-medium">
-              Taux 1er Contact
-            </span>
-            <strong className="text-2xl font-black text-blue-600 font-mono tabular-nums">
-              {currentReport.tauxResolutionFCR}%
-            </strong>
-            <span className="text-[11px] text-slate-500 block">
-              résolution directe (FCR)
-            </span>
-          </div>
-          <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
-            <span className="text-xs text-slate-500 block font-medium">
-              Délai Moyen (MTTR)
-            </span>
-            <strong className="text-2xl font-black text-indigo-600 font-mono tabular-nums">
-              {formatDuration(
-                currentReport.dureeMoyenneResolutionMin ||
-                  monthSnapshot.avgInterventionMinutes
-              )}
-            </strong>
-            <span className="text-[11px] text-slate-500 block">
-              temps de traitement
-            </span>
-          </div>
-        </div>
+        {(() => {
+          const useManualCounts =
+            currentReport.totalInterventions > 0 &&
+            currentReport.totalInterventions >= monthSnapshot.interventions.length;
+          const displayTotal = useManualCounts
+            ? currentReport.totalInterventions
+            : monthSnapshot.interventions.length;
+          const displayResolved = useManualCounts
+            ? currentReport.incidentsResolus
+            : monthSnapshot.interventionsTerminees;
+          const displayPending = useManualCounts
+            ? currentReport.incidentsEnCours
+            : monthSnapshot.interventionsEnCours;
+          const displayFcr = useManualCounts
+            ? currentReport.tauxResolutionFCR
+            : monthSnapshot.tauxResolution;
+          const displayMttr =
+            currentReport.totalInterventions > 0 && currentReport.dureeMoyenneResolutionMin > 0
+              ? currentReport.dureeMoyenneResolutionMin
+              : monthSnapshot.avgInterventionMinutes;
+
+          return (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-6 bg-slate-50 border-b border-slate-200">
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+                <span className="text-xs text-slate-500 block font-medium">
+                  Interventions
+                </span>
+                <strong className="text-2xl font-black text-slate-900 font-mono tabular-nums">
+                  {displayTotal}
+                </strong>
+                <span className="text-[11px] text-slate-500 block">
+                  tickets sur le mois
+                </span>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+                <span className="text-xs text-slate-500 block font-medium">
+                  Terminées / En cours
+                </span>
+                <strong className="text-2xl font-black text-emerald-600 font-mono tabular-nums">
+                  {displayResolved}
+                </strong>
+                <span className="text-[11px] text-slate-500 block font-mono tabular-nums">
+                  {displayPending} en cours
+                </span>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+                <span className="text-xs text-slate-500 block font-medium">
+                  Taux 1er Contact
+                </span>
+                <strong className="text-2xl font-black text-blue-600 font-mono tabular-nums">
+                  {displayFcr}%
+                </strong>
+                <span className="text-[11px] text-slate-500 block">
+                  résolution directe (FCR)
+                </span>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center">
+                <span className="text-xs text-slate-500 block font-medium">
+                  Délai Moyen (MTTR)
+                </span>
+                <strong className="text-2xl font-black text-indigo-600 font-mono tabular-nums">
+                  {formatDuration(displayMttr)}
+                </strong>
+                <span className="text-[11px] text-slate-500 block">
+                  temps de traitement
+                </span>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Contenu détaillé du rapport */}
         <div className="p-6 space-y-6 text-xs">

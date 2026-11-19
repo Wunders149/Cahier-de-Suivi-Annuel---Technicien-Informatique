@@ -13,6 +13,12 @@ import {
   TacheJournal,
 } from '../types/it-tracker';
 import { estimateWorkbookSizeBytes, normalizeWorkbookData } from './backupService';
+import { detectCurrencyAndConvertToAr, loadFxRates } from './currencyConverter';
+import {
+  addDaysToIso,
+  buildJournalTaskFromMaintenance,
+  getLocalTodayIso,
+} from './coherenceUtils';
 
 /**
  * Référentiel complet des endpoints exposés par l'application serveur SOGEDIPROMA · Gestion informatique
@@ -190,6 +196,7 @@ export interface SogedipromaAsset {
   id: string;
   name: string;
   assetTag?: string;
+  inventoryQrCode?: string;
   category?: string;
   brand?: string;
   model?: string;
@@ -218,8 +225,12 @@ export interface SogedipromaEmployee {
   departmentId?: string;
   email?: string;
   phone?: string;
+  fleetPhone?: string;
+  position?: string;
   location?: string;
   status?: string;
+  charterAttachment?: unknown;
+  charterSigned?: boolean;
 }
 
 export interface SogedipromaDepartment {
@@ -302,6 +313,9 @@ export interface SogedipromaSubscription {
   startDate?: string;
   renewalDate?: string;
   owner?: string;
+  budgetId?: string;
+  employeeId?: string;
+  departmentId?: string;
   autoRenew?: string;
   status?: string;
   licenseCount?: number;
@@ -1046,7 +1060,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     return {
       id: `sog-pur-${p.id || idx}`,
       numeroCommande: p.ref?.trim() || `ACH-${String(idx + 1).padStart(4, '0')}`,
-      dateDemande: p.date || new Date().toISOString().split('T')[0],
+      dateDemande: p.date || getLocalTodayIso(),
       demandeur: deptName || 'Équipe IT SOGEDIPROMA',
       articlesDemandes: invItem ? invItem.name : p.itemName || p.itemId || 'Article informatique',
       quantite: qty,
@@ -1090,6 +1104,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       marqueModele: [a.brand, a.model].filter(Boolean).join(' ') || a.category || 'Standard',
       numeroSerie: a.serial?.trim() || 'N/A',
       configurationTechnique: [
+        a.inventoryQrCode ? `QR : ${a.inventoryQrCode}` : '',
         a.category ? `Catégorie : ${a.category}` : '',
         a.purchasePrice ? `Valeur : ${a.purchasePrice} ${currency}` : '',
         supplierName ? `Fournisseur : ${supplierName}` : '',
@@ -1098,7 +1113,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       ]
         .filter(Boolean)
         .join(' · '),
-      dateAcquisition: a.purchaseDate || new Date().toISOString().split('T')[0],
+      dateAcquisition: a.purchaseDate || getLocalTodayIso(),
       etatMateriel: mapAssetState(a.status),
       utilisateurResponsable: empName || (a.status === 'Disponible' ? 'Stock DSI' : 'Non affecté'),
       service: deptName || 'SOGEDIPROMA',
@@ -1176,7 +1191,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       tacheControle: `${m.type || 'Maintenance'} — ${asset ? asset.name : m.assetName || 'Équipement IT'}`,
       frequence: 'Trimestrielle',
       dernierControle: isDone ? m.plannedAt || '' : '',
-      prochainControle: m.plannedAt || new Date().toISOString().split('T')[0],
+      prochainControle: m.plannedAt || getLocalTodayIso(),
       statut,
       responsableOuEquipement:
         [m.provider || resolveEmployeeName(m.employeeId, m.employeeName), asset?.assetTag || m.assetTag]
@@ -1195,7 +1210,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
   itTracking
     .filter((row) => row && row.type === 'cameraCheck')
     .forEach((chk) => {
-      const checkDate = chk.date || (chk.checkedAt ? chk.checkedAt.slice(0, 10) : new Date().toISOString().split('T')[0]);
+      const checkDate = chk.date || (chk.checkedAt ? chk.checkedAt.slice(0, 10) : getLocalTodayIso());
       const group = cameraCheckGroups.get(checkDate) || {
         total: 0,
         okCount: 0,
@@ -1220,10 +1235,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     .slice(0, 15)
     .map(([checkDate, group]) => {
       const hasIssues = group.issues.length > 0;
-      const nextDayIso = (() => {
-        const t = Date.parse(checkDate);
-        return Number.isFinite(t) ? new Date(t + 86400000).toISOString().split('T')[0] : checkDate;
-      })();
+      const nextDayIso = addDaysToIso(checkDate, 1);
       return {
         id: `sog-camchk-${checkDate}`,
         categorie: 'Équipements réseau',
@@ -1266,7 +1278,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     return {
       id: `sog-tic-${t.id || idx}`,
       numeroReference: t.ref?.trim() || `TIC-${String(idx + 1).padStart(4, '0')}`,
-      dateReception: t.openedAt || new Date().toISOString().split('T')[0],
+      dateReception: t.openedAt || getLocalTodayIso(),
       heureReception: '09:00',
       nomDemandeur: requester,
       serviceDemandeur: deptName,
@@ -1289,14 +1301,14 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     };
   });
 
-  // 7. Suivi du travail -> Journal Quotidien
-  const journalTaches: TacheJournal[] = workLogs.map((w, idx) => {
+  // 7. Suivi du travail + Maintenances réalisées/contrôles caméras du jour -> Journal Quotidien
+  const workLogTasks: TacheJournal[] = workLogs.map((w, idx) => {
     const mins = Math.max(15, Math.round((Number(w.durationHours) || 0.5) * 60));
     const statut: TacheJournal['statut'] =
       w.status === 'Terminé' ? 'Terminé' : w.status === 'À suivre' ? 'À faire' : 'En cours';
     return {
       id: `sog-wrk-${w.id || idx}`,
-      date: w.date || new Date().toISOString().split('T')[0],
+      date: w.date || getLocalTodayIso(),
       heure: '08:30',
       tache: w.title || 'Intervention journalière',
       description: w.description || '',
@@ -1312,9 +1324,19 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     };
   });
 
+  const maintenanceJournalTasks: TacheJournal[] = maintenances
+    .filter((m) => (m.valide && m.dernierControle) || m.id.startsWith('sog-camchk-'))
+    .map((m) => buildJournalTaskFromMaintenance(m));
+
+  const journalById = new Map<string, TacheJournal>();
+  [...workLogTasks, ...maintenanceJournalTasks].forEach((entry) => {
+    if (entry && entry.id) journalById.set(entry.id, entry);
+  });
+  const journalTaches: TacheJournal[] = Array.from(journalById.values());
+
   // 8. Abonnements + Affectations logicielles (itTracking.softwareAssignment) + Habilitations RBAC (accesses) -> Logiciels & Licences
-  const todayIso = new Date().toISOString().split('T')[0];
-  const cutoff30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+  const todayIso = getLocalTodayIso();
+  const cutoff30 = addDaysToIso(todayIso, 30);
 
   const SOFTWARE_META: Record<
     string,
@@ -1435,10 +1457,40 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     );
     const achetees = Math.max(basePurchased, attribuees);
 
+    const amountNum = Number(s.amount) || 0;
+    const fxRates = loadFxRates();
+    const haySub = `${s.name || ''} ${s.provider || ''} ${s.plan || ''} ${s.notes || ''}`;
+    let subCurrency: 'Ar' | 'EUR' | 'USD' =
+      currency === 'EUR' ? 'EUR' : currency === 'USD' ? 'USD' : 'Ar';
+    if (/€|\bEUR\b/i.test(haySub)) subCurrency = 'EUR';
+    else if (/\$|\bUSD\b/i.test(haySub)) subCurrency = 'USD';
+    else if (
+      subCurrency === 'Ar' &&
+      amountNum > 0 &&
+      (amountNum < 5000 ||
+        /(hostinger|anthropic|claude|icloud|apple|openai|chatgpt|adobe|dropbox|microsoft|canva|navionics)/i.test(
+          haySub
+        ))
+    ) {
+      subCurrency = 'USD';
+    }
+
+    const cycle = s.billingCycle || 'Mensuel';
+    const costLabel = amountNum ? `${amountNum} ${subCurrency} / ${cycle}` : '—';
+    const convertedCost = amountNum
+      ? detectCurrencyAndConvertToAr(costLabel, fxRates)
+      : { annualizedAr: 0 };
+
+    const empOwner = resolveEmployeeName(s.employeeId);
+    const linkedBudgetName =
+      (s.budgetId && budgetMap.get(String(s.budgetId))?.name) || '';
+
     const droitsText =
       (linkedAccessKey && formatAccessRbacSummary(linkedAccessKey)) ||
       (swBucket
         ? `${swBucket.count} postes affectés (${swBucket.employees.slice(0, 4).join(', ')}${swBucket.employees.length > 4 ? '…' : ''})`
+        : empOwner
+        ? `Bénéficiaire : ${empOwner}${s.owner ? ` (${s.owner})` : ''}`
         : s.owner
         ? `Responsable : ${s.owner}`
         : 'Administration DSI');
@@ -1452,12 +1504,16 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
       nombreLicencesAchetees: achetees,
       nombreLicencesAttribuees: attribuees,
       dateExpiration: s.renewalDate || 'À définir',
-      coutRenouvellementEstime: s.amount ? `${s.amount} ${currency} / ${s.billingCycle || 'Mensuel'}` : '—',
+      coutRenouvellementEstime: costLabel,
       procedureInstallation: s.notes || 'Géré via console prestataire.',
       gestionComptesEtDroits: droitsText,
       statutConformite: isExpiring ? 'Expire sous 30j' : 'Conforme',
       observations: [
         `Statut SOGEDIPROMA : ${s.status || 'Active'} · Renouvellement : ${s.autoRenew === 'Oui' ? 'Automatique' : 'Manuel'}`,
+        convertedCost.annualizedAr > 0
+          ? `Équivalent annualisé : ~${new Intl.NumberFormat('fr-FR').format(convertedCost.annualizedAr)} Ar/an`
+          : '',
+        linkedBudgetName ? `Budget : ${linkedBudgetName}` : '',
         swBucket ? `Affectations logicielles : ${swBucket.count} utilisateur(s)` : '',
       ]
         .filter(Boolean)
@@ -1548,20 +1604,67 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
     observations: sw.notes || '',
   }));
 
-  // 9. Budgets IT -> Objectifs Annuels (Planification & KPI)
+  // 9. Budgets IT -> Objectifs Annuels (avec calcul de l'engagé/dépensé réel rattaché par budgetId)
   const fmtMoney = (n: number): string => new Intl.NumberFormat('fr-FR').format(Math.round(n || 0));
+  const fxRatesForBudgets = loadFxRates();
+  const budgetDerived = new Map<string, { spent: number; committed: number; sources: string[] }>();
+  const addBudgetDerived = (
+    bId: string | undefined,
+    spentDelta: number,
+    committedDelta: number,
+    sourceLabel: string
+  ) => {
+    if (!bId) return;
+    const entry = budgetDerived.get(String(bId)) || { spent: 0, committed: 0, sources: [] };
+    entry.spent += spentDelta;
+    entry.committed += committedDelta;
+    if (sourceLabel && !entry.sources.includes(sourceLabel)) entry.sources.push(sourceLabel);
+    budgetDerived.set(String(bId), entry);
+  };
+
+  purchases.forEach((p) => {
+    const total = (Number(p.quantity) || 1) * (Number(p.unitPrice) || 0);
+    if (p.receivedApplied || p.status === 'Reçu') {
+      addBudgetDerived(p.budgetId, total, 0, 'Achats reçus');
+    } else {
+      addBudgetDerived(p.budgetId, 0, total, 'Commandes en cours');
+    }
+  });
+  assets.forEach((a) => {
+    const price = Number(a.purchasePrice) || 0;
+    if (price > 0) addBudgetDerived(a.budgetId, price, 0, 'Actifs CMDB');
+  });
+  maintenance.forEach((m) => {
+    const cost = Number(m.cost) || 0;
+    if (cost > 0) addBudgetDerived(m.budgetId, cost, 0, 'Maintenances');
+  });
+  subscriptions.forEach((s) => {
+    const amt = Number(s.amount) || 0;
+    if (!s.budgetId || amt <= 0) return;
+    const haySub = `${s.name || ''} ${s.provider || ''} ${s.plan || ''} ${s.notes || ''}`;
+    let subCur: 'Ar' | 'EUR' | 'USD' = currency === 'EUR' ? 'EUR' : currency === 'USD' ? 'USD' : 'Ar';
+    if (/€|\bEUR\b/i.test(haySub)) subCur = 'EUR';
+    else if (/\$|\bUSD\b/i.test(haySub) || (subCur === 'Ar' && amt < 5000)) subCur = 'USD';
+    const conv = detectCurrencyAndConvertToAr(`${amt} ${subCur} / ${s.billingCycle || 'Mensuel'}`, fxRatesForBudgets);
+    if (s.status === 'Active' || s.status === 'Essai') {
+      addBudgetDerived(s.budgetId, 0, conv.annualizedAr, 'Abonnements SaaS');
+    }
+  });
+
   const objectifsAnnuels: ObjectifAnnuel[] = budgets.map((b, idx) => {
     const allocated = Number(b.allocated) || 0;
-    const committed = Number(b.committed) || 0;
-    const spent = Number(b.spent) || 0;
-    const pct = allocated > 0 ? Math.min(100, Math.round((spent / allocated) * 100)) : 0;
+    const derived = budgetDerived.get(String(b.id));
+    const committed = Math.max(Number(b.committed) || 0, Math.round(derived?.committed || 0));
+    const spent = Math.max(Number(b.spent) || 0, Math.round(derived?.spent || 0));
+    const effectiveUsed = Math.max(spent, committed);
+    const pct = allocated > 0 ? Math.min(100, Math.round((effectiveUsed / allocated) * 100)) : 0;
     const year = Number(b.fiscalYear) || new Date().getFullYear() + 1;
     const priorite: ObjectifAnnuel['priorite'] =
       allocated >= 15000000 ? 'Haute' : allocated >= 5000000 ? 'Moyenne' : 'Basse';
     const statut: ObjectifAnnuel['statut'] =
       b.status === 'Clôturé' || b.status === 'Terminé'
         ? 'Atteint'
-        : spent > 0 || committed > 0
+        : effectiveUsed > 0
         ? 'En cours'
         : 'Non démarré';
 
@@ -1572,6 +1675,7 @@ export function mapSogedipromaToWorkbookDelta(raw: SogedipromaStateData): Sogedi
         b.category ? `Catégorie : ${b.category}` : '',
         `Exercice budgétaire : ${year}`,
         b.owner ? `Responsable : ${b.owner}` : '',
+        derived?.sources.length ? `Sources liées : ${derived.sources.join(', ')}` : '',
         b.notes || '',
       ]
         .filter(Boolean)

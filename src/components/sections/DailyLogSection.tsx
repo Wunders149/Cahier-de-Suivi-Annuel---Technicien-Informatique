@@ -28,6 +28,7 @@ import {
   secondaryButtonClass,
 } from '../ui/formStyles';
 import { formatDuration } from '../../utils/durationFormatter';
+import { addDaysToIso, getLocalTodayIso } from '../../utils/coherenceUtils';
 import { DailyLogCalendar } from '../journal/DailyLogCalendar';
 
 interface DailyLogSectionProps {
@@ -65,7 +66,7 @@ const STATUTS: TacheJournal['statut'][] = [
 type PeriodFilter = 'all' | 'today' | 'week' | 'month' | 'custom';
 type SortDirection = 'desc' | 'asc';
 
-const getTodayIso = () => new Date().toISOString().split('T')[0];
+const getTodayIso = () => getLocalTodayIso();
 
 const DEFAULT_TASK_FORM = (): Partial<TacheJournal> => ({
   date: getTodayIso(),
@@ -291,10 +292,7 @@ export const DailyLogSection: React.FC<DailyLogSectionProps> = ({
 
   const filteredTaches = useMemo(() => {
     const today = getTodayIso();
-    const now = new Date();
-    const weekAgoDate = new Date(now);
-    weekAgoDate.setDate(now.getDate() - 7);
-    const weekAgoIso = weekAgoDate.toISOString().split('T')[0];
+    const weekAgoIso = addDaysToIso(today, -7);
     const currentMonthPrefix = today.slice(0, 7);
 
     const filtered = baseFilteredTaches.filter((t) => {

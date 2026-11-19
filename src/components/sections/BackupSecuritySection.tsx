@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { SuiviSauvegarde, IncidentSecurite } from '../../types/it-tracker';
+import { SuiviSauvegarde, IncidentSecurite, TacheJournal } from '../../types/it-tracker';
 import {
   ShieldCheck,
   HardDrive,
@@ -10,7 +10,13 @@ import {
   AlertCircle,
   Clock,
   Zap,
+  BookCheck,
 } from 'lucide-react';
+import {
+  buildJournalTaskFromBackup,
+  getLocalDateTimeStamp,
+  getLocalTodayIso,
+} from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
@@ -29,6 +35,7 @@ interface BackupSecuritySectionProps {
   incidentsSecurite: IncidentSecurite[];
   onUpdateSauvegardes: (sauvegardes: SuiviSauvegarde[]) => void;
   onUpdateIncidentsSecurite: (incidents: IncidentSecurite[]) => void;
+  onLogToJournal?: (task: TacheJournal) => void;
   onShowToast?: (msg: string) => void;
 }
 
@@ -41,13 +48,13 @@ const DEFAULT_BACKUP = (): Partial<SuiviSauvegarde> => ({
   dureeExecutionMin: 35,
   destinationStockage: 'NAS Local + Cloud Immuable (Règle 3-2-1)',
   statut: 'Succès',
-  dateDernierTestRestauration: new Date().toISOString().split('T')[0],
+  dateDernierTestRestauration: getLocalTodayIso(),
   resultatTestRestauration: 'Succès complet',
   observations: '',
 });
 
 const DEFAULT_SECURITY = (): Partial<IncidentSecurite> => ({
-  dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+  dateHeure: getLocalDateTimeStamp(),
   typeIncident: 'Tentative Phishing',
   severite: 'Moyenne',
   postesConcernes: '',
@@ -115,6 +122,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
   incidentsSecurite,
   onUpdateSauvegardes,
   onUpdateIncidentsSecurite,
+  onLogToJournal,
   onShowToast,
 }) => {
   // 1. CRUD Jobs de sauvegarde
@@ -200,8 +208,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
       destinationStockage: formBackup.destinationStockage?.trim() || 'NAS Local + Cloud 3-2-1',
       statut: (formBackup.statut as SuiviSauvegarde['statut']) || 'Succès',
       dateDernierTestRestauration:
-        formBackup.dateDernierTestRestauration?.trim() ||
-        new Date().toISOString().split('T')[0],
+        formBackup.dateDernierTestRestauration?.trim() || getLocalTodayIso(),
       resultatTestRestauration:
         (formBackup.resultatTestRestauration as SuiviSauvegarde['resultatTestRestauration']) ||
         'À planifier',
@@ -213,9 +220,14 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
       notify(`Job de sauvegarde « ${payload.nomJob} » mis à jour.`);
     } else {
       onUpdateSauvegardes([...sauvegardes, payload]);
+      if (onLogToJournal) {
+        onLogToJournal(buildJournalTaskFromBackup(payload));
+      }
       notify(
         isDuplicatingBackup
           ? `Job de sauvegarde « ${payload.nomJob} » dupliqué.`
+          : onLogToJournal
+          ? `Job « ${payload.nomJob} » enregistré et consigné au journal quotidien.`
           : `Job de sauvegarde « ${payload.nomJob} » enregistré.`
       );
     }
@@ -254,7 +266,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
     setFormSec({
       ...sec,
       id: undefined,
-      dateHeure: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      dateHeure: getLocalDateTimeStamp(),
       statut: 'Sous surveillance',
     });
     setSecModalOpen(true);
@@ -266,8 +278,7 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
 
     const payload: IncidentSecurite = {
       id: editingSecId || `SEC-${Date.now()}`,
-      dateHeure:
-        formSec.dateHeure?.trim() || new Date().toISOString().replace('T', ' ').slice(0, 16),
+      dateHeure: formSec.dateHeure?.trim() || getLocalDateTimeStamp(),
       typeIncident:
         (formSec.typeIncident as IncidentSecurite['typeIncident']) || 'Tentative Phishing',
       severite: (formSec.severite as IncidentSecurite['severite']) || 'Moyenne',
@@ -813,7 +824,20 @@ export const BackupSecuritySection: React.FC<BackupSecuritySectionProps> = ({
               >
                 Supprimer
               </button>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {onLogToJournal && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onLogToJournal(buildJournalTaskFromBackup(inspectingBackup));
+                      notify(`Sauvegarde « ${inspectingBackup.nomJob} » consignée au journal quotidien.`);
+                    }}
+                    className={secondaryButtonClass}
+                  >
+                    <BookCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Consigner au journal</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {

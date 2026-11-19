@@ -52,7 +52,13 @@ export function normalizeWorkbookData(raw: unknown): CahierSuiviData {
   const rawRapports = Array.isArray(source.rapportsMensuels) ? source.rapportsMensuels : [];
   const rapportsMensuels = base.rapportsMensuels.map((defaultRep) => {
     const found = rawRapports.find((r) => r && r.moisIndex === defaultRep.moisIndex);
-    return found ? { ...defaultRep, ...found } : { ...defaultRep };
+    const merged = found ? { ...defaultRep, ...found } : { ...defaultRep };
+    const shouldAlignYear =
+      !found ||
+      !found.annee ||
+      (found.annee === defaultRep.annee &&
+        generalInfo.anneeReference !== base.generalInfo.anneeReference);
+    return shouldAlignYear ? { ...merged, annee: generalInfo.anneeReference } : merged;
   });
 
   const rawTrimestres = Array.isArray(source.bilansTrimestriels) ? source.bilansTrimestriels : [];
@@ -63,12 +69,18 @@ export function normalizeWorkbookData(raw: unknown): CahierSuiviData {
 
   const rawBilanAnnuel =
     source.bilanAnnuel && typeof source.bilanAnnuel === 'object' ? source.bilanAnnuel : {};
+  const typedRawBilan = rawBilanAnnuel as Partial<CahierSuiviData['bilanAnnuel']>;
+  const resolvedBilanYear =
+    !typedRawBilan.annee ||
+    (typedRawBilan.annee === base.bilanAnnuel.annee &&
+      generalInfo.anneeReference !== base.generalInfo.anneeReference)
+      ? generalInfo.anneeReference
+      : typedRawBilan.annee;
   const bilanAnnuel = {
     ...base.bilanAnnuel,
     ...rawBilanAnnuel,
-    projetsRoi: Array.isArray((rawBilanAnnuel as CahierSuiviData['bilanAnnuel']).projetsRoi)
-      ? (rawBilanAnnuel as CahierSuiviData['bilanAnnuel']).projetsRoi
-      : [],
+    annee: resolvedBilanYear,
+    projetsRoi: Array.isArray(typedRawBilan.projetsRoi) ? typedRawBilan.projetsRoi : [],
   };
 
   return {

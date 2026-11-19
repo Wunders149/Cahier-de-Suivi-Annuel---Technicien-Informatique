@@ -8,7 +8,10 @@ import {
   AlertCircle,
   Lock,
   Search,
+  Users,
+  ShieldCheck,
 } from 'lucide-react';
+import { useSogedipromaLiveSnapshot } from '../../utils/sogedipromaLiveStore';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
 import { CrudRowActions } from '../ui/CrudRowActions';
@@ -75,6 +78,15 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('Tous');
+
+  // Onglets SOGEDIPROMA : Affectations nominatives (93) & Habilitations RBAC (194)
+  const liveSnapshot = useSogedipromaLiveSnapshot();
+  const [activeTab, setActiveTab] = useState<'licences' | 'assignments' | 'rbac'>('licences');
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignSoftwareFilter, setAssignSoftwareFilter] = useState('Tous');
+  const [rbacSearch, setRbacSearch] = useState('');
+  const [rbacSystemFilter, setRbacSystemFilter] = useState('Tous');
+  const [rbacLimit, setRbacLimit] = useState(50);
 
   // États CRUD
   const [modalOpen, setModalOpen] = useState(false);
@@ -194,6 +206,54 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
     (Number(formLic.nombreLicencesAchetees) || 0) -
     (Number(formLic.nombreLicencesAttribuees) || 0);
 
+  const uniqueSoftwares = useMemo(() => {
+    const names = Array.from(
+      new Set((liveSnapshot?.softwareAssignments || []).map((a) => a.softwareName))
+    ).sort();
+    return ['Tous', ...names];
+  }, [liveSnapshot?.softwareAssignments]);
+
+  const filteredAssignments = useMemo(() => {
+    const rows = liveSnapshot?.softwareAssignments || [];
+    const q = assignSearch.trim().toLowerCase();
+    return rows.filter((a) => {
+      if (assignSoftwareFilter !== 'Tous' && a.softwareName !== assignSoftwareFilter) return false;
+      if (!q) return true;
+      return (
+        a.softwareName.toLowerCase().includes(q) ||
+        a.editor.toLowerCase().includes(q) ||
+        a.employeeName.toLowerCase().includes(q) ||
+        a.departmentName.toLowerCase().includes(q) ||
+        a.createdBy.toLowerCase().includes(q)
+      );
+    });
+  }, [liveSnapshot?.softwareAssignments, assignSearch, assignSoftwareFilter]);
+
+  const uniqueRbacSystems = useMemo(() => {
+    const systems = Array.from(
+      new Set((liveSnapshot?.accesses || []).map((a) => a.system).filter(Boolean))
+    ).sort();
+    return ['Tous', ...systems];
+  }, [liveSnapshot?.accesses]);
+
+  const filteredRbac = useMemo(() => {
+    const rows = liveSnapshot?.accesses || [];
+    const q = rbacSearch.trim().toLowerCase();
+    return rows.filter((a) => {
+      if (rbacSystemFilter !== 'Tous' && a.system !== rbacSystemFilter) return false;
+      if (!q) return true;
+      return (
+        a.system.toLowerCase().includes(q) ||
+        a.account.toLowerCase().includes(q) ||
+        a.role.toLowerCase().includes(q) ||
+        a.scope.toLowerCase().includes(q) ||
+        a.employeeName.toLowerCase().includes(q) ||
+        a.departmentName.toLowerCase().includes(q) ||
+        a.approvedBy.toLowerCase().includes(q)
+      );
+    });
+  }, [liveSnapshot?.accesses, rbacSearch, rbacSystemFilter]);
+
   return (
     <div className="space-y-6">
       {/* En-tête */}
@@ -215,67 +275,114 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
         </button>
       </div>
 
-      {/* AVERTISSEMENT SÉCURITÉ MOT DE PASSE (Exigence stricte de sécurité) */}
-      <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 text-xs flex items-start gap-3">
-        <Lock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <strong className="text-amber-900 font-bold block text-sm">
-            RÈGLE DE SÉCURITÉ CRITIQUE : INTERDICTION DE STOCKAGE DE MOTS DE PASSE EN CLAIR
-          </strong>
-          <p className="text-amber-800 leading-relaxed">
-            Conformément aux directives de l&apos;ANSSI et aux standards ISO 27001, ce registre ne comporte intentionnellement{' '}
-            <strong>aucun champ de mot de passe en clair</strong>. Les secrets et identifiants administrateurs doivent être
-            obligatoirement stockés dans le coffre-fort d&apos;entreprise chiffré (ex : Bitwarden / KeePass certifié) avec double
-            authentification MFA.
-          </p>
-        </div>
-      </div>
-
-      {/* Barre de synthèse et recherche */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <span className="text-slate-500">Total logiciels : </span>
-            <strong className="font-mono tabular-nums text-slate-900">{licences.length}</strong>
-          </div>
-          {overAllocatedCount > 0 && (
-            <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 font-semibold font-mono tabular-nums">
-              {overAllocatedCount} dépassement(s) de quota
-            </span>
-          )}
-          {expiringCount > 0 && (
-            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold font-mono tabular-nums">
-              {expiringCount} alerte(s) conformité
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs"
-            aria-label="Filtrer par conformité"
+      {/* Sélecteur segmenté : Licences vs Affectations nominatives vs RBAC */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('licences')}
+            className={`px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'licences'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
           >
-            <option value="Tous">Tous les statuts</option>
-            <option value="Conforme">Conforme</option>
-            <option value="Sous-licencié">Sous-licencié</option>
-            <option value="Sur-licencié">Sur-licencié</option>
-            <option value="Expire sous 30j">Expire sous 30j</option>
-          </select>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Rechercher logiciel, éditeur, RBAC..."
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs"
-            />
-          </div>
+            Licences &amp; Abonnements ({licences.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('assignments')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'assignments'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-blue-600" />
+            <span>
+              Affectations Postes ({liveSnapshot?.softwareAssignments.length || 0})
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('rbac')}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg font-semibold transition whitespace-nowrap ${
+              activeTab === 'rbac'
+                ? 'bg-white text-slate-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Habilitations RBAC ({liveSnapshot?.accesses.length || 0})</span>
+          </button>
         </div>
       </div>
+
+      {activeTab === 'licences' && (
+        <>
+          {/* AVERTISSEMENT SÉCURITÉ MOT DE PASSE (Exigence stricte de sécurité) */}
+          <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 text-xs flex items-start gap-3">
+            <Lock className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <strong className="text-amber-900 font-bold block text-sm">
+                RÈGLE DE SÉCURITÉ CRITIQUE : INTERDICTION DE STOCKAGE DE MOTS DE PASSE EN CLAIR
+              </strong>
+              <p className="text-amber-800 leading-relaxed">
+                Conformément aux directives de l&apos;ANSSI et aux standards ISO 27001, ce registre ne comporte intentionnellement{' '}
+                <strong>aucun champ de mot de passe en clair</strong>. Les secrets et identifiants administrateurs doivent être
+                obligatoirement stockés dans le coffre-fort d&apos;entreprise chiffré (ex : Bitwarden / KeePass certifié) avec double
+                authentification MFA.
+              </p>
+            </div>
+          </div>
+
+          {/* Barre de synthèse et recherche */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 text-xs">
+            <div className="flex flex-wrap items-center gap-4">
+              <div>
+                <span className="text-slate-500">Total logiciels : </span>
+                <strong className="font-mono tabular-nums text-slate-900">{licences.length}</strong>
+              </div>
+              {overAllocatedCount > 0 && (
+                <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 font-semibold font-mono tabular-nums">
+                  {overAllocatedCount} dépassement(s) de quota
+                </span>
+              )}
+              {expiringCount > 0 && (
+                <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold font-mono tabular-nums">
+                  {expiringCount} alerte(s) conformité
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs"
+                aria-label="Filtrer par conformité"
+              >
+                <option value="Tous">Tous les statuts</option>
+                <option value="Conforme">Conforme</option>
+                <option value="Sous-licencié">Sous-licencié</option>
+                <option value="Sur-licencié">Sur-licencié</option>
+                <option value="Expire sous 30j">Expire sous 30j</option>
+              </select>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Rechercher logiciel, éditeur, RBAC..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-900 text-xs"
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal Création / Édition / Duplication */}
       <Modal
@@ -617,143 +724,322 @@ export const SoftwareLicensesSection: React.FC<SoftwareLicensesSectionProps> = (
         }
       />
 
-      {/* Grille des licences */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="bg-slate-900 text-white">
-                <th className="p-3 font-semibold">Logiciel &amp; Éditeur</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Version &amp; Type</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Licences (Allouées / Achetées)</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Expiration</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Coût</th>
-                <th className="p-3 font-semibold">Droits &amp; Déploiement</th>
-                <th className="p-3 font-semibold whitespace-nowrap">Statut</th>
-                <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200 text-slate-700">
-              {filteredLicences.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center">
-                    <div className="max-w-md mx-auto space-y-2">
-                      <p className="text-slate-600 font-medium">
-                        {licences.length === 0
-                          ? 'Aucune licence ou logiciel répertorié.'
-                          : 'Aucune licence ne correspond à votre recherche.'}
-                      </p>
-                      {licences.length === 0 && (
-                        <button
-                          type="button"
-                          onClick={openCreateModal}
-                          className={primaryButtonClass}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Ajouter une licence</span>
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredLicences.map((lic) => {
-                  const disponible = lic.nombreLicencesAchetees - lic.nombreLicencesAttribuees;
-                  const badge = getConformiteBadge(lic.statutConformite);
-                  return (
-                    <tr key={lic.id} className="hover:bg-slate-50/80 transition">
-                      <td className="p-3 align-top">
-                        <button
-                          type="button"
-                          onClick={() => setInspectingId(lic.id)}
-                          className="text-left group"
-                        >
-                          <strong className="text-blue-900 group-hover:text-blue-700 block font-bold text-sm">
-                            {lic.nomLogiciel}
-                          </strong>
-                        </button>
-                        <span className="text-[11px] text-slate-500 font-medium">{lic.editeur}</span>
-                      </td>
-                      <td className="p-3 align-top whitespace-nowrap">
-                        <span className="text-slate-800 font-medium block">{lic.version}</span>
-                        <span className="text-slate-400 text-[11px]">{lic.typeLicence}</span>
-                      </td>
-                      <td className="p-3 align-top whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`font-bold font-mono tabular-nums ${
-                              disponible < 0 ? 'text-red-700' : 'text-slate-900'
-                            }`}
-                          >
-                            {lic.nombreLicencesAttribuees} / {lic.nombreLicencesAchetees}
-                          </span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded font-medium font-mono tabular-nums ${
-                              disponible < 0
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-slate-100 text-slate-600'
-                            }`}
-                          >
-                            {disponible >= 0
-                              ? `${disponible} dispo`
-                              : `-${Math.abs(disponible)} excédent`}
-                          </span>
-                        </div>
-                        <div className="w-24 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
-                          <div
-                            className={`h-full ${
-                              lic.nombreLicencesAttribuees > lic.nombreLicencesAchetees
-                                ? 'bg-red-500'
-                                : 'bg-blue-600'
-                            }`}
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                (lic.nombreLicencesAttribuees / (lic.nombreLicencesAchetees || 1)) *
-                                  100
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                      </td>
-                      <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums font-medium text-slate-800">
-                        {lic.dateExpiration}
-                      </td>
-                      <td className="p-3 align-top whitespace-nowrap font-semibold text-slate-900">
-                        {lic.coutRenouvellementEstime}
-                      </td>
-                      <td className="p-3 align-top text-[11px] max-w-xs">
-                        <span className="text-slate-800 font-medium block">
-                          {lic.gestionComptesEtDroits}
-                        </span>
-                        <span className="text-slate-400 text-[10px] block">
-                          Procédure : {lic.procedureInstallation}
-                        </span>
-                      </td>
-                      <td className="p-3 align-top whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold border ${badge.classes}`}
-                        >
-                          {badge.icon}
-                          {lic.statutConformite}
-                        </span>
-                      </td>
-                      <td className="p-3 align-top text-right whitespace-nowrap">
-                        <CrudRowActions
-                          onView={() => setInspectingId(lic.id)}
-                          onEdit={() => openEditModal(lic)}
-                          onDuplicate={() => openDuplicateModal(lic)}
-                          onDelete={() => setDeletingId(lic.id)}
-                        />
+      {activeTab === 'assignments' ? (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={assignSearch}
+                onChange={(e) => setAssignSearch(e.target.value)}
+                placeholder="Rechercher par collaborateur, service, logiciel ou opérateur..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              />
+            </div>
+            <select
+              value={assignSoftwareFilter}
+              onChange={(e) => setAssignSoftwareFilter(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs"
+            >
+              {uniqueSoftwares.map((s) => (
+                <option key={s} value={s}>
+                  {s === 'Tous' ? 'Tous les logiciels' : s}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-3 font-semibold">Logiciel &amp; Éditeur</th>
+                    <th className="p-3 font-semibold">Collaborateur</th>
+                    <th className="p-3 font-semibold">Département / Service</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Attribué le / Opérateur</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {filteredAssignments.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-slate-500">
+                        {liveSnapshot
+                          ? 'Aucune affectation logicielle trouvée pour ce filtre.'
+                          : 'Synchronisez SOGEDIPROMA pour charger les 93 affectations nominatives.'}
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  ) : (
+                    filteredAssignments.map((a) => (
+                      <tr key={a.id} className="hover:bg-slate-50 transition">
+                        <td className="p-3 align-top">
+                          <strong className="text-blue-900 block font-bold">{a.softwareName}</strong>
+                          <span className="text-[11px] text-slate-500">{a.editor}</span>
+                        </td>
+                        <td className="p-3 align-top font-semibold text-slate-900">
+                          {a.employeeName}
+                        </td>
+                        <td className="p-3 align-top text-slate-700">{a.departmentName}</td>
+                        <td className="p-3 align-top whitespace-nowrap text-[11px] text-slate-600">
+                          <span className="font-mono tabular-nums block text-slate-800">
+                            {a.createdAt ? a.createdAt.slice(0, 10) : '—'}
+                          </span>
+                          <span>{a.createdBy || 'DSI'}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : activeTab === 'rbac' ? (
+        <div className="space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={rbacSearch}
+                onChange={(e) => {
+                  setRbacSearch(e.target.value);
+                  setRbacLimit(50);
+                }}
+                placeholder="Rechercher collaborateur, compte, rôle RBAC, périmètre, valideur..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              />
+            </div>
+            <select
+              value={rbacSystemFilter}
+              onChange={(e) => {
+                setRbacSystemFilter(e.target.value);
+                setRbacLimit(50);
+              }}
+              className="px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-800 text-xs"
+            >
+              {uniqueRbacSystems.map((sys) => (
+                <option key={sys} value={sys}>
+                  {sys === 'Tous' ? 'Tous les systèmes RBAC' : sys}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    <th className="p-3 font-semibold">Système &amp; Catégorie</th>
+                    <th className="p-3 font-semibold">Collaborateur &amp; Service</th>
+                    <th className="p-3 font-semibold">Compte / Identifiant</th>
+                    <th className="p-3 font-semibold">Rôle &amp; Périmètre RBAC</th>
+                    <th className="p-3 font-semibold whitespace-nowrap">Statut &amp; Approbation</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 text-slate-700">
+                  {filteredRbac.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-slate-500">
+                        {liveSnapshot
+                          ? 'Aucune habilitation RBAC trouvée pour ce filtre.'
+                          : 'Synchronisez SOGEDIPROMA pour charger les 194 habilitations RBAC.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRbac.slice(0, rbacLimit).map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50 transition">
+                        <td className="p-3 align-top">
+                          <strong className="text-slate-900 block font-bold">{r.system}</strong>
+                          <span className="text-[11px] text-slate-500">{r.category || 'Accès SI'}</span>
+                        </td>
+                        <td className="p-3 align-top">
+                          <strong className="text-slate-900 block font-semibold">
+                            {r.employeeName}
+                          </strong>
+                          <span className="text-[11px] text-slate-500">{r.departmentName}</span>
+                        </td>
+                        <td className="p-3 align-top font-mono text-slate-800">{r.account || '—'}</td>
+                        <td className="p-3 align-top">
+                          <span className="font-semibold text-blue-800 block">{r.role || 'Standard'}</span>
+                          {r.scope && <span className="text-[11px] text-slate-500">{r.scope}</span>}
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap text-[11px]">
+                          <span
+                            className={`font-semibold block ${
+                              r.status === 'Actif' ? 'text-emerald-700' : 'text-amber-700'
+                            }`}
+                          >
+                            {r.status}
+                          </span>
+                          <span className="text-slate-500 block">
+                            {r.approvedBy ? `Par ${r.approvedBy}` : ''}
+                            {r.grantedAt ? ` · ${r.grantedAt.slice(0, 10)}` : ''}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {filteredRbac.length > rbacLimit && (
+              <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+                <span className="font-mono tabular-nums text-slate-600">
+                  Affichage {rbacLimit} / {filteredRbac.length} habilitations RBAC
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setRbacLimit((n) => n + 50)}
+                  className={secondaryButtonClass}
+                >
+                  Afficher +50 habilitations
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Grille des licences */
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-900 text-white">
+                  <th className="p-3 font-semibold">Logiciel &amp; Éditeur</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Version &amp; Type</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Licences (Allouées / Achetées)</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Expiration</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Coût</th>
+                  <th className="p-3 font-semibold">Droits &amp; Déploiement</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Statut</th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 text-slate-700">
+                {filteredLicences.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center">
+                      <div className="max-w-md mx-auto space-y-2">
+                        <p className="text-slate-600 font-medium">
+                          {licences.length === 0
+                            ? 'Aucune licence ou logiciel répertorié.'
+                            : 'Aucune licence ne correspond à votre recherche.'}
+                        </p>
+                        {licences.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={openCreateModal}
+                            className={primaryButtonClass}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Ajouter une licence</span>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLicences.map((lic) => {
+                    const disponible = lic.nombreLicencesAchetees - lic.nombreLicencesAttribuees;
+                    const badge = getConformiteBadge(lic.statutConformite);
+                    return (
+                      <tr key={lic.id} className="hover:bg-slate-50/80 transition">
+                        <td className="p-3 align-top">
+                          <button
+                            type="button"
+                            onClick={() => setInspectingId(lic.id)}
+                            className="text-left group"
+                          >
+                            <strong className="text-blue-900 group-hover:text-blue-700 block font-bold text-sm">
+                              {lic.nomLogiciel}
+                            </strong>
+                          </button>
+                          <span className="text-[11px] text-slate-500 font-medium">{lic.editeur}</span>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap">
+                          <span className="text-slate-800 font-medium block">{lic.version}</span>
+                          <span className="text-slate-400 text-[11px]">{lic.typeLicence}</span>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`font-bold font-mono tabular-nums ${
+                                disponible < 0 ? 'text-red-700' : 'text-slate-900'
+                              }`}
+                            >
+                              {lic.nombreLicencesAttribuees} / {lic.nombreLicencesAchetees}
+                            </span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-medium font-mono tabular-nums ${
+                                disponible < 0
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {disponible >= 0
+                                ? `${disponible} dispo`
+                                : `-${Math.abs(disponible)} excédent`}
+                            </span>
+                          </div>
+                          <div className="w-24 bg-slate-200 h-1.5 rounded-full overflow-hidden mt-1">
+                            <div
+                              className={`h-full ${
+                                lic.nombreLicencesAttribuees > lic.nombreLicencesAchetees
+                                  ? 'bg-red-500'
+                                  : 'bg-blue-600'
+                              }`}
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (lic.nombreLicencesAttribuees / (lic.nombreLicencesAchetees || 1)) *
+                                    100
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap font-mono tabular-nums font-medium text-slate-800">
+                          {lic.dateExpiration}
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap font-semibold text-slate-900">
+                          {lic.coutRenouvellementEstime}
+                        </td>
+                        <td className="p-3 align-top text-[11px] max-w-xs">
+                          <span className="text-slate-800 font-medium block">
+                            {lic.gestionComptesEtDroits}
+                          </span>
+                          <span className="text-slate-400 text-[10px] block">
+                            Procédure : {lic.procedureInstallation}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-semibold border ${badge.classes}`}
+                          >
+                            {badge.icon}
+                            {lic.statutConformite}
+                          </span>
+                        </td>
+                        <td className="p-3 align-top text-right whitespace-nowrap">
+                          <CrudRowActions
+                            onView={() => setInspectingId(lic.id)}
+                            onEdit={() => openEditModal(lic)}
+                            onDuplicate={() => openDuplicateModal(lic)}
+                            onDelete={() => setDeletingId(lic.id)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
