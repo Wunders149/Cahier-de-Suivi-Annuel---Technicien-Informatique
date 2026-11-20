@@ -29,7 +29,12 @@ import {
   sanitizeFileSlug,
   sanitizePdfText,
 } from './docDesign/documentThemes';
-import { PdfDocumentBuilder } from './docDesign/pdfLayoutEngine';
+import {
+  PdfDocumentBuilder,
+  PdfExportResult,
+  PdfFooterHeaderMeta,
+} from './docDesign/pdfLayoutEngine';
+import { drawDonutSummaryChart } from './docDesign/pdfCharts';
 import {
   A4_HEIGHT_DXA,
   A4_WIDTH_DXA,
@@ -91,9 +96,11 @@ function buildInterventionContext(
       'Technicien Informatique'
     : 'Technicien Informatique';
 
+  const typeLabel = intervention.type || intervention.typeIntervention || 'Support IT';
+
   const domaineText = (
     intervention.domaineTitre?.trim() ||
-    `${vocab.domainPrefix} · ${(intervention.type || intervention.typeIntervention).toUpperCase()}`
+    `${vocab.domainPrefix} · ${typeLabel.toUpperCase()}`
   ).toUpperCase();
 
   const subtitleText =
@@ -110,7 +117,7 @@ function buildInterventionContext(
     {
       label: 'Référence & Date',
       value: `${intervention.numeroReference} · Le ${intervention.dateReception} à ${
-        intervention.heureReception
+        intervention.heureReception || '—'
       }${techLine ? ` · Intervenant : ${techLine}` : ''}`,
     },
     {
@@ -119,7 +126,7 @@ function buildInterventionContext(
     },
     {
       label: 'Priorité & Type',
-      value: `${intervention.priorite} · ${intervention.type || intervention.typeIntervention}`,
+      value: `${intervention.priorite} · ${typeLabel}`,
     },
     {
       label: vocab.equipmentsRowLabel,
@@ -179,18 +186,22 @@ function buildInterventionContext(
 }
 
 /**
- * Génère un Rapport Détaillé d'Intervention Technique en PDF A4 vectoriel
+ * Construit le Rapport Détaillé d'Intervention Technique en PDF A4 vectoriel
  * adapté dynamiquement à la nature de l'opération (Incident, Déploiement/PV, Maintenance).
  */
-export function generateInterventionReportPdf(
+export function buildInterventionReportPdfDocument(
   intervention: FicheIntervention,
   generalInfo?: GeneralInfo
-): void {
+): {
+  builder: PdfDocumentBuilder;
+  filename: string;
+  meta: PdfFooterHeaderMeta;
+} {
   const ctx = buildInterventionContext(intervention, generalInfo);
   const builder = new PdfDocumentBuilder(ctx.category);
   const { doc, theme } = builder;
 
-  // --- EN-TÊTE EXÉCUTIF ---
+  // --- EN-TÊTE EXÉCUTIF ADAPTATIF ---
   builder.drawDocumentBanner({
     organization: ctx.companyName,
     eyebrow: ctx.domaineText,
@@ -199,6 +210,99 @@ export function generateInterventionReportPdf(
     rightBadge: `Réf. ${intervention.numeroReference} · Édité le ${ctx.genDate}`,
     subMeta: `Demandeur : ${intervention.nomDemandeur} (${intervention.serviceDemandeur}) · Intervenant : ${ctx.techLine}`,
   });
+
+  // --- BANDEAU KPI ADAPTÉ À LA NATURE DE L'OPÉRATION ---
+  const unitCount = ctx.details.length || 1;
+  const okUnits = ctx.details.filter((d) => d.statut === 'Résolu').length;
+  const unitOkPct = ctx.details.length > 0 ? Math.round((okUnits / ctx.details.length) * 100) : intervention.resultat === 'Résolu' ? 100 : 0;
+
+  if (ctx.category === 'technical_deployment') {
+    builder.drawKpiStrip([
+      {
+        label: 'Unités / Sites',
+        value: `${unitCount}`,
+        sub: ctx.details.length > 0 ? `${okUnits} opérationnel(s)` : intervention.equipementConcerne,
+        tone: 'info',
+      },
+      {
+        label: 'Taux de Recette',
+        value: `${unitOkPct}%`,
+        sub: ctx.details.length > 0 ? `${okUnits}/${ctx.details.length} validés` : ctx.statusDisplay,
+        tone: unitOkPct >= 90 ? 'success' : 'warning',
+      },
+      {
+        label: 'Durée Opération',
+        value: formatDuration(intervention.tempsConsacreMin),
+        sub: `Le ${intervention.dateReception}`,
+        tone: 'info',
+      },
+      {
+        label: 'Statut Mise en Service',
+        value: ctx.statusDisplay,
+        sub: intervention.validationDemandeur ? 'Réception signée' : 'Visa en attente',
+        tone: getStatusTone(intervention.resultat),
+      },
+    ]);
+  } else if (ctx.category === 'technical_maintenance') {
+    builder.drawKpiStrip([
+      {
+        label: 'Périmètre Contrôlé',
+        value: `${unitCount}`,
+        sub: ctx.details.length > 0 ? `${okUnits} point(s) conformes` : intervention.equipementConcerne,
+        tone: 'info',
+      },
+      {
+        label: 'Conformité MCO',
+        value: `${unitOkPct}%`,
+        sub: `Type : ${intervention.type || intervention.typeIntervention}`,
+        tone: unitOkPct >= 85 ? 'success' : 'warning',
+      },
+      {
+        label: 'Temps d’Inspection',
+        value: formatDuration(intervention.tempsConsacreMin),
+        sub: `Date : ${intervention.dateReception}`,
+        tone: 'info',
+      },
+      {
+        label: 'Verdict Technique',
+        value: ctx.statusDisplay,
+        sub: `Priorité : ${intervention.priorite}`,
+        tone: getStatusTone(intervention.resultat),
+      },
+    ]);
+  } else {
+    builder.drawKpiStrip([
+      {
+        label: 'Niveau Priorité',
+        value: intervention.priorite,
+        sub: intervention.type || intervention.typeIntervention,
+        tone:
+          intervention.priorite === 'Critique'
+            ? 'danger'
+            : intervention.priorite === 'Haute'
+              ? 'warning'
+              : 'info',
+      },
+      {
+        label: 'Temps Résolution',
+        value: formatDuration(intervention.tempsConsacreMin),
+        sub: `Reçu ${intervention.dateReception} ${intervention.heureReception || ''}`.trim(),
+        tone: 'info',
+      },
+      {
+        label: 'Équipements Traités',
+        value: `${unitCount}`,
+        sub: ctx.details.length > 0 ? `${okUnits}/${ctx.details.length} résolus` : intervention.equipementConcerne,
+        tone: 'info',
+      },
+      {
+        label: 'Statut Clôture',
+        value: ctx.statusDisplay,
+        sub: intervention.validationDemandeur ? 'Validé demandeur' : 'Validation en attente',
+        tone: getStatusTone(intervention.resultat),
+      },
+    ]);
+  }
 
   // --- 1. SYNTHÈSE ---
   builder.drawSectionHeading(ctx.vocab.summaryHeading);
@@ -225,16 +329,38 @@ export function generateInterventionReportPdf(
   if (ctx.details.length > 0) {
     builder.drawSectionHeading(ctx.vocab.equipmentsHeading);
 
+    // Graphique synthétique des statuts lorsque plusieurs unités/équipements sont traités
+    if (ctx.details.length >= 2) {
+      const resolvedCount = ctx.details.filter((d) => d.statut === 'Résolu').length;
+      const inProgressCount = ctx.details.filter(
+        (d) => d.statut === 'En cours' || d.statut === 'En attente pièce' || d.statut === 'Escaladé N3'
+      ).length;
+      const failedCount = ctx.details.filter((d) => d.statut === 'Non résolu').length;
+      drawDonutSummaryChart(builder, {
+        title: `État de Validation par Unité / Équipement (${ctx.details.length})`,
+        subtitle:
+          ctx.category === 'technical_deployment'
+            ? 'Répartition des unités mises en service lors du déploiement'
+            : 'Répartition des résultats techniques par équipement traité',
+        centerTopLabel: `${unitOkPct}%`,
+        centerBottomLabel: 'Conformes',
+        slices: [
+          { label: 'Résolu / Opérationnel', value: resolvedCount, colorRgb: theme.successRgb },
+          { label: 'En cours / Attente', value: inProgressCount, colorRgb: theme.warningRgb },
+          { label: 'Non résolu', value: failedCount, colorRgb: theme.dangerRgb },
+        ],
+      });
+    }
+
     ctx.details.forEach((item, idx) => {
       const actions = (item.actionsCorrectives || []).filter((a) => a.trim().length > 0);
       const toneColors = getToneColors(getStatusTone(item.statut), theme);
 
-      // Estimation pour éviter un sous-titre isolé
       builder.ensureSpace(34);
       const startPage = doc.getCurrentPageInfo().pageNumber;
       const startY = builder.y;
 
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(builder.fontFamily, 'bold');
       doc.setFontSize(9.8);
       doc.setTextColor(...theme.secondaryRgb);
       const subTitle = sanitizePdfText(
@@ -244,8 +370,7 @@ export function generateInterventionReportPdf(
       doc.text(subLines, builder.margin + 4.5, builder.y + 3);
       builder.y += subLines.length * 4.3 + 3;
 
-      // Constat / Emplacement
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(builder.fontFamily, 'bold');
       doc.setFontSize(8.5);
       doc.setTextColor(...theme.textDarkRgb);
       doc.text(sanitizePdfText(`${ctx.vocab.equipmentDiagLabel} :`), builder.margin + 4.5, builder.y);
@@ -253,12 +378,12 @@ export function generateInterventionReportPdf(
       builder.drawStructuredText(item.constatDiagnostic || '—', {
         indentMm: 4.5,
         fontSize: 8.4,
+        justify: false,
       });
 
-      // Actions / Opérations
       if (actions.length > 0) {
         builder.ensureSpace(10);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(builder.fontFamily, 'bold');
         doc.setFontSize(8.5);
         doc.setTextColor(...theme.textDarkRgb);
         doc.text(
@@ -270,13 +395,13 @@ export function generateInterventionReportPdf(
         builder.drawStructuredText(actions.map((a) => `• ${a}`).join('\n'), {
           indentMm: 4.5,
           fontSize: 8.4,
+          justify: false,
         });
       }
 
-      // Matériel spécifique si présent
       if (item.materielSpecifique?.trim()) {
         builder.ensureSpace(8);
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(builder.fontFamily, 'bold');
         doc.setFontSize(8.2);
         doc.setTextColor(...theme.textMutedRgb);
         const matLines = doc.splitTextToSize(
@@ -287,23 +412,22 @@ export function generateInterventionReportPdf(
         builder.y += matLines.length * 3.8 + 1.5;
       }
 
-      // Résultat
       const resText = sanitizePdfText(
         `Résultat : ${item.resultatDetail?.trim() || item.statut} (${item.statut}).`
       );
       const resLines = doc.splitTextToSize(resText, builder.contentWidth - 8);
       builder.ensureSpace(resLines.length * 4 + 3);
-      doc.setFont('helvetica', 'bold');
+      doc.setFont(builder.fontFamily, 'bold');
       doc.setFontSize(8.5);
       doc.setTextColor(...toneColors.rgb);
       doc.text(resLines, builder.margin + 4.5, builder.y);
       builder.y += resLines.length * 4 + 2;
 
-      // Barre latérale d'accentuation si le bloc est resté sur la même page
       if (doc.getCurrentPageInfo().pageNumber === startPage && builder.y > startY) {
         doc.setDrawColor(...theme.accentRgb);
         doc.setLineWidth(1);
         doc.line(builder.margin, startY, builder.margin, builder.y - 1.5);
+        builder.recordDrawBounds(builder.margin, startY, builder.contentWidth, builder.y - startY);
       }
 
       builder.addSpacing(4.5);
@@ -342,10 +466,17 @@ export function generateInterventionReportPdf(
     );
   }
 
-  // --- VALIDATION & SIGNATURES ---
+  // --- VALIDATION, CONCLUSION & RÉCEPTION ---
   const sigSectionNum =
     (ctx.details.length > 0 ? 5 : 3) + (intervention.recommandations?.trim() ? 1 : 0);
-  builder.drawSectionHeading(`${sigSectionNum}. VALIDATION & RÉCEPTION DE L'INTERVENTION`);
+  builder.drawSectionHeading(`${sigSectionNum}. CONCLUSION, VALIDATION & RÉCEPTION`);
+
+  builder.drawExecutiveCard({
+    title: 'Conclusion Technique de Clôture',
+    leadParagraph: `L'intervention référencée ${intervention.numeroReference} portant sur ${intervention.equipementConcerne} s'est achevée avec le statut « ${ctx.statusDisplay} » pour un temps total consacré de ${formatDuration(intervention.tempsConsacreMin, true)}.`,
+    tone: getStatusTone(intervention.resultat),
+  });
+
   if (intervention.commentairesDemandeur?.trim()) {
     builder.drawCalloutBox(
       'Commentaire du Demandeur / Service Utilisateur',
@@ -372,16 +503,34 @@ export function generateInterventionReportPdf(
     }
   );
 
-  // En-tête et pied de page avec pagination "Page X sur Y"
-  builder.finalizeHeadersAndFooters({
+  const meta: PdfFooterHeaderMeta = {
     organization: ctx.companyName,
     documentTitle: `${ctx.reportMainTitle} — ${intervention.equipementConcerne}`,
+    shortTitle: `${ctx.reportMainTitle} (${intervention.numeroReference})`,
     reference: intervention.numeroReference,
+    author: ctx.techLine,
+    subject: ctx.subtitleText,
     generationDate: ctx.genDate,
     hasCoverPage: false,
-  });
+  };
 
-  doc.save(`rapport_intervention_${ctx.slug}.pdf`);
+  return {
+    builder,
+    filename: `rapport_intervention_${ctx.slug}.pdf`,
+    meta,
+  };
+}
+
+/**
+ * Génère un Rapport Détaillé d'Intervention Technique en PDF A4 vectoriel
+ * adapté dynamiquement à la nature de l'opération (Incident, Déploiement/PV, Maintenance).
+ */
+export function generateInterventionReportPdf(
+  intervention: FicheIntervention,
+  generalInfo?: GeneralInfo
+): PdfExportResult {
+  const { builder, filename, meta } = buildInterventionReportPdfDocument(intervention, generalInfo);
+  return builder.finalizeAndSave(filename, meta);
 }
 
 /**

@@ -15,7 +15,15 @@ import {
   formatGenerationDateFr,
   getDocumentTheme,
 } from './docDesign/documentThemes';
-import { PdfDocumentBuilder } from './docDesign/pdfLayoutEngine';
+import {
+  PdfDocumentBuilder,
+  PdfExportResult,
+  PdfFooterHeaderMeta,
+} from './docDesign/pdfLayoutEngine';
+import {
+  drawDonutSummaryChart,
+  drawHorizontalBarChart,
+} from './docDesign/pdfCharts';
 import {
   A4_HEIGHT_DXA,
   A4_WIDTH_DXA,
@@ -223,46 +231,91 @@ function buildMonthlyDisplayContext(data: CahierSuiviData, moisIndex: number) {
 }
 
 /**
- * Génère et télécharge un Cahier de Suivi Mensuel complet au format PDF A4 vectoriel.
+ * Construit le Cahier de Suivi Mensuel PDF avec page de couverture, sommaire dynamique,
+ * graphiques vectoriels et structuration éditoriale adaptée.
  */
-export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): void {
+export function buildMonthlyPdfDocument(
+  data: CahierSuiviData,
+  moisIndex: number
+): {
+  builder: PdfDocumentBuilder;
+  filename: string;
+  meta: PdfFooterHeaderMeta;
+} {
   const ctx = buildMonthlyDisplayContext(data, moisIndex);
   const { snap, rapport } = ctx;
   const builder = new PdfDocumentBuilder('monthly_report');
 
-  // --- BANDEAU EXÉCUTIF ---
-  builder.drawDocumentBanner({
+  const lastDayOfMonth = new Date(snap.annee, snap.moisIndex, 0).getDate();
+  const mm = String(snap.moisIndex).padStart(2, '0');
+  const periodRange = `01/${mm}/${snap.annee} — ${String(lastDayOfMonth).padStart(2, '0')}/${mm}/${snap.annee}`;
+  const docRef = `LIV-${ctx.monthCode}`;
+
+  // --- PAGE 1 : COUVERTURE EXÉCUTIVE MENSUELLE ---
+  builder.drawCoverPage({
     organization: ctx.companyName,
-    eyebrow: 'CAHIER DE SUIVI MENSUEL DU TECHNICIEN INFORMATIQUE',
-    title: `${snap.nomMois.toUpperCase()} ${snap.annee}`,
-    subtitle: `${ctx.companyName} (${ctx.departmentName}) — Livrable mensuel d'activité et indicateurs SI`,
-    rightBadge: `Réf. LIV-${ctx.monthCode} · Édité le ${ctx.genDate}`,
-    subMeta: `Statut de livraison : ${rapport.statutLivraison || 'Prêt à livrer'}${
-      rapport.dateLivraison ? ` (${rapport.dateLivraison})` : ''
-    }${rapport.modeLivraison ? ` · Mode : ${rapport.modeLivraison}` : ''}`,
+    department: ctx.departmentName,
+    eyebrow: "CAHIER DE SUIVI MENSUEL · LIVRABLE D'ACTIVITÉ SI",
+    mainTitle: `RAPPORT MENSUEL D'ACTIVITÉ IT`,
+    subtitle: `${snap.nomMois.toUpperCase()} ${snap.annee}`,
+    exerciseLabel: `PÉRIODE : ${snap.nomMois.toUpperCase()} ${snap.annee}`,
+    periodLabel: `Période couverte : ${periodRange}`,
+    tagline:
+      "Synthèse opérationnelle des interventions techniques, exploitation quotidienne, maintenance préventive et recommandations",
+    recipient: ctx.recipientName,
+    metadataRows: [
+      ['Référence document', docRef],
+      ['Période concernée', `${snap.nomMois} ${snap.annee} (${periodRange})`],
+      ['Auteur / Technicien', `${ctx.techName} (${ctx.techRole})`],
+      ['Service / Direction', `${ctx.companyName} — ${ctx.departmentName}`],
+      ['Destinataire officiel', ctx.recipientName],
+      [
+        'Statut de livraison',
+        `${rapport.statutLivraison || 'Prêt à livrer'}${
+          rapport.dateLivraison ? ` (${rapport.dateLivraison})` : ''
+        }`,
+      ],
+      [
+        'Visa hiérarchique RSI',
+        rapport.valideParHierarchie
+          ? `Approuvé & Validé le ${rapport.dateValidation || ctx.deliveryDate}`
+          : 'En attente de validation RSI',
+      ],
+      ['Date d’édition', ctx.genDate],
+    ],
+    engagementTitle: 'PORTÉE DU LIVRABLE MENSUEL',
+    engagementText:
+      "Ce rapport compile fidèlement les fiches d'intervention, les tâches consignées au journal quotidien, les contrôles de maintenance préventive et les événements réseau ou sécurité relevés au cours du mois écoulé.",
+    engagementFooter: `Document officiel remis par ${ctx.techName} · Destinataire : ${ctx.recipientName}`,
   });
 
-  // --- FICHE D'IDENTIFICATION ---
-  builder.drawKeyValueTable(
-    [
-      { label: 'Entreprise / Direction', value: `${ctx.companyName} (${ctx.departmentName})` },
-      { label: 'Technicien titulaire', value: `${ctx.techName} — ${ctx.techRole}` },
-      { label: 'Destinataire hiérarchique', value: ctx.recipientName },
-      {
-        label: 'Livraison & Visa RSI',
-        value: `${rapport.statutLivraison || 'Prêt à livrer'} · ${
-          rapport.valideParHierarchie
-            ? `Validé le ${rapport.dateValidation || ctx.deliveryDate}`
-            : 'En attente de signature RSI'
-        }`,
-        isStatus: true,
-      },
-    ],
-    { labelWidthMm: 48 }
+  // --- PAGE 2 : SOMMAIRE DYNAMIQUE ---
+  builder.addPage();
+  builder.beginTableOfContents(
+    'SOMMAIRE DU RAPPORT MENSUEL',
+    `${snap.nomMois} ${snap.annee} — ${ctx.companyName}`
   );
 
-  // --- 1. SYNTHÈSE & KPI DU MOIS ---
-  builder.drawSectionHeading('1. SYNTHÈSE & INDICATEURS CLÉS DU MOIS');
+  // --- 1. RÉSUMÉ EXÉCUTIF & KPI DU MOIS ---
+  builder.drawSectionHeading(
+    '1. RÉSUMÉ EXÉCUTIF & INDICATEURS CLÉS',
+    `Bilan chiffré de l'activité informatique sur ${snap.nomMois} ${snap.annee}`
+  );
+
+  builder.drawExecutiveCard({
+    title: `Vue d'Ensemble — ${snap.nomMois} ${snap.annee}`,
+    leadParagraph: `Au cours du mois de ${snap.nomMois} ${snap.annee}, ${ctx.totalIntervDisplay} intervention(s) ont été suivies avec un taux de résolution de ${snap.tauxResolution}% (MTTR moyen de ${formatDuration(snap.avgInterventionMinutes)}). Le journal quotidien totalise ${snap.taches.length} activité(s) pour ${ctx.totalTaskHours} heure(s) d'exploitation consignée(s).`,
+    highlights: [
+      `Maintenances préventives / correctives exécutées sur la période : ${snap.maintenances.length}.`,
+      `Incidents réseau / cybersécurité recensés : ${snap.reseauIncidents.length} réseau · ${snap.incidentsSecurite.length} sécurité.`,
+    ],
+    tone:
+      snap.reseauIncidents.length + snap.incidentsSecurite.length === 0 &&
+      snap.tauxResolution >= 85
+        ? 'success'
+        : 'info',
+  });
+
   builder.drawKpiStrip([
     {
       label: 'Interventions IT',
@@ -293,13 +346,80 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
     },
   ]);
 
-  // --- 2. COMPTE-RENDU D'ACTIVITÉ MENSUEL ---
-  builder.drawSectionHeading("2. COMPTE-RENDU D'ACTIVITÉ MENSUEL");
-  ctx.narrativeItems.forEach((item) => {
-    const body =
-      item.content?.trim() || 'Aucune observation particulière consignée pour cette rubrique.';
-    builder.drawCalloutBox(item.title, body, 'info');
-  });
+  // Graphiques vectoriels du mois (basés strictement sur les données réelles)
+  if (snap.interventions.length > 0) {
+    const resolved = snap.interventionsTerminees;
+    const pending = Math.max(0, snap.interventions.length - resolved);
+    drawDonutSummaryChart(builder, {
+      title: `Statut des Interventions — ${snap.nomMois} ${snap.annee}`,
+      subtitle: 'Proportion des fiches clôturées par rapport aux tickets restant ouverts',
+      caption: `Base réelle : ${snap.interventions.length} fiche(s) datée(s) sur ${snap.monthPrefix}.`,
+      centerTopLabel: `${snap.tauxResolution}%`,
+      centerBottomLabel: 'Résolus',
+      slices: [
+        { label: 'Résolues / Clôturées', value: resolved, colorRgb: builder.theme.successRgb },
+        { label: 'En cours / Attente', value: pending, colorRgb: builder.theme.warningRgb },
+      ],
+    });
+  }
+
+  if (snap.taches.length >= 2) {
+    const byCat = new Map<string, number>();
+    snap.taches.forEach((t) => {
+      const k = t.categorie || 'Autre';
+      byCat.set(k, (byCat.get(k) || 0) + (t.dureeReelleMin || t.dureeEstimeeMin || 0));
+    });
+    const barItems = Array.from(byCat.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([label, mins]) => ({
+        label,
+        value: Math.round((mins / 60) * 10) / 10,
+        valueText: `${(Math.round((mins / 60) * 10) / 10).toString().replace('.', ',')} h`,
+      }));
+    if (barItems.some((i) => i.value > 0)) {
+      drawHorizontalBarChart(builder, {
+        title: 'Répartition Horaire du Journal Quotidien par Domaine',
+        subtitle: `Cumul : ${ctx.totalTaskHours} h sur ${snap.taches.length} tâche(s) enregistrée(s)`,
+        items: barItems,
+      });
+    }
+  }
+
+  // --- 2. COMPTE-RENDU D'ACTIVITÉ MENSUEL (ADAPTATIF) ---
+  builder.drawSectionHeading(
+    "2. COMPTE-RENDU D'ACTIVITÉ & ANALYSE",
+    'Faits marquants, maintenance, points de vigilance et priorités'
+  );
+
+  const populatedNarratives = ctx.narrativeItems.filter((item) => item.content?.trim().length > 0);
+  const emptyNarrativeLabels = ctx.narrativeItems
+    .filter((item) => !item.content?.trim())
+    .map((item) => item.title.replace(/^\d+\.\s*/, ''));
+
+  if (populatedNarratives.length === 0) {
+    builder.drawCalloutBox(
+      'Synthèse Narrative Mensuelle',
+      "Aucun commentaire narratif détaillé n'a encore été saisi pour ce mois ; les données quantitatives ci-après font foi.",
+      'neutral'
+    );
+  } else {
+    populatedNarratives.forEach((item) => {
+      const tone = /problème|difficulté/i.test(item.title)
+        ? 'warning'
+        : /recommandation|priorité/i.test(item.title)
+          ? 'success'
+          : 'info';
+      builder.drawCalloutBox(item.title, item.content.trim(), tone);
+    });
+    if (emptyNarrativeLabels.length > 0) {
+      builder.drawStructuredText(
+        `Rubriques sans mention particulière ce mois-ci : ${emptyNarrativeLabels.join(' · ')}.`,
+        { fontSize: 8.1, color: builder.theme.textMutedRgb, justify: false }
+      );
+      builder.addSpacing(2);
+    }
+  }
 
   // --- 3. INTERVENTIONS TECHNIQUES DU MOIS ---
   builder.drawSectionHeading(
@@ -319,6 +439,7 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
     [13, 12, 19, 34, 10, 12],
     {
       boldColumns: [0],
+      alignRightColumns: [4],
       statusColumns: [5],
       emptyMessage: `Aucune fiche d'intervention enregistrée sur ${snap.nomMois} ${snap.annee}.`,
     }
@@ -329,36 +450,51 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
     `4. JOURNAL QUOTIDIEN DU MOIS (${snap.taches.length} tâches · ${ctx.totalTaskHours} h)`,
     "Chronologie des opérations d'exploitation courante"
   );
+  const taskRows: string[][] = snap.taches.map((t) => [
+    `${t.date}\n${t.heure || '—'}`,
+    `${t.tache}${t.observations ? `\nObs : ${t.observations}` : ''}`,
+    t.categorie,
+    formatDuration(t.dureeReelleMin || t.dureeEstimeeMin || 0),
+    t.statut,
+  ]);
+  if (taskRows.length > 0) {
+    taskRows.push([
+      'TOTAL MOIS',
+      `${snap.taches.length} activité(s) consignée(s)`,
+      '—',
+      formatDuration(snap.totalTaskMinutes),
+      `${snap.tachesTerminees} terminée(s)`,
+    ]);
+  }
   builder.drawDataTable(
     ['Date / Heure', 'Tâche / Activité', 'Catégorie', 'Durée', 'Statut'],
-    snap.taches.map((t) => [
-      `${t.date}\n${t.heure || '—'}`,
-      `${t.tache}${t.observations ? `\nObs : ${t.observations}` : ''}`,
-      t.categorie,
-      formatDuration(t.dureeReelleMin || t.dureeEstimeeMin || 0),
-      t.statut,
-    ]),
+    taskRows,
     [15, 42, 19, 11, 13],
     {
       boldColumns: [0],
+      alignRightColumns: [3],
       statusColumns: [4],
+      totalRowIndices: taskRows.length > 0 ? [taskRows.length - 1] : [],
       emptyMessage: `Aucune activité journalière consignée sur ${snap.nomMois} ${snap.annee}.`,
     }
   );
 
   // --- 5. MAINTENANCES & INCIDENTS DU MOIS (SI PRÉSENTS) ---
-  if (
+  const hasExtraEvents =
     snap.maintenances.length > 0 ||
     snap.reseauIncidents.length > 0 ||
-    snap.incidentsSecurite.length > 0
-  ) {
+    snap.incidentsSecurite.length > 0;
+
+  if (hasExtraEvents) {
     builder.drawSectionHeading(
       '5. MAINTENANCES & INCIDENTS RÉSEAU / SÉCURITÉ DU MOIS',
       'Synthèse des contrôles préventifs et événements notables de la période'
     );
 
     if (snap.maintenances.length > 0) {
-      builder.drawSubHeading(`5.1. Contrôles de Maintenance (${snap.maintenances.length})`);
+      builder.drawSubHeading(`5.1. Contrôles de Maintenance (${snap.maintenances.length})`, {
+        registerToc: true,
+      });
       builder.drawDataTable(
         ['Domaine / Cible', 'Type', 'Contrôle Effectué', 'Date', 'Statut'],
         snap.maintenances.map((m) => [
@@ -374,7 +510,7 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
     }
 
     if (snap.reseauIncidents.length > 0 || snap.incidentsSecurite.length > 0) {
-      builder.drawSubHeading('5.2. Incidents Réseau & Cybersécurité');
+      builder.drawSubHeading('5.2. Incidents Réseau & Cybersécurité', { registerToc: true });
       const combinedIncidents = [
         ...snap.reseauIncidents.map((inc) => [
           inc.dateHeure,
@@ -399,14 +535,10 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
   }
 
   // --- BORDEREAU DE LIVRAISON & VISA ---
-  const finalSecNum =
-    snap.maintenances.length > 0 ||
-    snap.reseauIncidents.length > 0 ||
-    snap.incidentsSecurite.length > 0
-      ? 6
-      : 5;
+  const finalSecNum = hasExtraEvents ? 6 : 5;
   builder.drawSectionHeading(
-    `${finalSecNum}. BORDEREAU DE LIVRAISON & VISA HIÉRARCHIQUE`
+    `${finalSecNum}. BORDEREAU DE LIVRAISON & VISA HIÉRARCHIQUE`,
+    'Validation officielle et remise du livrable mensuel'
   );
 
   if (rapport.noteLivraison?.trim()) {
@@ -430,15 +562,30 @@ export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): vo
     }
   );
 
-  builder.finalizeHeadersAndFooters({
+  const meta: PdfFooterHeaderMeta = {
     organization: ctx.companyName,
     documentTitle: `Rapport Mensuel — ${snap.nomMois} ${snap.annee}`,
-    reference: `LIV-${ctx.monthCode}`,
+    shortTitle: `Rapport Mensuel ${snap.nomMois} ${snap.annee}`,
+    reference: docRef,
+    author: ctx.techName,
+    subject: `Livrable mensuel d'activité IT — ${snap.nomMois} ${snap.annee}`,
     generationDate: ctx.genDate,
-    hasCoverPage: false,
-  });
+    hasCoverPage: true,
+  };
 
-  builder.docInstance.save(`Cahier_Suivi_Mensuel_${ctx.safeMonthSlug}_${snap.annee}.pdf`);
+  return {
+    builder,
+    filename: `Cahier_Suivi_Mensuel_${ctx.safeMonthSlug}_${snap.annee}.pdf`,
+    meta,
+  };
+}
+
+/**
+ * Génère et télécharge un Cahier de Suivi Mensuel complet au format PDF A4 vectoriel.
+ */
+export function generateMonthlyPdf(data: CahierSuiviData, moisIndex: number): PdfExportResult {
+  const { builder, filename, meta } = buildMonthlyPdfDocument(data, moisIndex);
+  return builder.finalizeAndSave(filename, meta);
 }
 
 /**

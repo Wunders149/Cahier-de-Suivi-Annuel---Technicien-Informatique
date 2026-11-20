@@ -1,8 +1,27 @@
 import { CahierSuiviData } from '../types/it-tracker';
 import { formatDuration } from './durationFormatter';
 import { formatInterventionStatusLabel } from './interventionLabels';
-import { formatAriary, formatGenerationDateFr } from './docDesign/documentThemes';
-import { PdfDocumentBuilder } from './docDesign/pdfLayoutEngine';
+import {
+  formatAriary,
+  formatCompactAriaryPdf,
+  formatGenerationDateFr,
+} from './docDesign/documentThemes';
+import {
+  PdfDocumentBuilder,
+  PdfExportResult,
+  PdfFooterHeaderMeta,
+} from './docDesign/pdfLayoutEngine';
+import {
+  drawDonutSummaryChart,
+  drawHorizontalBarChart,
+  drawTrendLineChart,
+  drawVerticalBarChart,
+} from './docDesign/pdfCharts';
+
+const SHORT_MONTHS = [
+  'Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin',
+  'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc',
+];
 
 /**
  * Déclenche l'aperçu avant impression et l'impression directe en PDF A4 vectoriel haute fidélité
@@ -12,10 +31,14 @@ export function triggerPrintToPdf(): void {
 }
 
 /**
- * Génère et télécharge directement un fichier PDF A4 complet, paginé et structuré
- * couvrant l'ensemble des 12 rubriques du Cahier de Suivi Annuel.
+ * Construit le Cahier de Suivi Annuel complet avec sommaire dynamique, graphiques vectoriels
+ * et données consolidées sur les 12 rubriques.
  */
-export function generateDirectPdf(data: CahierSuiviData): void {
+export function buildAnnualPdfDocument(data: CahierSuiviData): {
+  builder: PdfDocumentBuilder;
+  filename: string;
+  meta: PdfFooterHeaderMeta;
+} {
   const {
     generalInfo,
     objectifsAnnuels = [],
@@ -39,8 +62,12 @@ export function generateDirectPdf(data: CahierSuiviData): void {
 
   const builder = new PdfDocumentBuilder('annual_workbook');
   const genDate = formatGenerationDateFr();
+  const annee = generalInfo.anneeReference || new Date().getFullYear();
 
-  const entrepriseLabel = generalInfo.entreprise?.trim() || "Direction des Systèmes d'Information";
+  const entrepriseLabel =
+    generalInfo.entreprise?.trim() || "Direction des Systèmes d'Information";
+  const departmentLabel =
+    generalInfo.departement?.trim() || "Direction des Systèmes d'Information";
   const techFullName =
     `${generalInfo.prenomTechnicien || ''} ${generalInfo.nomTechnicien || ''}`.trim() ||
     'Technicien Informatique';
@@ -53,20 +80,22 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   // --- PAGE 1 : PAGE DE GARDE INSTITUTIONNELLE ---
   builder.drawCoverPage({
     organization: entrepriseLabel,
-    department: generalInfo.departement || "Direction des Systèmes d'Information",
-    eyebrow: "DIRECTION DES SYSTÈMES D'INFORMATION · DOCUMENT OFFICIEL",
+    department: departmentLabel,
+    eyebrow: "DIRECTION DES SYSTÈMES D'INFORMATION · CAHIER OFFICIEL DE PILOTAGE",
     mainTitle: 'CAHIER DE SUIVI ANNUEL',
-    subtitle: 'DU TECHNICIEN INFORMATIQUE',
-    exerciseLabel: `EXERCICE ANNUEL ${generalInfo.anneeReference}`,
+    subtitle: 'DU TECHNICIEN INFORMATIQUE & EXPLOITATION SI',
+    exerciseLabel: `EXERCICE ANNUEL ${annee}`,
+    periodLabel: `Période couverte : 01/01/${annee} — 31/12/${annee}`,
     tagline:
-      "Pilotage Opérationnel, Traçabilité des Interventions, Maintenance Préventive, Infrastructure & Reporting",
+      "Traçabilité opérationnelle des interventions, maintenance préventive, infrastructure réseau, sécurité PRA et pilotage financier IT",
+    recipient: responsableLabel,
     metadataRows: [
-      ['Année de référence', `${generalInfo.anneeReference}`],
-      ['Technicien titulaire', techFullName],
+      ['Année de référence', `${annee}`],
+      ['Auteur / Technicien titulaire', techFullName],
       ['Fonction', generalInfo.fonction || 'Technicien Informatique'],
-      ['Département / Service', generalInfo.departement || 'DSI'],
+      ['Service / Département', departmentLabel],
       ['Entreprise / Organisation', entrepriseLabel],
-      ['Responsable hiérarchique', responsableLabel],
+      ['Destinataire / Responsable SI', responsableLabel],
       ['Date de prise de fonction', generalInfo.datePriseFonction || '—'],
       [
         'Coordonnées professionnelles',
@@ -75,20 +104,27 @@ export function generateDirectPdf(data: CahierSuiviData): void {
           : '—',
       ],
       ['Localisation atelier IT', generalInfo.localisationBureau || '—'],
+      ['Date de génération', genDate],
     ],
     engagementTitle: 'ENGAGEMENT PROFESSIONNEL & DÉONTOLOGIE INFORMATIQUE',
     engagementText:
-      "Le technicien soussigné certifie consigner avec rigueur, honnêteté et exactitude l'ensemble des travaux, maintenances, contrôles de sauvegarde et incidents techniques réalisés sur le système d'information. Il s'engage à appliquer les bonnes pratiques d'hygiène numérique et à ne jamais stocker de mot de passe en clair.",
+      "Le technicien soussigné certifie consigner avec rigueur, impartialité et exactitude l'ensemble des travaux, maintenances, contrôles de sauvegarde et incidents techniques réalisés sur le système d'information. Il s'engage à appliquer les bonnes pratiques d'hygiène numérique et à ne jamais stocker de mot de passe en clair.",
     engagementFooter: `Prise d'effet le ${generalInfo.datePriseFonction || genDate} — Visa Technicien : ${
       generalInfo.charteAcceptee ? '[Lu et Approuvé]' : '[À valider]'
     }`,
   });
 
-  // --- PAGE 2 : SOMMAIRE & TABLEAU DE BORD EXÉCUTIF ---
+  // --- PAGE 2 : SOMMAIRE DYNAMIQUE (REMPLI EN PASSE FINALE AVEC NUMÉROS DE PAGE RÉELS) ---
   builder.addPage();
+  builder.beginTableOfContents(
+    'SOMMAIRE & TABLE DES MATIÈRES',
+    `Navigation directe et pagination certifiée — Exercice ${annee}`
+  );
+
+  // --- PAGE 3 : RÉSUMÉ EXÉCUTIF & TABLEAU DE BORD ---
   builder.drawSectionHeading(
-    'SYNTHÈSE EXÉCUTIVE & SOMMAIRE DU CAHIER',
-    `Vue consolidée des 12 domaines d'exploitation pour l'exercice ${generalInfo.anneeReference}`
+    'RÉSUMÉ EXÉCUTIF & INDICATEURS DE PILOTAGE',
+    `Consolidation quantitative des opérations informatiques pour l'exercice ${annee}`
   );
 
   const interventionsResolues = interventions.filter((i) => i.resultat === 'Résolu').length;
@@ -97,7 +133,27 @@ export function generateDirectPdf(data: CahierSuiviData): void {
       ? Math.round((interventionsResolues / interventions.length) * 100)
       : 100;
   const tachesTerminees = journalTaches.filter((t) => t.statut === 'Terminé').length;
+  const totalJournalHours =
+    Math.round(
+      (journalTaches.reduce((sum, t) => sum + (t.dureeReelleMin || t.dureeEstimeeMin || 0), 0) /
+        60) *
+        10
+    ) / 10;
   const maintenancesConformes = maintenances.filter((m) => m.statut === 'Conforme').length;
+  const maintPct =
+    maintenances.length > 0 ? Math.round((maintenancesConformes / maintenances.length) * 100) : 100;
+  const totalDaTtc = demandesAchat.reduce((s, d) => s + (Number(d.montantEstimeTTC) || 0), 0);
+
+  builder.drawExecutiveCard({
+    title: `Synthèse Exécutive — Exercice ${annee}`,
+    leadParagraph: `Sur la période observée pour ${entrepriseLabel}, le service informatique a consigné ${interventions.length} fiche(s) d'intervention technique (taux de résolution FCR de ${tauxFcrGlobal}%), ${journalTaches.length} tâche(s) d'exploitation quotidienne (${totalJournalHours} h cumulées) et ${maintenances.length} point(s) de contrôle de maintenance (${maintPct}% conformes). Le parc inventorié regroupe ${parcEquipements.length} équipement(s) et ${reseauEquipements.length} actif(s) réseau.`,
+    highlights: [
+      `Support & Incidents : ${interventionsResolues} ticket(s) résolu(s) sur ${interventions.length} enregistré(s).`,
+      `Continuité & PRA : ${sauvegardes.length} job(s) de sauvegarde suivi(s), ${incidentsSecurite.length} incident(s) de sécurité tracé(s).`,
+      `Engagements d'achats IT : ${demandesAchat.length} demande(s) d'achat totalisant ${formatAriary(totalDaTtc, true)}.`,
+    ],
+    tone: tauxFcrGlobal >= 85 && maintPct >= 80 ? 'success' : 'info',
+  });
 
   builder.drawKpiStrip([
     {
@@ -109,14 +165,14 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     {
       label: 'Journal Quotidien',
       value: `${journalTaches.length}`,
-      sub: `${tachesTerminees} tâches terminées`,
+      sub: `${tachesTerminees} terminées (${totalJournalHours} h)`,
       tone: 'info',
     },
     {
-      label: 'Maintenance SI',
-      value: `${maintenances.length}`,
-      sub: `${maintenancesConformes} contrôles conformes`,
-      tone: maintenancesConformes === maintenances.length ? 'success' : 'warning',
+      label: 'Conformité MCO',
+      value: `${maintPct}%`,
+      sub: `${maintenancesConformes}/${maintenances.length} contrôles conformes`,
+      tone: maintPct >= 85 ? 'success' : 'warning',
     },
     {
       label: 'Parc & Réseau',
@@ -126,30 +182,63 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     },
   ]);
 
-  builder.drawDataTable(
-    ['N°', 'Rubrique du Cahier de Suivi', 'Volume Consigné'],
-    [
-      ['01', 'Informations Générales & Cadre Déontologique', 'Charte & Profil vérifiés'],
-      ['02', 'Planification Annuelle & Calendrier', `${objectifsAnnuels.length} objectifs · ${jalonsCalendrier.length} jalons`],
-      ['03', 'Journal Quotidien des Activités', `${journalTaches.length} tâches consignées`],
-      ['04', 'Registre des Interventions Informatiques', `${interventions.length} fiches d'intervention`],
-      ['05', 'Maintenance Préventive & Corrective', `${maintenances.length} points de contrôle`],
-      ['06', 'Infrastructure Réseau & Tests de Débit', `${reseauEquipements.length} actifs · ${reseauIncidents.length} incidents · ${reseauTestsDebit.length} tests`],
-      ['07', 'Gestion du Parc Informatique (CMDB)', `${parcEquipements.length} équipements inventoriés`],
-      ['08', 'Logiciels, Licences & Droits d\'Accès', `${logicielsLicences.length} licences suivies`],
-      ['09', 'Sauvegardes 3-2-1 (PRA) & Cybersécurité', `${sauvegardes.length} jobs PRA · ${incidentsSecurite.length} incidents`],
-      ['10', 'Consommables, Stocks & Demandes d\'Achat', `${consommables.length} articles · ${demandesAchat.length} demandes`],
-      ['11', 'Rapports Mensuels d\'Activité', `${rapportsMensuels.length} mois documentés`],
-      ['12', 'Bilans Trimestriels, Bilan Annuel & Projets ROI', `${bilansTrimestriels.length} trimestres · ${bilanAnnuel.projetsRoi?.length || 0} projets ROI`],
-    ],
-    [10, 58, 32],
-    { boldColumns: [0], centerColumns: [0], fontSize: 7.9 }
-  );
+  // Graphique annuel 1 : Volume mensuel des interventions (données réelles)
+  const monthlyTotals = SHORT_MONTHS.map((_, idx) => {
+    const mNum = idx + 1;
+    const prefix = `${annee}-${String(mNum).padStart(2, '0')}`;
+    const fromTickets = interventions.filter((i) => i.dateReception?.startsWith(prefix)).length;
+    const rep = rapportsMensuels.find((r) => r.moisIndex === mNum);
+    return Math.max(fromTickets, rep?.totalInterventions || 0);
+  });
+  const monthlyResolved = SHORT_MONTHS.map((_, idx) => {
+    const mNum = idx + 1;
+    const prefix = `${annee}-${String(mNum).padStart(2, '0')}`;
+    const fromTickets = interventions.filter(
+      (i) => i.dateReception?.startsWith(prefix) && i.resultat === 'Résolu'
+    ).length;
+    const rep = rapportsMensuels.find((r) => r.moisIndex === mNum);
+    return Math.max(fromTickets, rep?.incidentsResolus || 0);
+  });
+
+  if (monthlyTotals.some((v) => v > 0)) {
+    drawVerticalBarChart(builder, {
+      title: `Activité Mensuelle des Interventions IT (${annee})`,
+      subtitle: 'Comparaison entre le volume total pris en charge et les tickets résolus par mois',
+      caption: 'Source : Registre des interventions et synthèses mensuelles consolidées.',
+      categories: SHORT_MONTHS,
+      series: [
+        { name: 'Total prises en charge', values: monthlyTotals },
+        { name: 'Résolues', values: monthlyResolved, colorRgb: builder.theme.successRgb },
+      ],
+      heightMm: 36,
+    });
+  }
+
+  // Graphique annuel 2 : État de conformité de la maintenance (si données présentes)
+  if (maintenances.length > 0) {
+    const aTraiter = maintenances.filter((m) => m.statut === 'À traiter').length;
+    const critiques = maintenances.filter((m) => m.statut === 'Critique').length;
+    const nonApp = maintenances.filter((m) => m.statut === 'Non applicable').length;
+    drawDonutSummaryChart(builder, {
+      title: 'Répartition des Contrôles de Maintenance (MCO)',
+      subtitle: 'État de conformité sur les domaines d’infrastructure surveillés',
+      caption: `Base : ${maintenances.length} point(s) de contrôle enregistrés.`,
+      centerTopLabel: `${maintPct}%`,
+      centerBottomLabel: 'Conformes',
+      slices: [
+        { label: 'Conformes', value: maintenancesConformes, colorRgb: builder.theme.successRgb },
+        { label: 'À traiter', value: aTraiter, colorRgb: builder.theme.warningRgb },
+        { label: 'Critiques', value: critiques, colorRgb: builder.theme.dangerRgb },
+        { label: 'Non applicables', value: nonApp, colorRgb: builder.theme.textMutedRgb },
+      ],
+    });
+  }
 
   // --- SECTION 1 : CADRE DE RÉFÉRENCE ---
   builder.drawSectionHeading(
     '1. INFORMATIONS GÉNÉRALES & DÉONTOLOGIE',
-    'Cadre officiel de pilotage et règles de sécurité applicables'
+    'Cadre officiel de pilotage et règles de sécurité applicables',
+    { pageBreakBefore: true }
   );
   builder.drawCalloutBox(
     'Règles de Tenue du Registre & Hygiène Informatique',
@@ -160,11 +249,12 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   // --- SECTION 2 : PLANIFICATION ANNUELLE ---
   builder.drawSectionHeading(
     '2. PLANIFICATION ANNUELLE & CALENDRIER',
-    `Objectifs stratégiques, indicateurs de performance (KPI) et jalons clés ${generalInfo.anneeReference}`,
-    { pageBreakBefore: true }
+    `Objectifs stratégiques, indicateurs de performance (KPI) et jalons clés ${annee}`
   );
 
-  builder.drawSubHeading(`2.1. Objectifs Annuels & KPI (${objectifsAnnuels.length})`);
+  builder.drawSubHeading(`2.1. Objectifs Annuels & KPI (${objectifsAnnuels.length})`, {
+    registerToc: true,
+  });
   builder.drawDataTable(
     ['Réf.', 'Objectif & Missions', 'Résultats Attendus', 'Échéance / Prio', 'KPI Cible', 'Avanc.'],
     objectifsAnnuels.map((obj) => [
@@ -175,11 +265,18 @@ export function generateDirectPdf(data: CahierSuiviData): void {
       obj.kpi || '—',
       `${obj.avancement || 0}%\n(${obj.statut})`,
     ]),
-    [8, 31, 21, 13, 15, 12],
-    { boldColumns: [0], statusColumns: [5], emptyMessage: 'Aucun objectif annuel enregistré.' }
+    [9, 30, 21, 13, 15, 12],
+    {
+      boldColumns: [0],
+      statusColumns: [5],
+      centerColumns: [5],
+      emptyMessage: 'Aucun objectif annuel enregistré.',
+    }
   );
 
-  builder.drawSubHeading(`2.2. Calendrier des Jalons Clés (${jalonsCalendrier.length})`);
+  builder.drawSubHeading(`2.2. Calendrier des Jalons Clés (${jalonsCalendrier.length})`, {
+    registerToc: true,
+  });
   builder.drawDataTable(
     ['Mois', 'Jalon / Opération Majeure', 'Catégorie', 'Priorité', 'Statut'],
     jalonsCalendrier.map((j) => [
@@ -196,8 +293,32 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   // --- SECTION 3 : JOURNAL QUOTIDIEN ---
   builder.drawSectionHeading(
     '3. GESTION QUOTIDIENNE DES ACTIVITÉS',
-    `Journal de bord chronologique complet (${journalTaches.length} tâches)`
+    `Journal de bord chronologique complet (${journalTaches.length} tâches · ${totalJournalHours} h)`
   );
+
+  if (journalTaches.length >= 3) {
+    const catMinutes = new Map<string, number>();
+    journalTaches.forEach((t) => {
+      const cat = t.categorie || 'Autre';
+      catMinutes.set(cat, (catMinutes.get(cat) || 0) + (t.dureeReelleMin || t.dureeEstimeeMin || 0));
+    });
+    const catItems = Array.from(catMinutes.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([label, mins]) => ({
+        label,
+        value: Math.round((mins / 60) * 10) / 10,
+        valueText: `${(Math.round((mins / 60) * 10) / 10).toString().replace('.', ',')} h`,
+      }));
+    if (catItems.some((c) => c.value > 0)) {
+      drawHorizontalBarChart(builder, {
+        title: 'Répartition du Temps d’Exploitation par Domaine',
+        subtitle: 'Volume horaire cumulé dans le journal quotidien',
+        items: catItems,
+      });
+    }
+  }
+
   builder.drawDataTable(
     ['Date & Heure', 'Tâche & Description', 'Catégorie / Prio', 'Durée', 'Statut', 'Résultat & Observations'],
     journalTaches.map((t) => [
@@ -209,7 +330,12 @@ export function generateDirectPdf(data: CahierSuiviData): void {
       `${t.resultat || '—'}${t.observations ? `\nObs : ${t.observations}` : ''}`,
     ]),
     [13, 29, 17, 10, 11, 20],
-    { boldColumns: [0], statusColumns: [4], emptyMessage: 'Aucune tâche consignée dans le journal quotidien.' }
+    {
+      boldColumns: [0],
+      statusColumns: [4],
+      alignRightColumns: [3],
+      emptyMessage: 'Aucune tâche consignée dans le journal quotidien.',
+    }
   );
 
   // --- SECTION 4 : REGISTRE DES INTERVENTIONS ---
@@ -217,7 +343,6 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     '4. REGISTRE DES INTERVENTIONS INFORMATIQUES',
     `Traçabilité complète des tickets et opérations techniques (${interventions.length} fiches)`
   );
-
   builder.drawDataTable(
     ['Réf. / Date', 'Demandeur / Service', 'Équipement & Type', 'Problème & Solution Appliquée', 'Durée', 'Statut'],
     interventions.map((it) => [
@@ -232,6 +357,7 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     {
       boldColumns: [0],
       statusColumns: [5],
+      alignRightColumns: [4],
       emptyMessage: "Aucune fiche d'intervention enregistrée.",
     }
   );
@@ -261,7 +387,9 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     "Équipements actifs LAN/WAN, registre des incidents et mesures de bande passante"
   );
 
-  builder.drawSubHeading(`6.1. Équipements Réseau (${reseauEquipements.length})`);
+  builder.drawSubHeading(`6.1. Équipements Réseau (${reseauEquipements.length})`, {
+    registerToc: true,
+  });
   builder.drawDataTable(
     ['Équipement', 'Type & Modèle', 'IP / MAC', 'Localisation / VLAN', 'Firmware / État'],
     reseauEquipements.map((eq) => [
@@ -323,7 +451,7 @@ export function generateDirectPdf(data: CahierSuiviData): void {
 
   // --- SECTION 8 : LOGICIELS & LICENCES ---
   builder.drawSectionHeading(
-    '8. LOGICIELS, LICENCES & CONTRÔLE D\'ACCÈS',
+    "8. LOGICIELS, LICENCES & CONTRÔLE D'ACCÈS",
     `Suivi de conformité logicielle (${logicielsLicences.length} références)`
   );
   builder.drawCalloutBox(
@@ -380,7 +508,7 @@ export function generateDirectPdf(data: CahierSuiviData): void {
 
   // --- SECTION 10 : CONSOMMABLES & DEMANDES D'ACHAT ---
   builder.drawSectionHeading(
-    '10. CONSOMMABLES & DEMANDES D\'ACHAT',
+    "10. CONSOMMABLES & DEMANDES D'ACHAT",
     "Suivi des stocks critiques d'atelier et engagements budgétaires (en Ariary)"
   );
 
@@ -399,24 +527,58 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   );
 
   builder.drawSubHeading(`10.2. Demandes d'Achat (${demandesAchat.length})`);
+  const daRows: string[][] = demandesAchat.map((da) => [
+    `${da.numeroCommande}\n${da.dateDemande}`,
+    `${da.articlesDemandes} (x${da.quantite})`,
+    da.fournisseur || '—',
+    formatAriary(da.montantEstimeTTC, true),
+    `${da.statut}${da.dateReception ? `\nReçu ${da.dateReception}` : ''}`,
+  ]);
+  if (daRows.length > 0) {
+    daRows.push([
+      'TOTAL ENGAGÉ',
+      `${demandesAchat.length} commande(s)`,
+      '—',
+      formatAriary(totalDaTtc, true),
+      'Consolidé TTC',
+    ]);
+  }
   builder.drawDataTable(
-    ['N° Commande & Date', 'Articles & Quantité', 'Fournisseur & Montant TTC', 'Statut', 'Réception / Obs'],
-    demandesAchat.map((da) => [
-      `${da.numeroCommande}\n${da.dateDemande}`,
-      `${da.articlesDemandes} (x${da.quantite})`,
-      `${da.fournisseur}\n${formatAriary(da.montantEstimeTTC, true)}`,
-      da.statut,
-      `${da.dateReception || 'En attente'}${da.observations ? `\n${da.observations}` : ''}`,
-    ]),
-    [17, 30, 21, 16, 16],
-    { boldColumns: [0], statusColumns: [3], emptyMessage: "Aucune demande d'achat enregistrée." }
+    ['N° Commande & Date', 'Articles & Quantité', 'Fournisseur', 'Montant TTC', 'Statut'],
+    daRows,
+    [17, 30, 19, 17, 17],
+    {
+      boldColumns: [0],
+      alignRightColumns: [3],
+      statusColumns: [4],
+      totalRowIndices: daRows.length > 0 ? [daRows.length - 1] : [],
+      emptyMessage: "Aucune demande d'achat enregistrée.",
+    }
   );
 
   // --- SECTION 11 : SYNTHÈSE DES 12 RAPPORTS MENSUELS ---
   builder.drawSectionHeading(
-    '11. RAPPORTS MENSUELS D\'ACTIVITÉ',
+    "11. RAPPORTS MENSUELS D'ACTIVITÉ",
     'Tableau récapitulatif des indicateurs et livrables sur les 12 mois'
   );
+
+  const fcrMonths = rapportsMensuels.filter((r) => r.totalInterventions > 0);
+  if (fcrMonths.length >= 2) {
+    drawTrendLineChart(builder, {
+      title: 'Évolution du Taux de Résolution (FCR %) sur les Mois Documentés',
+      subtitle: 'Taux de résolution au premier passage par rapport au seuil cible (85%)',
+      labels: fcrMonths.map((r) => SHORT_MONTHS[(r.moisIndex - 1) % 12] || r.nomMois.slice(0, 3)),
+      values: fcrMonths.map((r) => r.tauxResolutionFCR || 0),
+      seriesLabel: 'FCR (%)',
+      targetValue: 85,
+      targetLabel: 'Cible SLA 85%',
+      minY: 0,
+      maxY: 100,
+      unitSuffix: '%',
+      heightMm: 32,
+    });
+  }
+
   builder.drawDataTable(
     ['Mois', 'Tickets (Rés./Tot.)', 'FCR / MTTR', 'Travaux & Faits Marquants', 'Visa RSI'],
     rapportsMensuels.map((rep) => [
@@ -429,7 +591,12 @@ export function generateDirectPdf(data: CahierSuiviData): void {
         : `${rep.statutLivraison || 'En attente'}`,
     ]),
     [13, 15, 13, 44, 15],
-    { boldColumns: [0], statusColumns: [4], emptyMessage: 'Aucun rapport mensuel disponible.' }
+    {
+      boldColumns: [0],
+      centerColumns: [1, 2],
+      statusColumns: [4],
+      emptyMessage: 'Aucun rapport mensuel disponible.',
+    }
   );
 
   // --- SECTION 12 : BILANS TRIMESTRIELS, BILAN ANNUEL & ROI ---
@@ -439,7 +606,7 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     { pageBreakBefore: true }
   );
 
-  builder.drawSubHeading('12.1. Synthèse des Trimestres (T1 à T4)');
+  builder.drawSubHeading('12.1. Synthèse des Trimestres (T1 à T4)', { registerToc: true });
   builder.drawDataTable(
     ['Trimestre', 'Objectifs & Réalisations', 'Satisfaction / Dispo', 'Difficultés & Formation', 'Investissements'],
     bilansTrimestriels.map((bt) => [
@@ -453,7 +620,9 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     { boldColumns: [0], emptyMessage: 'Aucun bilan trimestriel renseigné.' }
   );
 
-  builder.drawSubHeading(`12.2. Bilan Annuel Consolidé (${bilanAnnuel.annee})`);
+  builder.drawSubHeading(`12.2. Bilan Annuel Consolidé (${bilanAnnuel.annee})`, {
+    registerToc: true,
+  });
   builder.drawKeyValueTable(
     [
       { label: "Synthèse générale de l'année", value: bilanAnnuel.syntheseGenerale || '—' },
@@ -478,45 +647,102 @@ export function generateDirectPdf(data: CahierSuiviData): void {
   );
 
   if (bilanAnnuel.projetsRoi && bilanAnnuel.projetsRoi.length > 0) {
-    builder.drawSubHeading(`12.3. Retour sur Investissement (ROI) des Projets IT (${bilanAnnuel.projetsRoi.length})`);
+    const projets = bilanAnnuel.projetsRoi;
+    builder.drawSubHeading(
+      `12.3. Retour sur Investissement (ROI) des Projets IT (${projets.length})`,
+      { registerToc: true }
+    );
+
+    // Graphique ROI Investissement vs Valeur Annuelle Générée
+    const topProjets = projets.slice(0, 6);
+    drawVerticalBarChart(builder, {
+      title: 'Comparatif Investissement vs Valeur Annuelle Générée (Ar)',
+      subtitle: 'Économies financières directes + valorisation du temps économisé sur 12 mois',
+      categories: topProjets.map((p) => p.nomProjet.slice(0, 14)),
+      series: [
+        {
+          name: 'Investissement',
+          values: topProjets.map((p) => p.coutInvestissementEuros || 0),
+          colorRgb: builder.theme.primaryRgb,
+        },
+        {
+          name: 'Valeur annuelle (An 1)',
+          values: topProjets.map(
+            (p) =>
+              (p.economiesFinancieresAnnuellesEuros || 0) +
+              (p.gainTempsEstimeHeuresParAn || 0) * (p.tauxHoraireMoyenValorise || 25000)
+          ),
+          colorRgb: builder.theme.successRgb,
+        },
+      ],
+      valueFormatter: formatCompactAriaryPdf,
+      heightMm: 34,
+    });
+
+    let totalInvest = 0;
+    let totalEco = 0;
+    let totalHours = 0;
+    let totalVal = 0;
+
+    const roiRows: string[][] = projets.map((p) => {
+      const invest = p.coutInvestissementEuros || 0;
+      const eco = p.economiesFinancieresAnnuellesEuros || 0;
+      const heures = p.gainTempsEstimeHeuresParAn || 0;
+      const taux = p.tauxHoraireMoyenValorise || 25000;
+      const val = eco + heures * taux;
+      totalInvest += invest;
+      totalEco += eco;
+      totalHours += heures;
+      totalVal += val;
+      const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
+      const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
+      return [
+        `${p.nomProjet}\n[${p.categorie}] · ${p.statut}`,
+        formatAriary(invest, true),
+        `+${formatAriary(eco, true)}`,
+        `${heures} h/an\n(+${formatAriary(heures * taux, true)})`,
+        `${roi >= 0 ? `+${roi}%` : `${roi}%`}\n(Amorti ${payback} mois)`,
+      ];
+    });
+
+    const totalRoi =
+      totalInvest > 0 ? Math.round(((totalVal - totalInvest) / totalInvest) * 100) : 0;
+    roiRows.push([
+      `TOTAL PORTEFEUILLE (${projets.length} projets)`,
+      formatAriary(totalInvest, true),
+      `+${formatAriary(totalEco, true)}`,
+      `${totalHours} h/an`,
+      `${totalRoi >= 0 ? `+${totalRoi}%` : `${totalRoi}%`} global`,
+    ]);
+
     builder.drawDataTable(
       ['Projet IT & Catégorie', 'Investissement', 'Économies / An', 'Temps Gagné / An', 'ROI An 1 & Payback'],
-      bilanAnnuel.projetsRoi.map((p) => {
-        const invest = p.coutInvestissementEuros || 0;
-        const eco = p.economiesFinancieresAnnuellesEuros || 0;
-        const heures = p.gainTempsEstimeHeuresParAn || 0;
-        const taux = p.tauxHoraireMoyenValorise || 25000;
-        const val = eco + heures * taux;
-        const roi = invest > 0 ? Math.round(((val - invest) / invest) * 100) : 0;
-        const payback = val > 0 ? Math.round((invest / val) * 12 * 10) / 10 : 0;
-        return [
-          `${p.nomProjet}\n[${p.categorie}] · ${p.statut}`,
-          formatAriary(invest, true),
-          `+${formatAriary(eco, true)}`,
-          `${heures} h/an\n(+${formatAriary(heures * taux, true)})`,
-          `${roi >= 0 ? `+${roi}%` : `${roi}%`}\n(Amorti ${payback} mois)`,
-        ];
-      }),
+      roiRows,
       [29, 17, 18, 19, 17],
       {
         boldColumns: [0],
-        alignRightColumns: [1, 2],
+        alignRightColumns: [1, 2, 3],
         statusColumns: [4],
+        totalRowIndices: [roiRows.length - 1],
       }
     );
   }
 
-  builder.drawSubHeading('12.4. Signatures & Clôture Officielle');
+  builder.drawSubHeading('12.4. Conclusion, Recommandations & Clôture Officielle', {
+    registerToc: true,
+  });
   builder.drawSignatureGrid(
     {
       role: 'TECHNICIEN INFORMATIQUE TITULAIRE',
       name: techFullName,
       dateLabel: bilanAnnuel.signatureTechnicienDate || undefined,
-      statusLabel: bilanAnnuel.signatureTechnicienDate ? 'Signé & Certifié' : 'En attente de signature',
+      statusLabel: bilanAnnuel.signatureTechnicienDate
+        ? 'Signé & Certifié'
+        : 'En attente de signature',
       signed: Boolean(bilanAnnuel.signatureTechnicienDate),
     },
     {
-      role: 'RESPONSABLE SYSTÈMES D\'INFORMATION (RSI)',
+      role: "RESPONSABLE SYSTÈMES D'INFORMATION (RSI)",
       name: responsableLabel,
       dateLabel: bilanAnnuel.signatureRsiDate || undefined,
       statusLabel: bilanAnnuel.signatureRsiDate ? 'Approuvé & Validé' : 'En attente de visa',
@@ -524,14 +750,29 @@ export function generateDirectPdf(data: CahierSuiviData): void {
     }
   );
 
-  // En-têtes & pieds de page homogènes avec pagination "Page X sur Y"
-  builder.finalizeHeadersAndFooters({
+  const meta: PdfFooterHeaderMeta = {
     organization: entrepriseLabel,
-    documentTitle: `Cahier de Suivi Annuel IT ${generalInfo.anneeReference}`,
-    reference: `CAHIER-${generalInfo.anneeReference}`,
+    documentTitle: `Cahier de Suivi Annuel IT ${annee}`,
+    shortTitle: `Cahier de Suivi Annuel ${annee}`,
+    reference: `CAHIER-${annee}`,
+    author: techFullName,
+    subject: `Registre annuel d'exploitation SI — ${entrepriseLabel} (${annee})`,
     generationDate: genDate,
     hasCoverPage: true,
-  });
+  };
 
-  builder.docInstance.save(`cahier_suivi_annuel_technicien_it_${generalInfo.anneeReference}.pdf`);
+  return {
+    builder,
+    filename: `cahier_suivi_annuel_technicien_it_${annee}.pdf`,
+    meta,
+  };
+}
+
+/**
+ * Génère et télécharge directement un fichier PDF A4 complet, paginé et structuré
+ * couvrant l'ensemble des 12 rubriques du Cahier de Suivi Annuel.
+ */
+export function generateDirectPdf(data: CahierSuiviData): PdfExportResult {
+  const { builder, filename, meta } = buildAnnualPdfDocument(data);
+  return builder.finalizeAndSave(filename, meta);
 }

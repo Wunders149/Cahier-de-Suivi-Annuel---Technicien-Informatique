@@ -16,8 +16,12 @@ import {
 } from '../../utils/sogedipromaLiveStore';
 import {
   mapSogedipromaToWorkbookDelta,
-  SogedipromaStateData,
 } from '../../utils/sogedipromaSync';
+import {
+  postSogInventoryMovementSmart,
+  resolvePreferredSogUrl,
+  syncSogStateSmart,
+} from '../../utils/sogedipromaLiveClient';
 import { getLocalTodayIso } from '../../utils/coherenceUtils';
 import { Modal } from '../ui/Modal';
 import { FormField, FormSection } from '../ui/FormField';
@@ -385,54 +389,31 @@ export const ConsumablesSection: React.FC<ConsumablesSectionProps> = ({
     setMovError(null);
     try {
       setIsPostingMov(true);
-      let serverUrl: string | undefined;
-      try {
-        serverUrl = localStorage.getItem('sogediproma_server_url') || undefined;
-      } catch {
-        serverUrl = undefined;
-      }
+      const serverUrl = resolvePreferredSogUrl();
 
-      const res = await fetch('/api/sogediproma/inventory/movements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl: serverUrl,
-          movement: {
-            id: `mov-cahier-${Date.now()}`,
-            itemId: sogMovItemId,
-            type: sogMovType,
-            quantity: Number(sogMovQty),
-            date: sogMovDate,
-            reason: sogMovReason.trim() || 'Ajustement depuis Cahier IT',
-            reference: sogMovRef.trim(),
-            assignedEmployeeId: sogMovEmpId || undefined,
-            departmentId: sogMovDeptId || undefined,
-          },
-        }),
+      await postSogInventoryMovementSmart({
+        baseUrl: serverUrl,
+        movement: {
+          id: `mov-cahier-${Date.now()}`,
+          itemId: sogMovItemId,
+          type: sogMovType,
+          quantity: Number(sogMovQty),
+          date: sogMovDate,
+          reason: sogMovReason.trim() || 'Ajustement depuis Cahier IT',
+          reference: sogMovRef.trim(),
+          assignedEmployeeId: sogMovEmpId || undefined,
+          departmentId: sogMovDeptId || undefined,
+        },
       });
-      const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        throw new Error(payload?.error || `HTTP ${res.status}`);
-      }
 
       // Rafraîchir le snapshot live après écriture
-      const syncRes = await fetch('/api/sogediproma/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baseUrl: serverUrl }),
-      });
-      if (syncRes.ok) {
-        const syncJson = (await syncRes.json()) as {
-          revision?: number;
-          data?: SogedipromaStateData;
-        };
-        if (syncJson?.data) {
-          saveSogedipromaLiveSnapshot(syncJson.data, syncJson.revision);
-          const delta = mapSogedipromaToWorkbookDelta(syncJson.data);
-          if (delta.consommables.length > 0) {
-            const manual = consommables.filter((c) => !c.id.startsWith('sog-'));
-            onUpdateConsommables([...manual, ...delta.consommables]);
-          }
+      const syncJson = await syncSogStateSmart({ baseUrl: serverUrl }).catch(() => null);
+      if (syncJson?.data) {
+        saveSogedipromaLiveSnapshot(syncJson.data, syncJson.revision);
+        const delta = mapSogedipromaToWorkbookDelta(syncJson.data);
+        if (delta.consommables.length > 0) {
+          const manual = consommables.filter((c) => !c.id.startsWith('sog-'));
+          onUpdateConsommables([...manual, ...delta.consommables]);
         }
       }
 

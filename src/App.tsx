@@ -33,11 +33,24 @@ import { Toast } from './components/ui/Toast';
 import { dangerButtonClass, secondaryButtonClass } from './components/ui/formStyles';
 import {
   SogedipromaStateData,
-  SogedipromaSyncModuleKey,
   applySogedipromaMerge,
   mapSogedipromaToWorkbookDelta,
 } from './utils/sogedipromaSync';
 import { saveSogedipromaLiveSnapshot } from './utils/sogedipromaLiveStore';
+import {
+  SOG_POLL_INTERVAL_MS,
+  SogLiveSyncStatus,
+  SogSyncError,
+  buildFullStateModuleSelection,
+  emitSogSyncStatusEvent,
+  fetchSogConfigSafe,
+  loadAutoPollEnabled,
+  loadLastSogSyncMeta,
+  resolvePreferredSogUrl,
+  saveLastSogSyncMeta,
+  subscribeSogSyncStatusEvent,
+  syncSogStateSmart,
+} from './utils/sogedipromaLiveClient';
 import {
   reconcileAllValidatedMaintenancesToJournal,
   reconcileMaintenancesUpdate,
@@ -97,6 +110,8 @@ function CahierContent({
   onResolveMerge,
   onResolveKeepLocal,
   onResolveLoadCloud,
+  sogSyncStatus,
+  onTriggerSogSync,
 }: {
   data: CahierSuiviData;
   setData: React.Dispatch<React.SetStateAction<CahierSuiviData>>;
@@ -112,6 +127,8 @@ function CahierContent({
   onResolveMerge: (saveFn: (d: CahierSuiviData) => Promise<void>) => void;
   onResolveKeepLocal: (saveFn: (d: CahierSuiviData) => Promise<void>) => void;
   onResolveLoadCloud: () => void;
+  sogSyncStatus: SogLiveSyncStatus;
+  onTriggerSogSync: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<string>('general');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -273,6 +290,8 @@ function CahierContent({
               onPrintPreview={handlePrintPreview}
               isGeneratingDocx={isGeneratingDocx}
               onOpenSogedipromaSync={() => openDataModal('sogediproma')}
+              sogSyncStatus={sogSyncStatus}
+              onTriggerSogSync={onTriggerSogSync}
             />
 
             {/* Notification persistante discrète si connecté (Thème Clair unifié) */}
@@ -618,7 +637,34 @@ export default function App() {
   const isApplyingCloudRef = useRef(false);
   const isAutoSyncRef = useRef(false);
   const hasAutoSyncedRef = useRef(false);
-  const didRunStartupAutoSyncRef = useRef(false);
+
+  const [sogSyncStatus, setSogSyncStatus] = useState<SogLiveSyncStatus>(() => {
+    const lastMeta = loadLastSogSyncMeta();
+    return {
+      phase: lastMeta ? 'synced' : 'idle',
+      transport: lastMeta?.transport ?? null,
+      lastSyncedAt: lastMeta?.at ?? null,
+      revision: typeof lastMeta?.revision === 'number' ? lastMeta.revision : null,
+      errorCode: null,
+      message: lastMeta?.summary ?? null,
+      hint: null,
+      backendProxyAvailable: true,
+      autoPollEnabled: loadAutoPollEnabled(),
+      consecutiveFailures: 0,
+    };
+  });
+  const sogSyncStatusRef = useRef<SogLiveSyncStatus>(sogSyncStatus);
+  sogSyncStatusRef.current = sogSyncStatus;
+
+  const sogSyncInFlightRef = useRef(false);
+  const lastSogAttemptAtRef = useRef(0);
+  const lastSogWarningShownRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return subscribeSogSyncStatusEvent((patch) => {
+      setSogSyncStatus((prev) => ({ ...prev, ...patch }));
+    });
+  }, []);
 
   // Synchronisation continue avec localStorage + suivi des modifications locales non synchronisées
   useEffect(() => {
@@ -730,162 +776,248 @@ export default function App() {
     setData(nextData);
   }, []);
 
-  // Synchronisation automatique et non bloquante depuis SOGEDIPROMA à l'ouverture
-  useEffect(() => {
-    if (didRunStartupAutoSyncRef.current) return;
-    didRunStartupAutoSyncRef.current = true;
+  // Moteur unifié de synchronisation live SOGEDIPROMA (démarrage, retour d'onglet, polling 30s, déclenchement manuel)
+  const runSogSync = useCallback(
+    async (reason: 'startup' | 'poll' | 'focus' | 'manual') => {
+      if (sogSyncInFlightRef.current) return;
 
-    let cancelled = false;
-
-    const isPrivateLanUrl = (urlStr: string): boolean => {
-      try {
-        const h = new URL(urlStr.trim()).hostname.toLowerCase();
-        if (h === 'localhost' || h === '::1' || h.endsWith('.local')) return true;
-        if (h.startsWith('127.') || h.startsWith('10.') || h.startsWith('192.168.')) return true;
-        const m = /^172\.(\d+)\./.exec(h);
-        if (m) {
-          const n = Number(m[1]);
-          return n >= 16 && n <= 31;
-        }
-        return false;
-      } catch {
-        return false;
+      const now = Date.now();
+      if (reason === 'focus' && now - lastSogAttemptAtRef.current < 6000) {
+        return;
       }
-    };
 
-    const runStartupAutoSync = async () => {
+      const currentStatus = sogSyncStatusRef.current;
+      // En polling de fond, éviter de spammer en boucle si auth manquante ou après échecs répétés
+      if (reason === 'poll') {
+        if (!currentStatus.autoPollEnabled) return;
+        if (currentStatus.phase === 'auth_required') return;
+        if (
+          currentStatus.consecutiveFailures >= 2 &&
+          now - lastSogAttemptAtRef.current < 120000
+        ) {
+          return;
+        }
+      }
+
+      sogSyncInFlightRef.current = true;
+      lastSogAttemptAtRef.current = now;
+      setSogSyncStatus((prev) => ({ ...prev, phase: 'syncing' }));
+
       try {
-        const cfgRes = await fetch('/api/sogediproma/config');
-        if (!cfgRes.ok) return;
-        const cfg = (await cfgRes.json()) as {
-          hasDefaultUrl?: boolean;
-          defaultUrl?: string;
-          pairedUrl?: string;
-          hasDefaultCredentials?: boolean;
-        };
-        if (!cfg?.hasDefaultUrl && !cfg?.hasDefaultCredentials) return;
+        const { proxyAvailable, config } = await fetchSogConfigSafe();
+        const preferredUrl = resolvePreferredSogUrl(config);
+        const canShortCircuit =
+          (reason === 'poll' || reason === 'focus') &&
+          hasAutoSyncedRef.current &&
+          typeof currentStatus.revision === 'number' &&
+          currentStatus.revision > 0;
 
-        const pairedDefault =
-          cfg.pairedUrl || cfg.defaultUrl || 'https://win-rmt226g06rg.taild86fee.ts.net';
-
-        let preferredUrl = pairedDefault;
+        let syncResult;
         try {
-          const storedUrl = (localStorage.getItem('sogediproma_server_url') || '').trim();
-          const isCloudHost =
-            typeof window !== 'undefined' &&
-            window.location.hostname !== 'localhost' &&
-            window.location.hostname !== '127.0.0.1';
-          if (
-            storedUrl &&
-            !storedUrl.includes('pc-informatique.taild86fee.ts.net') &&
-            !(isCloudHost && isPrivateLanUrl(storedUrl))
-          ) {
-            preferredUrl = storedUrl;
-          } else if (storedUrl.includes('pc-informatique.taild86fee.ts.net')) {
-            localStorage.setItem('sogediproma_server_url', pairedDefault);
-          }
-        } catch {
-          // Ignorer erreur localStorage
-        }
-
-        let usedUrl = preferredUrl;
-        let syncRes = await fetch('/api/sogediproma/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ baseUrl: preferredUrl }),
-        });
-
-        // Repli automatique sur l'URL serveur de secours si le nœud appairé principal est indisponible
-        if (!syncRes.ok && cfg.defaultUrl && cfg.defaultUrl !== preferredUrl && !cancelled) {
-          usedUrl = cfg.defaultUrl;
-          syncRes = await fetch('/api/sogediproma/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ baseUrl: cfg.defaultUrl }),
+          syncResult = await syncSogStateSmart({
+            baseUrl: preferredUrl,
+            knownRevision: canShortCircuit ? currentStatus.revision ?? undefined : undefined,
           });
+        } catch (primaryErr) {
+          // Repli sur l'URL serveur de secours si distincte
+          if (config.defaultUrl && config.defaultUrl !== preferredUrl) {
+            syncResult = await syncSogStateSmart({
+              baseUrl: config.defaultUrl,
+              knownRevision: canShortCircuit ? currentStatus.revision ?? undefined : undefined,
+            });
+          } else {
+            throw primaryErr;
+          }
         }
 
-        if (!syncRes.ok || cancelled) return;
+        const revNumber =
+          typeof syncResult.revision === 'number'
+            ? syncResult.revision
+            : currentStatus.revision;
+        const transportLabel =
+          syncResult.transport === 'direct' ? 'Lien direct navigateur' : 'Proxy serveur';
+        const nowIso = new Date().toISOString();
 
-        const payload = (await syncRes.json()) as {
-          revision?: number;
-          data?: SogedipromaStateData;
-        };
-        if (!payload?.data || cancelled) return;
+        if (syncResult.unchanged || !syncResult.data) {
+          const patch: Partial<SogLiveSyncStatus> = {
+            phase: 'synced',
+            transport: syncResult.transport,
+            lastSyncedAt: nowIso,
+            revision: revNumber ?? null,
+            errorCode: null,
+            message: `À jour (rév. #${revNumber ?? '—'} · ${transportLabel})`,
+            hint: null,
+            backendProxyAvailable: !syncResult.proxyUnavailable && proxyAvailable,
+            consecutiveFailures: 0,
+          };
+          setSogSyncStatus((prev) => ({ ...prev, ...patch }));
+          if (reason === 'manual') {
+            showToast(`SOGEDIPROMA déjà à jour (rév. #${revNumber ?? '—'} · ${transportLabel}).`);
+          }
+          return;
+        }
 
-        saveSogedipromaLiveSnapshot(payload.data, payload.revision);
-        const mapped = mapSogedipromaToWorkbookDelta(payload.data);
-        const populatedSel: Record<SogedipromaSyncModuleKey, boolean> = {
-          consommables: mapped.consommables.length > 0,
-          demandesAchat: mapped.demandesAchat.length > 0,
-          parcEquipements: mapped.parcEquipements.length > 0,
-          reseauEquipements: mapped.reseauEquipements.length > 0,
-          maintenances: mapped.maintenances.length > 0,
-          interventions: mapped.interventions.length > 0,
-          journalTaches: mapped.journalTaches.length > 0,
-          logicielsLicences: mapped.logicielsLicences.length > 0,
-          objectifsAnnuels: mapped.objectifsAnnuels.length > 0,
-          jalonsCalendrier: mapped.jalonsCalendrier.length > 0,
-        };
+        saveSogedipromaLiveSnapshot(syncResult.data, syncResult.revision);
+        const mapped = mapSogedipromaToWorkbookDelta(syncResult.data);
+        const fullSelection = buildFullStateModuleSelection(syncResult.data);
 
-        // Mode 'replace-sog' : remplace proprement les anciennes entrées sog-* sans supprimer les saisies manuelles
-        const result = applySogedipromaMerge(
+        // Mode 'replace-sog' : reflète aussi les ajouts, modifications et suppressions de SOGEDIPROMA sans toucher aux saisies manuelles
+        const mergedResult = applySogedipromaMerge(
           dataRef.current,
           mapped,
-          populatedSel,
+          fullSelection,
           'replace-sog'
         );
-        if (result.estimatedBytes >= 950 * 1024) return;
 
-        const revLabel = payload.revision ?? '—';
+        if (mergedResult.estimatedBytes >= 950 * 1024) {
+          const warnMsg = `Données SOGEDIPROMA volumineuses (${Math.round(mergedResult.estimatedBytes / 1024)} Ko / 1 024 Ko Firestore). Ouvrez le connecteur pour filtrer les modules.`;
+          setSogSyncStatus((prev) => ({
+            ...prev,
+            phase: 'error',
+            transport: syncResult.transport,
+            message: warnMsg,
+            errorCode: 'HTTP_ERROR',
+          }));
+          if (reason === 'manual') showToast(warnMsg);
+          return;
+        }
+
+        const revLabel = syncResult.revision ?? '—';
         const counts: string[] = [];
         if (mapped.parcEquipements.length) counts.push(`${mapped.parcEquipements.length} mat.`);
         if (mapped.consommables.length) counts.push(`${mapped.consommables.length} art.`);
         if (mapped.demandesAchat.length) counts.push(`${mapped.demandesAchat.length} achats`);
+        if (mapped.interventions.length) counts.push(`${mapped.interventions.length} tickets`);
         if (mapped.logicielsLicences.length) counts.push(`${mapped.logicielsLicences.length} licences`);
         if (mapped.objectifsAnnuels.length) counts.push(`${mapped.objectifsAnnuels.length} budgets`);
 
         const summary = counts.length
-          ? `Synchro auto SOGEDIPROMA (rév. #${revLabel}) : ${counts.join(', ')}.`
-          : `Synchro auto SOGEDIPROMA (rév. #${revLabel}) à jour.`;
+          ? `Synchro SOGEDIPROMA (rév. #${revLabel} · ${transportLabel}) : ${counts.join(', ')}.`
+          : `Synchro SOGEDIPROMA (rév. #${revLabel} · ${transportLabel}) appliquée.`;
 
-        try {
-          localStorage.setItem(
-            'sogediproma_last_sync_v1',
-            JSON.stringify({
-              at: new Date().toISOString(),
-              revision: typeof payload.revision === 'number' ? payload.revision : undefined,
-              summary,
-              url: usedUrl,
-            })
-          );
-        } catch {
-          // Ignorer erreur localStorage
-        }
+        saveLastSogSyncMeta({
+          at: nowIso,
+          revision: typeof syncResult.revision === 'number' ? syncResult.revision : undefined,
+          summary,
+          url: syncResult.usedUrl,
+          transport: syncResult.transport,
+        });
 
         const prevSerialized = JSON.stringify(dataRef.current);
-        const nextSerialized = JSON.stringify(result.nextData);
+        const nextSerialized = JSON.stringify(mergedResult.nextData);
         hasAutoSyncedRef.current = true;
+        lastSogWarningShownRef.current = null;
 
-        if (nextSerialized !== prevSerialized && !cancelled) {
-          isAutoSyncRef.current = true;
-          setData(result.nextData);
+        const okPatch: Partial<SogLiveSyncStatus> = {
+          phase: 'synced',
+          transport: syncResult.transport,
+          lastSyncedAt: nowIso,
+          revision: typeof syncResult.revision === 'number' ? syncResult.revision : null,
+          errorCode: null,
+          message: summary,
+          hint: null,
+          backendProxyAvailable: !syncResult.proxyUnavailable && proxyAvailable,
+          consecutiveFailures: 0,
+        };
+        setSogSyncStatus((prev) => ({ ...prev, ...okPatch }));
+        emitSogSyncStatusEvent(okPatch);
+
+        if (nextSerialized !== prevSerialized) {
+          if (!syncMetaRef.current.localDirty) {
+            isAutoSyncRef.current = true;
+          }
+          setData(mergedResult.nextData);
           showToast(summary);
+        } else if (reason === 'manual') {
+          showToast(`SOGEDIPROMA synchronisé et à jour (rév. #${revLabel} · ${transportLabel}).`);
         }
-      } catch {
-        // Silencieux si proxy/tunnel indisponible à l'ouverture
-      }
-    };
+      } catch (err) {
+        const sogErr =
+          err instanceof SogSyncError
+            ? err
+            : new SogSyncError(
+                err instanceof Error ? err.message : 'Erreur de synchronisation SOGEDIPROMA.',
+                'UNKNOWN'
+              );
 
-    const timer = setTimeout(() => {
-      void runStartupAutoSync();
+        const isAuth = sogErr.code === 'AUTH_REQUIRED' || sogErr.code === 'AUTH_FAILED';
+        const isUnreachable = [
+          'TAILSCALE_TIMEOUT',
+          'TAILSCALE_UNREACHABLE',
+          'TAILSCALE_OR_CORS_BLOCKED',
+          'STATIC_NO_PROXY_CORS',
+          'PRIVATE_LAN',
+          'UPSTREAM_TIMEOUT',
+          'UPSTREAM_UNREACHABLE',
+        ].includes(sogErr.code);
+
+        const errPhase: SogLiveSyncStatus['phase'] = isAuth
+          ? 'auth_required'
+          : isUnreachable
+          ? 'unreachable'
+          : 'error';
+
+        setSogSyncStatus((prev) => ({
+          ...prev,
+          phase: errPhase,
+          errorCode: sogErr.code,
+          message: sogErr.message,
+          hint: sogErr.hint || null,
+          backendProxyAvailable: sogErr.proxyUnavailable ? false : prev.backendProxyAvailable,
+          consecutiveFailures: prev.consecutiveFailures + 1,
+        }));
+
+        if (reason === 'manual') {
+          showToast(
+            isAuth
+              ? 'Identifiants SOGEDIPROMA requis — ouvrez le bouton SOGEDIPROMA pour vous connecter.'
+              : `Synchro SOGEDIPROMA impossible (${sogErr.code === 'TAILSCALE_OR_CORS_BLOCKED' || sogErr.code === 'TAILSCALE_TIMEOUT' ? 'Tailscale Funnel / CORS requis' : sogErr.message}). Cliquez sur SOGEDIPROMA pour le diagnostic.`
+          );
+        } else if (
+          reason === 'startup' &&
+          lastSogWarningShownRef.current !== sogErr.code &&
+          (isAuth || sogErr.code === 'TAILSCALE_OR_CORS_BLOCKED' || sogErr.code === 'TAILSCALE_TIMEOUT')
+        ) {
+          lastSogWarningShownRef.current = sogErr.code;
+          showToast(
+            isAuth
+              ? 'SOGEDIPROMA joignable : connectez-vous via le bouton SOGEDIPROMA en haut pour activer la synchro fluide.'
+              : 'SOGEDIPROMA Tailscale non joignable depuis le Cloud : ouvrez le bouton SOGEDIPROMA pour voir la commande Funnel/CORS.'
+          );
+        }
+      } finally {
+        sogSyncInFlightRef.current = false;
+      }
+    },
+    [showToast]
+  );
+
+  // 1. Synchro au démarrage + écoute retour d'onglet (focus / visibilitychange) + polling 30s
+  useEffect(() => {
+    const startupTimer = setTimeout(() => {
+      void runSogSync('startup');
     }, 350);
 
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
+    const handleFocusOrVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void runSogSync('focus');
     };
-  }, [showToast]);
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      void runSogSync('poll');
+    }, SOG_POLL_INTERVAL_MS);
+
+    return () => {
+      clearTimeout(startupTimer);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+      clearInterval(pollInterval);
+    };
+  }, [runSogSync]);
 
   const handleCloudSnapshotReceived = useCallback(
     (snapshot: CloudWorkbookSnapshot, isInitialLoad: boolean) => {
@@ -1108,6 +1240,8 @@ export default function App() {
         onResolveMerge={handleResolveMerge}
         onResolveKeepLocal={handleResolveKeepLocal}
         onResolveLoadCloud={handleResolveLoadCloud}
+        sogSyncStatus={sogSyncStatus}
+        onTriggerSogSync={() => void runSogSync('manual')}
       />
     </FirebaseProvider>
   );

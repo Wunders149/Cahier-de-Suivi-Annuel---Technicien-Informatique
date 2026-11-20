@@ -14,6 +14,30 @@ import {
   useSogedipromaLiveSnapshot,
 } from '../utils/sogedipromaLiveStore';
 import {
+  PAIRED_SOGEDIPROMA_URL,
+  LastSogedipromaSyncMeta,
+  ServerConfigStatus,
+  SogSyncError,
+  SogSyncErrorCode,
+  SogTransportMode,
+  buildFullStateModuleSelection,
+  clearSavedSogCredentials,
+  emitSogSyncStatusEvent,
+  fetchSogConfigSafe,
+  isPrivateLanUrl,
+  isTailscaleUrl,
+  loadAutoPollEnabled,
+  loadLastSogSyncMeta,
+  loadSavedSogCredentials,
+  persistSogServerUrl as persistSharedServerUrl,
+  resolvePreferredSogUrl,
+  saveAutoPollEnabled,
+  saveLastSogSyncMeta as saveSharedLastSyncMeta,
+  saveSogCredentials,
+  syncSogStateSmart,
+  testSogConnectionSmart,
+} from '../utils/sogedipromaLiveClient';
+import {
   Server,
   RefreshCw,
   Upload,
@@ -51,41 +75,6 @@ import {
 interface SogedipromaSyncPanelProps {
   currentData: CahierSuiviData;
   onApplySyncedData: (nextData: CahierSuiviData, summaryMsg: string) => void;
-}
-
-interface ServerConfigStatus {
-  hasDefaultUrl: boolean;
-  defaultUrl: string;
-  pairedUrl?: string;
-  isDefaultUrlPrivateLan?: boolean;
-  hasDefaultCredentials: boolean;
-  defaultUsername: string;
-}
-
-const PAIRED_SOGEDIPROMA_URL = 'https://win-rmt226g06rg.taild86fee.ts.net';
-const LAST_SYNC_META_KEY = 'sogediproma_last_sync_v1';
-
-interface LastSogedipromaSyncMeta {
-  at: string;
-  revision?: number;
-  summary: string;
-  url: string;
-}
-
-function isPrivateLanUrl(urlStr: string): boolean {
-  try {
-    const h = new URL(urlStr.trim()).hostname.toLowerCase();
-    if (h === 'localhost' || h === '::1' || h.endsWith('.local')) return true;
-    if (h.startsWith('127.') || h.startsWith('10.') || h.startsWith('192.168.')) return true;
-    const m = /^172\.(\d+)\./.exec(h);
-    if (m) {
-      const n = Number(m[1]);
-      return n >= 16 && n <= 31;
-    }
-    return false;
-  } catch {
-    return false;
-  }
 }
 
 const MODULE_LABELS: Array<{
@@ -173,6 +162,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   currentData,
   onApplySyncedData,
 }) => {
+  const initialCreds = loadSavedSogCredentials();
   const [serverConfig, setServerConfig] = useState<ServerConfigStatus>({
     hasDefaultUrl: true,
     defaultUrl: PAIRED_SOGEDIPROMA_URL,
@@ -182,41 +172,26 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     defaultUsername: '',
   });
   const [backendProxyAvailable, setBackendProxyAvailable] = useState<boolean>(true);
-  const [baseUrl, setBaseUrl] = useState<string>(() => {
-    try {
-      const stored = localStorage.getItem('sogediproma_server_url') || '';
-      const isCloudHost =
-        typeof window !== 'undefined' &&
-        window.location.hostname !== 'localhost' &&
-        window.location.hostname !== '127.0.0.1';
-      if (
-        !stored.trim() ||
-        stored.includes('pc-informatique.taild86fee.ts.net') ||
-        (isCloudHost && isPrivateLanUrl(stored))
-      ) {
-        return PAIRED_SOGEDIPROMA_URL;
-      }
-      return stored;
-    } catch {
-      return PAIRED_SOGEDIPROMA_URL;
-    }
-  });
-  const [lastSyncMeta, setLastSyncMeta] = useState<LastSogedipromaSyncMeta | null>(() => {
-    try {
-      const raw = localStorage.getItem(LAST_SYNC_META_KEY);
-      return raw ? (JSON.parse(raw) as LastSogedipromaSyncMeta) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [username, setUsername] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
+  const [baseUrl, setBaseUrl] = useState<string>(() => resolvePreferredSogUrl());
+  const [lastSyncMeta, setLastSyncMeta] = useState<LastSogedipromaSyncMeta | null>(() =>
+    loadLastSogSyncMeta()
+  );
+  const [username, setUsername] = useState<string>(initialCreds.username);
+  const [password, setPassword] = useState<string>(initialCreds.password);
+  const [rememberCreds, setRememberCreds] = useState<boolean>(initialCreds.rememberInBrowser);
+  const [autoPollEnabled, setAutoPollEnabled] = useState<boolean>(() => loadAutoPollEnabled());
+  const [lastTransport, setLastTransport] = useState<SogTransportMode | null>(
+    () => loadLastSogSyncMeta()?.transport ?? null
+  );
   const [isTesting, setIsTesting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [loadingPreset, setLoadingPreset] = useState<'full' | 'assets-18' | 'inventory-18' | null>(null);
-  const [copiedTunnelCmd, setCopiedTunnelCmd] = useState(false);
+  const [copiedTunnelCmd, setCopiedTunnelCmd] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorHint, setErrorHint] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<SogSyncErrorCode | null>(null);
   const [statusNotice, setStatusNotice] = useState<string | null>(null);
+  const [showTailscaleGuide, setShowTailscaleGuide] = useState(false);
 
   const [sourceRevision, setSourceRevision] = useState<number | null>(null);
   const [sourceOriginLabel, setSourceOriginLabel] = useState<string>('');
@@ -235,59 +210,45 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
   const jsonInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch('/api/sogediproma/config')
-      .then(async (r) => {
-        if (r.status === 404 || r.status === 405) {
-          setBackendProxyAvailable(false);
-          return null;
-        }
-        if (!r.ok) return null;
-        setBackendProxyAvailable(true);
-        return (await r.json()) as ServerConfigStatus;
-      })
-      .then((cfg: ServerConfigStatus | null) => {
-        if (!cfg) return;
-        setServerConfig(cfg);
-        const resolvedDefault = cfg.pairedUrl || cfg.defaultUrl || PAIRED_SOGEDIPROMA_URL;
-        const isCloudHost =
-          typeof window !== 'undefined' &&
-          window.location.hostname !== 'localhost' &&
-          window.location.hostname !== '127.0.0.1';
-        if (resolvedDefault) {
-          if (
-            !baseUrl ||
-            baseUrl.includes('pc-informatique.taild86fee.ts.net') ||
-            (isCloudHost && !cfg.isDefaultUrlPrivateLan && isPrivateLanUrl(baseUrl))
-          ) {
-            persistServerUrl(resolvedDefault);
-          }
-        }
-        if (!username && cfg.defaultUsername) {
-          setUsername(cfg.defaultUsername);
-        }
-      })
-      .catch(() => {
-        setBackendProxyAvailable(false);
-      });
+    fetchSogConfigSafe().then(({ proxyAvailable, config }) => {
+      setBackendProxyAvailable(proxyAvailable);
+      setServerConfig(config);
+      const resolvedUrl = resolvePreferredSogUrl(config);
+      if (resolvedUrl && resolvedUrl !== baseUrl) {
+        setBaseUrl(resolvedUrl);
+      }
+      if (!username && config.defaultUsername) {
+        setUsername(config.defaultUsername);
+      }
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const persistServerUrl = (val: string) => {
     setBaseUrl(val);
-    try {
-      localStorage.setItem('sogediproma_server_url', val);
-    } catch {
-      // Ignorer
-    }
+    persistSharedServerUrl(val);
   };
 
   const saveLastSyncMeta = (meta: LastSogedipromaSyncMeta) => {
     setLastSyncMeta(meta);
-    try {
-      localStorage.setItem(LAST_SYNC_META_KEY, JSON.stringify(meta));
-    } catch {
-      // Ignorer
+    saveSharedLastSyncMeta(meta);
+  };
+
+  const persistCredsIfPresent = (userVal: string, passVal: string, rememberVal: boolean) => {
+    if (userVal.trim() || passVal) {
+      saveSogCredentials({
+        username: userVal,
+        password: passVal,
+        rememberInBrowser: rememberVal,
+      });
     }
+  };
+
+  const copyCommand = (cmd: string, key: string) => {
+    navigator.clipboard?.writeText(cmd).then(() => {
+      setCopiedTunnelCmd(key);
+      setTimeout(() => setCopiedTunnelCmd(null), 2000);
+    });
   };
 
   const safeParseJson = async <T,>(res: Response): Promise<T | null> => {
@@ -299,142 +260,53 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
     }
   };
 
-  const tryDirectBrowserFetch = async (
-    targetBaseUrl: string,
-    mode: 'test' | 'sync'
-  ): Promise<{
-    reachable?: boolean;
-    authenticated?: boolean;
-    settings?: { company?: string };
-    revision?: number;
-    data?: SogedipromaStateData;
-  }> => {
-    const cleanUrl = targetBaseUrl.trim().replace(/\/+$/, '');
-    if (!cleanUrl) {
-      throw new Error(
-        "Cet hébergement statique n'exécute pas le serveur proxy (/api/*). Ouvrez l'application via son URL serveur (ais-dev / localhost) ou saisissez l'URL complète https://... ci-dessus."
-      );
-    }
-
-    try {
-      const statusRes = await fetch(`${cleanUrl}/api/status`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      const statusData = await safeParseJson<{
-        authenticated?: boolean;
-        settings?: { company?: string };
-      }>(statusRes);
-      if (!statusRes.ok) {
-        throw new Error(`HTTP ${statusRes.status} sur ${cleanUrl}/api/status`);
-      }
-
-      let authenticated = Boolean(statusData?.authenticated);
-      let loginPayload: { revision?: number; data?: SogedipromaStateData } | null = null;
-
-      if (username.trim() && password) {
-        const loginRes = await fetch(`${cleanUrl}/api/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ username: username.trim(), password }),
-        });
-        if (!loginRes.ok) {
-          throw new Error('Identifiants SOGEDIPROMA refusés par le serveur distant.');
-        }
-        authenticated = true;
-        loginPayload = await safeParseJson<{ revision?: number; data?: SogedipromaStateData }>(loginRes);
-      }
-
-      if (mode === 'test') {
-        return {
-          reachable: true,
-          authenticated,
-          settings: statusData?.settings,
-        };
-      }
-
-      if (loginPayload?.data) {
-        return {
-          revision: loginPayload.revision,
-          data: loginPayload.data,
-        };
-      }
-
-      const stateRes = await fetch(`${cleanUrl}/api/state`, {
-        method: 'GET',
-        credentials: 'include',
-      });
-      const stateJson = await safeParseJson<{ revision?: number; data?: SogedipromaStateData }>(
-        stateRes
-      );
-      if (!stateRes.ok || !stateJson?.data) {
-        throw new Error(`Impossible de lire /api/state (HTTP ${stateRes.status}).`);
-      }
-      return {
-        revision: stateJson.revision,
-        data: stateJson.data,
-      };
-    } catch (directErr) {
-      const msg = directErr instanceof Error ? directErr.message : '';
-      if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || !msg) {
-        throw new Error(
-          "Hébergement statique (sans serveur Express /api/sogediproma/*) et blocage CORS par le serveur distant. Solution immédiate : utilisez l'URL complète avec serveur Express actif (ais-dev-... ou exécution locale), ou l'Option B (export JSON)."
-        );
-      }
-      throw directErr;
-    }
-  };
-
   const handleTestConnection = async () => {
     setErrorMsg(null);
+    setErrorHint(null);
+    setErrorCode(null);
     setStatusNotice(null);
+    persistCredsIfPresent(username, password, rememberCreds);
+
     try {
       setIsTesting(true);
-      const res = await fetch('/api/sogediproma/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl: baseUrl.trim() || undefined,
-          username: username.trim() || undefined,
-          password: password || undefined,
-        }),
+      const result = await testSogConnectionSmart({
+        baseUrl: baseUrl.trim() || serverConfig.defaultUrl,
+        username: username.trim() || undefined,
+        password: password || undefined,
       });
-
-      if (res.status === 404 || res.status === 405) {
-        setBackendProxyAvailable(false);
-        const direct = await tryDirectBrowserFetch(baseUrl || serverConfig.defaultUrl, 'test');
-        const companyName = direct.settings?.company || 'SOGEDIPROMA';
-        setStatusNotice(
-          direct.authenticated
-            ? `Connexion directe réussie au serveur ${companyName}.`
-            : `Serveur ${companyName} joignable (/api/status OK).`
-        );
-        return;
-      }
-
-      const payload = await safeParseJson<{
-        error?: string;
-        reachable?: boolean;
-        authenticated?: boolean;
-        needsSetup?: boolean;
-        settings?: { company?: string };
-      }>(res);
-      if (!res.ok) {
-        throw new Error(payload?.error || `Erreur HTTP ${res.status}`);
-      }
-      const companyName = payload?.settings?.company || 'SOGEDIPROMA';
+      setBackendProxyAvailable(!result.proxyUnavailable);
+      setLastTransport(result.transport);
+      const companyName = result.settings?.company || 'SOGEDIPROMA';
+      const via =
+        result.transport === 'direct'
+          ? 'Lien Direct Navigateur (Tailscale)'
+          : 'Proxy Serveur Express';
+      const revTxt = result.revision !== undefined ? ` · Rév. #${result.revision}` : '';
       setStatusNotice(
-        payload?.authenticated
-          ? `Connexion authentifiée réussie au serveur ${companyName}.`
-          : `Serveur ${companyName} joignable (/api/status OK).`
+        result.authenticated
+          ? `Connexion authentifiée réussie au serveur ${companyName} via ${via}${revTxt}.`
+          : `Serveur ${companyName} joignable via ${via} (/api/status OK${revTxt}).`
       );
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Impossible de joindre le serveur SOGEDIPROMA.'
-      );
+      if (err instanceof SogSyncError) {
+        setErrorMsg(err.message);
+        setErrorHint(err.hint || null);
+        setErrorCode(err.code);
+        if (err.proxyUnavailable) setBackendProxyAvailable(false);
+        if (
+          err.code === 'TAILSCALE_TIMEOUT' ||
+          err.code === 'TAILSCALE_OR_CORS_BLOCKED' ||
+          err.code === 'TAILSCALE_UNREACHABLE'
+        ) {
+          setShowTailscaleGuide(true);
+        }
+      } else {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : 'Impossible de joindre le serveur SOGEDIPROMA.'
+        );
+      }
     } finally {
       setIsTesting(false);
     }
@@ -461,51 +333,41 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
 
   const executeLiveFetch = async (applyImmediately: boolean) => {
     setErrorMsg(null);
+    setErrorHint(null);
+    setErrorCode(null);
     setStatusNotice(null);
+    persistCredsIfPresent(username, password, rememberCreds);
+
     try {
       setIsSyncing(true);
-      let payload: { error?: string; revision?: number; data?: SogedipromaStateData } | null = null;
+      emitSogSyncStatusEvent({ phase: 'syncing' });
 
-      const res = await fetch('/api/sogediproma/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseUrl: baseUrl.trim() || undefined,
-          username: username.trim() || undefined,
-          password: password || undefined,
-        }),
+      const syncRes = await syncSogStateSmart({
+        baseUrl: baseUrl.trim() || serverConfig.defaultUrl,
+        username: username.trim() || undefined,
+        password: password || undefined,
       });
 
-      if (res.status === 404 || res.status === 405) {
-        setBackendProxyAvailable(false);
-        payload = await tryDirectBrowserFetch(baseUrl || serverConfig.defaultUrl, 'sync');
-      } else {
-        payload = await safeParseJson<{
-          error?: string;
-          revision?: number;
-          data?: SogedipromaStateData;
-        }>(res);
-        if (!res.ok || !payload?.data) {
-          throw new Error(payload?.error || `Erreur HTTP ${res.status} sur /api/sogediproma/sync`);
-        }
-      }
+      setBackendProxyAvailable(!syncRes.proxyUnavailable);
+      setLastTransport(syncRes.transport);
 
-      if (!payload?.data) {
+      if (!syncRes.data) {
         throw new Error('Réponse vide reçue depuis SOGEDIPROMA.');
       }
 
-      saveSogedipromaLiveSnapshot(payload.data, payload.revision);
-      const mapped = mapSogedipromaToWorkbookDelta(payload.data);
-      const populatedSel = buildPopulatedSelection(mapped);
-      const revLabel = payload.revision ?? '—';
+      saveSogedipromaLiveSnapshot(syncRes.data, syncRes.revision);
+      const mapped = mapSogedipromaToWorkbookDelta(syncRes.data);
+      const fullSel = buildFullStateModuleSelection(syncRes.data);
+      const revLabel = syncRes.revision ?? '—';
+      const via = syncRes.transport === 'direct' ? 'Lien direct' : 'Proxy serveur';
 
       if (applyImmediately) {
-        const result = applySogedipromaMerge(currentData, mapped, populatedSel, mergeMode);
+        const result = applySogedipromaMerge(currentData, mapped, fullSel, mergeMode);
         if (result.estimatedBytes >= 950 * 1024) {
           setPendingDelta(mapped);
-          setSelectedModules(populatedSel);
-          setSourceRevision(typeof payload.revision === 'number' ? payload.revision : null);
-          setSourceOriginLabel(`Serveur live (${baseUrl || serverConfig.defaultUrl || 'env'})`);
+          setSelectedModules(fullSel);
+          setSourceRevision(typeof syncRes.revision === 'number' ? syncRes.revision : null);
+          setSourceOriginLabel(`Serveur live (${syncRes.usedUrl})`);
           setErrorMsg(
             `Taille Firestore élevée (${Math.round(result.estimatedBytes / 1024)} Ko / 1 024 Ko). Sélectionnez manuellement les modules ci-dessous avant d'appliquer.`
           );
@@ -521,34 +383,70 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         if (mapped.objectifsAnnuels.length) counts.push(`${mapped.objectifsAnnuels.length} budgets`);
         if (mapped.jalonsCalendrier.length) counts.push(`${mapped.jalonsCalendrier.length} jalon(s)`);
         const summary = counts.length
-          ? `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée : ${counts.join(', ')}.`
-          : `Sync directe SOGEDIPROMA (rév. ${revLabel}) appliquée.`;
+          ? `Sync directe SOGEDIPROMA (rév. #${revLabel} · ${via}) : ${counts.join(', ')}.`
+          : `Sync directe SOGEDIPROMA (rév. #${revLabel} · ${via}) appliquée.`;
 
+        const nowIso = new Date().toISOString();
         setPendingDelta(null);
         setStatusNotice(summary);
         saveLastSyncMeta({
-          at: new Date().toISOString(),
-          revision: typeof payload.revision === 'number' ? payload.revision : undefined,
+          at: nowIso,
+          revision: typeof syncRes.revision === 'number' ? syncRes.revision : undefined,
           summary,
-          url: baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL,
+          url: syncRes.usedUrl,
+          transport: syncRes.transport,
+        });
+        emitSogSyncStatusEvent({
+          phase: 'synced',
+          transport: syncRes.transport,
+          lastSyncedAt: nowIso,
+          revision: typeof syncRes.revision === 'number' ? syncRes.revision : null,
+          errorCode: null,
+          message: summary,
+          hint: null,
+          backendProxyAvailable: !syncRes.proxyUnavailable,
+          consecutiveFailures: 0,
         });
         onApplySyncedData(result.nextData, summary);
         return;
       }
 
       setPendingDelta(mapped);
-      setSelectedModules(populatedSel);
-      setSourceRevision(typeof payload.revision === 'number' ? payload.revision : null);
-      setSourceOriginLabel(`Serveur live (${baseUrl || serverConfig.defaultUrl || 'env'})`);
+      setSelectedModules(fullSel);
+      setSourceRevision(typeof syncRes.revision === 'number' ? syncRes.revision : null);
+      setSourceOriginLabel(`Serveur live (${syncRes.usedUrl} · ${via})`);
       setStatusNotice(
-        `Snapshot GET /api/state récupéré (révision ${revLabel}). Sélectionnez les modules à importer ci-dessous.`
+        `Snapshot GET /api/state récupéré (rév. #${revLabel} via ${via}). Sélectionnez les modules à importer ci-dessous.`
       );
     } catch (err) {
-      setErrorMsg(
-        err instanceof Error
-          ? err.message
-          : 'Échec de la récupération depuis /api/state.'
-      );
+      if (err instanceof SogSyncError) {
+        setErrorMsg(err.message);
+        setErrorHint(err.hint || null);
+        setErrorCode(err.code);
+        if (err.proxyUnavailable) setBackendProxyAvailable(false);
+        if (
+          err.code === 'TAILSCALE_TIMEOUT' ||
+          err.code === 'TAILSCALE_OR_CORS_BLOCKED' ||
+          err.code === 'TAILSCALE_UNREACHABLE'
+        ) {
+          setShowTailscaleGuide(true);
+        }
+        emitSogSyncStatusEvent({
+          phase:
+            err.code === 'AUTH_REQUIRED' || err.code === 'AUTH_FAILED'
+              ? 'auth_required'
+              : 'unreachable',
+          errorCode: err.code,
+          message: err.message,
+          hint: err.hint || null,
+        });
+      } else {
+        setErrorMsg(
+          err instanceof Error
+            ? err.message
+            : 'Échec de la récupération depuis /api/state.'
+        );
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -882,13 +780,18 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           <div className="flex items-center gap-2">
             <PlugZap className="w-4 h-4 text-blue-600 shrink-0" />
             <h4 className="font-bold text-slate-900 text-[13px]">
-              Connecteur API SOGEDIPROMA · Appairage Actif
+              Connecteur API SOGEDIPROMA · Synchro Fluide
             </h4>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[11px] font-mono font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
               {serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL}
             </span>
+            {lastTransport && (
+              <span className="text-[10px] font-semibold text-blue-800 bg-white px-2 py-0.5 rounded border border-blue-200">
+                {lastTransport === 'direct' ? 'Mode : Direct Navigateur' : 'Mode : Proxy Cloud'}
+              </span>
+            )}
             <a
               href={baseUrl.trim() || serverConfig.defaultUrl || PAIRED_SOGEDIPROMA_URL}
               target="_blank"
@@ -901,11 +804,38 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           </div>
         </div>
         <p className="text-xs text-slate-600 leading-relaxed">
-          Ce cahier fonctionne en paire directe avec votre instance SOGEDIPROMA (<code className="font-mono text-[11px]">GET /api/state</code>) pour synchroniser{' '}
-          <strong className="font-semibold text-slate-800">consommables &amp; achats</strong>,{' '}
-          <strong className="font-semibold text-slate-800">matériels &amp; équipements</strong>,{' '}
-          tickets, suivis du travail, maintenances et abonnements.
+          Synchronisation automatique au démarrage, au retour d&apos;onglet et toutes les 30 secondes (<code className="font-mono text-[11px]">GET /api/state</code>) avec bascule automatique entre <strong className="font-semibold text-slate-800">Proxy Cloud Express</strong> et <strong className="font-semibold text-slate-800">Lien Direct Navigateur Tailscale</strong>.
         </p>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+          <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] font-medium text-slate-800">
+            <input
+              type="checkbox"
+              checked={autoPollEnabled}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setAutoPollEnabled(next);
+                saveAutoPollEnabled(next);
+                emitSogSyncStatusEvent({ autoPollEnabled: next });
+              }}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            />
+            <span>Synchronisation auto continue (toutes les 30 s + au retour sur cet onglet)</span>
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowTailscaleGuide((v) => !v)}
+            className="text-[11px] font-semibold text-blue-700 hover:underline inline-flex items-center gap-1"
+          >
+            <span>Guide Tailscale HTTPS (Serve vs Funnel &amp; CORS)</span>
+            {showTailscaleGuide ? (
+              <ChevronUp className="w-3 h-3" />
+            ) : (
+              <ChevronDown className="w-3 h-3" />
+            )}
+          </button>
+        </div>
+
         {lastSyncMeta && (
           <div className="text-[11px] text-slate-600 bg-white/80 border border-blue-200/80 rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between gap-2">
             <span>
@@ -922,16 +852,97 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         )}
       </div>
 
+      {/* Guide de diagnostic & configuration Tailscale pour synchro fluide */}
+      {(showTailscaleGuide ||
+        errorCode === 'TAILSCALE_TIMEOUT' ||
+        errorCode === 'TAILSCALE_OR_CORS_BLOCKED' ||
+        errorCode === 'TAILSCALE_UNREACHABLE') && (
+        <div className="p-4 rounded-xl bg-amber-50/90 border border-amber-300 text-amber-950 space-y-3 text-xs">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <h5 className="font-bold text-amber-950">
+                Pourquoi un lien <code className="font-mono">*.ts.net</code> ne se synchronise pas encore depuis le Cloud ?
+              </h5>
+              <p className="text-[11px] text-amber-900 leading-relaxed">
+                Par défaut, <code className="font-mono font-semibold">tailscale serve</code> expose votre application <strong>uniquement sur votre VPN privé Tailscale</strong> : votre navigateur y accède, mais le serveur Cloud du cahier expire en délai dépassé (timeout). Pour une synchronisation 100 % fluide en continu, utilisez <strong>l&apos;une des deux méthodes</strong> sur la machine Windows <code className="font-mono font-semibold">WIN-RMT226G06RG</code> :
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTailscaleGuide(false)}
+              className="text-amber-700 hover:text-amber-950 p-1"
+              aria-label="Fermer le guide Tailscale"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-2 bg-white border border-amber-200 rounded-lg p-3">
+            <div className="font-semibold text-[11px] text-slate-900">
+              Méthode 1 (Recommandée · Marche partout &amp; auto-sync permanente) — Activer Tailscale Funnel :
+            </div>
+            <p className="text-[11px] text-slate-600">
+              Dans PowerShell (Administrateur) sur <code className="font-mono">WIN-RMT226G06RG</code>, remplacez <code className="font-mono">3001</code> par le port local de SOGEDIPROMA (ex. 3000, 3001 ou 8080) :
+            </p>
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5">
+              <code className="font-mono text-[11px] text-slate-900 select-all">
+                tailscale funnel --bg 3001
+              </code>
+              <button
+                type="button"
+                onClick={() => copyCommand('tailscale funnel --bg 3001', 'funnel')}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-950 font-semibold text-[10px] shrink-0 transition"
+              >
+                <Copy className="w-3 h-3" />
+                <span>{copiedTunnelCmd === 'funnel' ? 'Copié !' : 'Copier'}</span>
+              </button>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5">
+              <code className="font-mono text-[11px] text-slate-900 select-all">
+                tailscale funnel status
+              </code>
+              <button
+                type="button"
+                onClick={() => copyCommand('tailscale funnel status', 'status')}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-950 font-semibold text-[10px] shrink-0 transition"
+              >
+                <Copy className="w-3 h-3" />
+                <span>{copiedTunnelCmd === 'status' ? 'Copié !' : 'Copier'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 bg-white border border-amber-200 rounded-lg p-3">
+            <div className="font-semibold text-[11px] text-slate-900">
+              Méthode 2 (Sans Funnel · Réseau privé VPN uniquement) — Autoriser CORS sur SOGEDIPROMA :
+            </div>
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              Si vous souhaitez garder Tailscale privé (sans Funnel public), votre navigateur connecté au VPN Tailscale peut synchroniser <strong>directement</strong> à condition que le serveur SOGEDIPROMA réponde aux en-têtes <code className="font-mono">Access-Control-Allow-Origin</code> (avec l&apos;origine de ce cahier) et <code className="font-mono">Access-Control-Allow-Credentials: true</code>.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Alertes erreur / succès */}
       {errorMsg && (
         <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 flex items-start justify-between gap-2 text-xs">
           <div className="flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
+            <div className="space-y-1">
+              <span className="block font-medium">{errorMsg}</span>
+              {errorHint && (
+                <span className="block text-[11px] text-red-700 leading-relaxed">
+                  {errorHint}
+                </span>
+              )}
+            </div>
           </div>
           <button
             type="button"
-            onClick={() => setErrorMsg(null)}
+            onClick={() => {
+              setErrorMsg(null);
+              setErrorHint(null);
+            }}
             className="text-red-500 hover:text-red-700 p-0.5"
             aria-label="Fermer l'erreur"
           >
@@ -947,7 +958,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
         </div>
       )}
 
-      {/* Méthode A : Connexion Serveur Directe via Proxy Backend */}
+      {/* Méthode A : Connexion Serveur Directe via Proxy Backend ou Direct Navigateur */}
       <form
         onSubmit={handleFetchLiveState}
         className="p-4 rounded-xl bg-white border border-slate-200 space-y-3.5"
@@ -970,7 +981,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
           <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
             <span>
-              Vous utilisez actuellement l&apos;hébergement <strong>statique</strong> (le proxy backend <code className="font-mono">/api/sogediproma/*</code> renvoie HTTP 404/405). Pour synchroniser en direct avec <code className="font-mono">https://win-rmt226g06rg.taild86fee.ts.net</code> sans erreur CORS, ouvrez l&apos;application via son <strong>URL serveur active (ais-dev)</strong> ou autorisez les requêtes CORS sur votre serveur SOGEDIPROMA.
+              Vous utilisez actuellement l&apos;hébergement <strong>statique</strong> (le proxy backend <code className="font-mono">/api/sogediproma/*</code> renvoie HTTP 404/405). L&apos;application bascule automatiquement en mode <strong>Lien Direct Navigateur</strong> (CORS requis sur SOGEDIPROMA), ou ouvrez l&apos;URL serveur active (<strong>ais-dev</strong>).
             </span>
           </div>
         )}
@@ -996,7 +1007,7 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
               value={baseUrl}
               onChange={(e) => persistServerUrl(e.target.value)}
               placeholder={
-                serverConfig.defaultUrl || 'https://it-sogediproma.exemple.com ou http://192.168.100.3:8080'
+                serverConfig.defaultUrl || 'https://win-rmt226g06rg.taild86fee.ts.net'
               }
               required={!serverConfig.hasDefaultUrl}
               className={`${fieldInputClass} font-mono text-xs`}
@@ -1008,6 +1019,17 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
                 (window.location.hostname === 'localhost' ||
                   window.location.hostname === '127.0.0.1');
               const tunnelCmd = `cloudflared tunnel --url ${targetUrl || 'http://192.168.100.3:8080'}`;
+
+              if (isTailscaleUrl(targetUrl)) {
+                return (
+                  <div className="text-[11px] text-slate-500 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                    <span>
+                      Nœud Tailscale détecté (<code className="font-mono">{new URL(targetUrl).hostname}</code>) : bascule automatique Proxy Cloud (si Funnel actif) ↔ Direct Navigateur (si VPN Tailscale + CORS).
+                    </span>
+                  </div>
+                );
+              }
 
               if (!isPrivateLanUrl(targetUrl)) return null;
 
@@ -1036,16 +1058,11 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
                     </code>
                     <button
                       type="button"
-                      onClick={() => {
-                        navigator.clipboard?.writeText(tunnelCmd).then(() => {
-                          setCopiedTunnelCmd(true);
-                          setTimeout(() => setCopiedTunnelCmd(false), 2000);
-                        });
-                      }}
+                      onClick={() => copyCommand(tunnelCmd, 'lan')}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold text-[10px] shrink-0 transition"
                     >
                       <Copy className="w-3 h-3" />
-                      <span>{copiedTunnelCmd ? 'Copié !' : 'Copier'}</span>
+                      <span>{copiedTunnelCmd === 'lan' ? 'Copié !' : 'Copier'}</span>
                     </button>
                   </div>
                 </div>
@@ -1085,6 +1102,43 @@ export const SogedipromaSyncPanel: React.FC<SogedipromaSyncPanelProps> = ({
               autoComplete="current-password"
               className={fieldInputClass}
             />
+          </div>
+
+          <div className="sm:col-span-3 flex flex-wrap items-center justify-between gap-2">
+            <label className="inline-flex items-center gap-2 cursor-pointer text-[11px] text-slate-700">
+              <input
+                type="checkbox"
+                checked={rememberCreds}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  setRememberCreds(next);
+                  saveSogCredentials({
+                    username,
+                    password,
+                    rememberInBrowser: next,
+                  });
+                }}
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>
+                Mémoriser ces identifiants sur ce navigateur pour la synchro automatique continue
+              </span>
+            </label>
+            {(username || password) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUsername('');
+                  setPassword('');
+                  setRememberCreds(false);
+                  clearSavedSogCredentials();
+                  setStatusNotice('Identifiants locaux effacés de ce navigateur.');
+                }}
+                className="text-[11px] text-slate-500 hover:text-red-600 underline"
+              >
+                Effacer identifiants locaux
+              </button>
+            )}
           </div>
         </div>
 

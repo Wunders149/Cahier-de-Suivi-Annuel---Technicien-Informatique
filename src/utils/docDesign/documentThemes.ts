@@ -16,10 +16,18 @@ export type DocumentCategory =
 
 export type RgbColor = [number, number, number];
 
+export interface EditorialProfile {
+  coverStyle: 'full_cover' | 'executive_banner';
+  useTocByDefault: boolean;
+  fontFamily: 'helvetica' | 'times';
+  chartPaletteRgb: RgbColor[];
+}
+
 export interface DocumentThemePalette {
   category: DocumentCategory;
   categoryBadge: string;
   confidentialityLabel: string;
+  editorial: EditorialProfile;
   primaryHex: string;
   secondaryHex: string;
   accentHex: string;
@@ -60,7 +68,8 @@ function buildTheme(
   confidentialityLabel: string,
   primaryHex: string,
   secondaryHex: string,
-  accentHex: string
+  accentHex: string,
+  editorialOverrides?: Partial<EditorialProfile>
 ): DocumentThemePalette {
   const lightBgHex = 'F1F5F9';
   const zebraBgHex = 'F8FAFC';
@@ -72,10 +81,30 @@ function buildTheme(
   const warningHex = 'B45309';
   const dangerHex = 'B91C1C';
 
+  const primaryRgb = hexToRgb(primaryHex);
+  const secondaryRgb = hexToRgb(secondaryHex);
+  const accentRgb = hexToRgb(accentHex);
+  const successRgb = hexToRgb(successHex);
+  const warningRgb = hexToRgb(warningHex);
+
+  const editorial: EditorialProfile = {
+    coverStyle: editorialOverrides?.coverStyle ?? 'executive_banner',
+    useTocByDefault: editorialOverrides?.useTocByDefault ?? false,
+    fontFamily: editorialOverrides?.fontFamily ?? 'helvetica',
+    chartPaletteRgb: editorialOverrides?.chartPaletteRgb ?? [
+      primaryRgb,
+      accentRgb,
+      successRgb,
+      warningRgb,
+      secondaryRgb,
+    ],
+  };
+
   return {
     category,
     categoryBadge,
     confidentialityLabel,
+    editorial,
     primaryHex,
     secondaryHex,
     accentHex,
@@ -88,17 +117,17 @@ function buildTheme(
     successHex,
     warningHex,
     dangerHex,
-    primaryRgb: hexToRgb(primaryHex),
-    secondaryRgb: hexToRgb(secondaryHex),
-    accentRgb: hexToRgb(accentHex),
+    primaryRgb,
+    secondaryRgb,
+    accentRgb,
     lightBgRgb: hexToRgb(lightBgHex),
     zebraBgRgb: hexToRgb(zebraBgHex),
     borderRgb: hexToRgb(borderHex),
     textDarkRgb: hexToRgb(textDarkHex),
     textBodyRgb: hexToRgb(textBodyHex),
     textMutedRgb: hexToRgb(textMutedHex),
-    successRgb: hexToRgb(successHex),
-    warningRgb: hexToRgb(warningHex),
+    successRgb,
+    warningRgb,
     dangerRgb: hexToRgb(dangerHex),
   };
 }
@@ -110,7 +139,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Document Interne Confidentiel — Direction des Systèmes d\'Information',
     '0F2A4A',
     '1E3A8A',
-    '0284C7'
+    '0284C7',
+    { coverStyle: 'full_cover', useTocByDefault: true }
   ),
   monthly_report: buildTheme(
     'monthly_report',
@@ -118,7 +148,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Livrable Mensuel Officiel — Suivi d\'Exploitation SI',
     '0F2A4A',
     '0369A1',
-    '0D9488'
+    '0D9488',
+    { coverStyle: 'full_cover', useTocByDefault: true }
   ),
   technical_incident: buildTheme(
     'technical_incident',
@@ -126,7 +157,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Document Technique — Support & Résolution d\'Incident',
     '0F2A4A',
     '1D4ED8',
-    '0284C7'
+    '0284C7',
+    { coverStyle: 'executive_banner', useTocByDefault: false }
   ),
   technical_deployment: buildTheme(
     'technical_deployment',
@@ -134,7 +166,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Document Technique — Déploiement & Recette Opérationnelle',
     '0F2A4A',
     '0F766E',
-    '0284C7'
+    '0284C7',
+    { coverStyle: 'executive_banner', useTocByDefault: false }
   ),
   technical_maintenance: buildTheme(
     'technical_maintenance',
@@ -142,7 +175,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Document Technique — Maintien en Condition Opérationnelle',
     '1E293B',
     '3730A3',
-    '0284C7'
+    '0284C7',
+    { coverStyle: 'executive_banner', useTocByDefault: false }
   ),
   official_letter: buildTheme(
     'official_letter',
@@ -150,7 +184,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Correspondance Administrative & Technique',
     '0F2A4A',
     '334155',
-    '1E3A8A'
+    '1E3A8A',
+    { coverStyle: 'executive_banner', useTocByDefault: false, fontFamily: 'times' }
   ),
   management_table: buildTheme(
     'management_table',
@@ -158,7 +193,8 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Registre de Suivi Opérationnel',
     '0F2A4A',
     '1E3A8A',
-    '0369A1'
+    '0369A1',
+    { coverStyle: 'executive_banner', useTocByDefault: false }
   ),
   attestation: buildTheme(
     'attestation',
@@ -166,15 +202,17 @@ export const DOCUMENT_THEMES: Record<DocumentCategory, DocumentThemePalette> = {
     'Attestation Officielle DSI',
     '0F2A4A',
     '065F46',
-    '0284C7'
+    '0284C7',
+    { coverStyle: 'executive_banner', useTocByDefault: false, fontFamily: 'times' }
   ),
   invoice_quote: buildTheme(
     'invoice_quote',
-    'ESTIMATION BUDGÉTAIRE & CHIFFRAGE',
-    'Document Financier & Investissement IT',
+    'ANALYSE FINANCIÈRE, BUDGET & ROI IT',
+    'Document Financier & Investissement IT — Confidentiel Direction',
     '0F2A4A',
-    '1E3A8A',
-    '0284C7'
+    '065F46',
+    '0284C7',
+    { coverStyle: 'full_cover', useTocByDefault: true }
   ),
 };
 
@@ -182,41 +220,106 @@ export function getDocumentTheme(category: DocumentCategory): DocumentThemePalet
   return DOCUMENT_THEMES[category] || DOCUMENT_THEMES.annual_workbook;
 }
 
+// Caractères WinAnsi (Windows-1252) > 0xFF nativement supportés par jsPDF v4 Helvetica/Times
+const WINANSI_EXTENDED_CHARS = new Set([
+  '€', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', 'Ž',
+  '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', 'ž', 'Ÿ',
+]);
+
 /**
- * Normalise un texte pour jsPDF (encodage WinAnsi Helvetica sans glyphes cassés).
- * Remplace notamment les espaces insécables étroites (\u202F) produites par
- * Number.toLocaleString('fr-FR'), les flèches et ligatures non WinAnsi.
+ * Normalise un texte pour jsPDF (encodage WinAnsi / Windows-1252 avec conservation intégrale
+ * des accents français et caractères éditoriaux `œ`, `€`, `•`, `–`, `—`, `’`, `«`, `»`, `…`).
+ * Supprime les espaces insécables étroites (\u202F), emojis et glyphes hors WinAnsi.
  */
 export function sanitizePdfText(value: unknown): string {
   if (value === null || value === undefined) return '—';
   const raw = String(value);
   if (!raw.trim()) return '—';
 
-  return raw
+  const normalized = raw
     // Espaces insécables / étroites -> espace ASCII standard
-    .replace(/[\u00A0\u2007\u202F\u2009\u200B-\u200D\uFEFF]/g, ' ')
-    // Ligatures et caractères spéciaux hors WinAnsi standard
-    .replace(/œ/g, 'oe')
-    .replace(/Œ/g, 'OE')
+    .replace(/[\u00A0\u2007\u202F\u2009\u2002-\u2006\u2008\u200A]/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    // Puces & flèches hors WinAnsi -> équivalents propres
+    .replace(/[▪▫‣◦●○◆◇]/g, '•')
     .replace(/→/g, '->')
     .replace(/←/g, '<-')
     .replace(/↔/g, '<->')
     .replace(/⇒/g, '=>')
     .replace(/≥/g, '>=')
     .replace(/≤/g, '<=')
+    .replace(/≠/g, '!=')
     .replace(/≈/g, '~')
-    .replace(/€ /g, 'EUR ')
-    .replace(/€/g, 'EUR')
-    .replace(/[✓✔]/g, '[OK]')
-    .replace(/[✗✘]/g, '[X]')
+    .replace(/[✓✔☑]/g, '[OK]')
+    .replace(/[✗✘☒]/g, '[X]')
     .replace(/[⚠⚡]/g, '[!]')
     // Caractères de contrôle interdits (hors \n et \t)
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     // Emojis / paires de substitution hors BMP
     .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
     .replace(/\r\n/g, '\n')
-    .replace(/\t/g, '  ')
-    .trim();
+    .replace(/\t/g, '  ');
+
+  // Filtrer tout caractère résiduel > 0xFF qui ne fait pas partie de WinAnsi
+  let safe = '';
+  for (let i = 0; i < normalized.length; i++) {
+    const ch = normalized[i];
+    const code = ch.charCodeAt(0);
+    if (code <= 0xff || WINANSI_EXTENDED_CHARS.has(ch)) {
+      safe += ch;
+    }
+  }
+
+  return safe.trim() || '—';
+}
+
+/**
+ * Détecte d'éventuels caractères résiduels non supportés par WinAnsi dans une chaîne déjà destinée au PDF.
+ */
+export function findUnsafePdfChars(text: string): string[] {
+  const bad: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const code = ch.charCodeAt(0);
+    if (
+      (code < 0x20 && ch !== '\n' && ch !== '\r') ||
+      (code > 0xff && !WINANSI_EXTENDED_CHARS.has(ch))
+    ) {
+      bad.push(ch);
+    }
+  }
+  return Array.from(new Set(bad));
+}
+
+/**
+ * Insère des points de césure souples dans les jetons très longs sans espaces (URL, MAC, séries)
+ * afin d'éviter tout débordement hors cellule dans les tableaux étroits.
+ */
+export function wrapLongTokensForPdf(text: string, maxTokenLen = 28): string {
+  if (!text || text.length <= maxTokenLen) return text;
+  return text
+    .split(/(\s+)/)
+    .map((part) => {
+      if (/^\s+$/.test(part) || part.length <= maxTokenLen) return part;
+      // Coupe proprement après /, -, _, . ou par tranches
+      const chunks: string[] = [];
+      let remaining = part;
+      while (remaining.length > maxTokenLen) {
+        let cut = -1;
+        for (let i = maxTokenLen; i >= Math.floor(maxTokenLen * 0.55); i--) {
+          if ('/_-.=:'.includes(remaining[i])) {
+            cut = i + 1;
+            break;
+          }
+        }
+        if (cut <= 0) cut = maxTokenLen;
+        chunks.push(remaining.slice(0, cut));
+        remaining = remaining.slice(cut);
+      }
+      if (remaining) chunks.push(remaining);
+      return chunks.join(' ');
+    })
+    .join('');
 }
 
 /**
@@ -247,6 +350,25 @@ export function formatAriary(amount: number | undefined | null, forPdf = false):
 }
 
 /**
+ * Formate un montant compact pour axes de graphiques PDF (ex: 12,5 M Ar, 450 k Ar).
+ */
+export function formatCompactAriaryPdf(amount: number): string {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) {
+    return sanitizePdfText(`${sign}${(abs / 1_000_000_000).toFixed(1).replace('.', ',')} Md`);
+  }
+  if (abs >= 1_000_000) {
+    const m = abs / 1_000_000;
+    return sanitizePdfText(`${sign}${m >= 10 ? Math.round(m) : m.toFixed(1).replace('.', ',')} M`);
+  }
+  if (abs >= 1_000) {
+    return sanitizePdfText(`${sign}${Math.round(abs / 1_000)} k`);
+  }
+  return sanitizePdfText(`${Math.round(amount)}`);
+}
+
+/**
  * Date de génération du document formatée en français (JJ/MM/AAAA).
  */
 export function formatGenerationDateFr(date = new Date()): string {
@@ -254,6 +376,17 @@ export function formatGenerationDateFr(date = new Date()): string {
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const yyyy = date.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+/**
+ * Date éditoriale longue en français (ex: 20 novembre 2026).
+ */
+export function formatEditorialDateFr(date = new Date()): string {
+  const months = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+  ];
+  return `${date.getDate()} ${months[date.getMonth()] || ''} ${date.getFullYear()}`;
 }
 
 /**
@@ -363,21 +496,21 @@ export type SemanticTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral'
 export function getStatusTone(statusValue?: string): SemanticTone {
   const s = (statusValue || '').toLowerCase();
   if (
-    /résolu|atteint|conforme|succès|validé|approuvé|en ligne|en production|clôturé avec succès|terminé|opérationnel|livré|reçu|oui/.test(
+    /résolu|atteint|conforme|succès|validé|approuvé|en ligne|en production|clôturé|terminé|opérationnel|livré|reçu|oui|réalisé/.test(
       s
     )
   ) {
     return 'success';
   }
   if (
-    /critique|échec|hors ligne|rupture|non résolu|sous-licencié|anormalement bas|non exécuté|expire/.test(
+    /critique|échec|hors ligne|rupture|non résolu|sous-licencié|anormalement bas|non exécuté|expire|rebut|obsolète/.test(
       s
     )
   ) {
     return 'danger';
   }
   if (
-    /en cours|partiel|alerte|avertissement|stock bas|à traiter|escaladé|en attente|reporté|dégradé|brouillon|prêt/.test(
+    /en cours|partiel|alerte|avertissement|stock bas|à traiter|escaladé|en attente|reporté|dégradé|brouillon|prêt|à faire|à réaliser/.test(
       s
     )
   ) {

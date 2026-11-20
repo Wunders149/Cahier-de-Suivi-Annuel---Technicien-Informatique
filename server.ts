@@ -120,6 +120,24 @@ function serializeCookies(jar: Map<string, string>): string {
     .join('; ');
 }
 
+class UpstreamError extends Error {
+  status: number;
+  errorCode: string;
+  hint?: string;
+
+  constructor(message: string, status: number, errorCode: string, hint?: string) {
+    super(message);
+    this.name = 'UpstreamError';
+    this.status = status;
+    this.errorCode = errorCode;
+    this.hint = hint;
+  }
+}
+
+function isTailscaleHostname(hostname: string): boolean {
+  return hostname.toLowerCase().endsWith('.ts.net');
+}
+
 async function fetchUpstreamJson(
   url: string,
   options: {
@@ -172,21 +190,65 @@ async function fetchUpstreamJson(
     const causeCode = errObj?.cause?.code || '';
     const message = errObj?.message || String(err);
     const isPrivate = isPrivateLanHostname(parsedUrl.hostname);
+    const isTailscale = isTailscaleHostname(parsedUrl.hostname);
 
     if (isPrivate) {
-      throw new Error(
-        `Serveur privé local (${parsedUrl.origin}) injoignable depuis cet environnement Cloud (${causeCode || 'réseau LAN isolé'}). Solutions : importez un export JSON (/api/backup) via l’Option B, exposez ${parsedUrl.host} via un tunnel HTTPS (Cloudflare Tunnel / ngrok), ou exécutez le cahier en local sur votre réseau.`
+      throw new UpstreamError(
+        `Serveur privé local (${parsedUrl.origin}) injoignable depuis cet environnement Cloud (${causeCode || 'réseau LAN isolé'}).`,
+        502,
+        'PRIVATE_LAN',
+        `Solutions : activez Tailscale Funnel / Cloudflare Tunnel sur ${parsedUrl.host}, importez un export JSON (Option B), ou lancez le cahier en local.`
       );
     }
-    if (message.includes('aborted') || message.includes('AbortError')) {
-      throw new Error(`Délai dépassé (${timeoutMs / 1000}s) lors de la connexion au serveur SOGEDIPROMA.`);
+
+    const isTimeout =
+      message.includes('aborted') ||
+      message.includes('AbortError') ||
+      causeCode === 'ETIMEDOUT' ||
+      causeCode === 'UND_ERR_CONNECT_TIMEOUT';
+
+    if (isTimeout) {
+      if (isTailscale) {
+        throw new UpstreamError(
+          `Délai dépassé (${timeoutMs / 1000}s) vers ${parsedUrl.origin}. Le serveur Cloud ne parvient pas à joindre ce nœud Tailscale.`,
+          504,
+          'TAILSCALE_TIMEOUT',
+          `Cause fréquente : « tailscale serve » n'est joignable qu'en VPN privé Tailscale. Exécutez « tailscale funnel --bg <PORT> » sur ${parsedUrl.hostname.split('.')[0]} pour l'ouvrir au Cloud, ou autorisez CORS pour la synchro directe depuis votre navigateur connecté à Tailscale.`
+        );
+      }
+      throw new UpstreamError(
+        `Délai dépassé (${timeoutMs / 1000}s) lors de la connexion au serveur SOGEDIPROMA (${parsedUrl.origin}).`,
+        504,
+        'UPSTREAM_TIMEOUT'
+      );
     }
-    throw new Error(
-      `Serveur SOGEDIPROMA inaccessible (${causeCode ? `${causeCode} · ` : ''}${message}).`
+
+    throw new UpstreamError(
+      `Serveur SOGEDIPROMA inaccessible (${causeCode ? `${causeCode} · ` : ''}${message}).`,
+      502,
+      isTailscale ? 'TAILSCALE_UNREACHABLE' : 'UPSTREAM_UNREACHABLE',
+      isTailscale
+        ? `Vérifiez que la machine ${parsedUrl.hostname} est allumée, que l'application SOGEDIPROMA tourne et que « tailscale funnel » est actif.`
+        : undefined
     );
   } finally {
     clearTimeout(timer);
   }
+}
+
+function sendUpstreamError(res: Response, err: unknown, fallbackMessage: string): void {
+  if (err instanceof UpstreamError) {
+    res.status(err.status).json({
+      error: err.message,
+      errorCode: err.errorCode,
+      hint: err.hint,
+    });
+    return;
+  }
+  res.status(400).json({
+    error: err instanceof Error ? err.message : fallbackMessage,
+    errorCode: 'BAD_REQUEST',
+  });
 }
 
 function sanitizeSogedipromaDataForWorkbook(rawData: Record<string, unknown>): Record<string, unknown> {
@@ -274,6 +336,7 @@ async function startServer(): Promise<void> {
           error:
             (typeof statusRes.payload.error === 'string' && statusRes.payload.error) ||
             `Le serveur SOGEDIPROMA a répondu HTTP ${statusRes.status} sur /api/status.`,
+          errorCode: 'UPSTREAM_HTTP_ERROR',
         });
         return;
       }
@@ -292,6 +355,7 @@ async function startServer(): Promise<void> {
             error:
               (typeof loginRes.payload.error === 'string' && loginRes.payload.error) ||
               'Identifiants SOGEDIPROMA refusés par le serveur distant.',
+            errorCode: 'AUTH_FAILED',
           });
           return;
         }
@@ -308,13 +372,13 @@ async function startServer(): Promise<void> {
         reachable: true,
         authenticated,
         needsSetup: Boolean(statusRes.payload.needsSetup),
+        revision:
+          typeof statusRes.payload.revision === 'number' ? statusRes.payload.revision : undefined,
         settings: statusRes.payload.settings || {},
         user,
       });
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur lors du test SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur lors du test SOGEDIPROMA.');
     }
   });
 
@@ -324,18 +388,26 @@ async function startServer(): Promise<void> {
     let normalizedBaseUrl = '';
 
     try {
-      const body = (req.body || {}) as SyncRequestBody;
+      const body = (req.body || {}) as SyncRequestBody & { knownRevision?: number };
       normalizedBaseUrl = resolveEffectiveBaseUrl(body.baseUrl);
       const username = String(body.username || process.env.SOGEDIPROMA_USERNAME || '').trim();
       const password = String(body.password || process.env.SOGEDIPROMA_PASSWORD || '');
+      const knownRevision =
+        typeof body.knownRevision === 'number' && Number.isFinite(body.knownRevision)
+          ? body.knownRevision
+          : undefined;
 
-      // 1. Vérifier /api/status
-      const statusRes = await fetchUpstreamJson(`${normalizedBaseUrl}/api/status`, { jar });
+      // 1. Vérifier /api/status (timeout rapide 7s pour détecter vite si Tailscale Funnel est hors ligne)
+      const statusRes = await fetchUpstreamJson(`${normalizedBaseUrl}/api/status`, {
+        jar,
+        timeoutMs: 7500,
+      });
       if (!statusRes.ok) {
         res.status(502).json({
           error:
             (typeof statusRes.payload.error === 'string' && statusRes.payload.error) ||
             `Impossible d'interroger /api/status (HTTP ${statusRes.status}).`,
+          errorCode: 'UPSTREAM_HTTP_ERROR',
         });
         return;
       }
@@ -343,6 +415,25 @@ async function startServer(): Promise<void> {
       if (statusRes.payload.needsSetup) {
         res.status(409).json({
           error: 'Le serveur SOGEDIPROMA nécessite une initialisation administrateur (/api/setup-admin) avant la synchronisation.',
+          errorCode: 'NEEDS_SETUP',
+        });
+        return;
+      }
+
+      // Court-circuit rapide si /api/status expose déjà la même révision que le client
+      if (
+        knownRevision !== undefined &&
+        typeof statusRes.payload.revision === 'number' &&
+        statusRes.payload.revision === knownRevision
+      ) {
+        res.json({
+          unchanged: true,
+          revision: knownRevision,
+          status: {
+            mailConfigured: Boolean(statusRes.payload.mailConfigured),
+            settings: statusRes.payload.settings || {},
+          },
+          fetchedAt: new Date().toISOString(),
         });
         return;
       }
@@ -353,6 +444,7 @@ async function startServer(): Promise<void> {
         if (!username || !password) {
           res.status(401).json({
             error: 'Identifiant et mot de passe SOGEDIPROMA requis pour accéder à /api/state.',
+            errorCode: 'AUTH_REQUIRED',
           });
           return;
         }
@@ -366,6 +458,7 @@ async function startServer(): Promise<void> {
             error:
               (typeof loginRes.payload.error === 'string' && loginRes.payload.error) ||
               'Authentification refusée par le serveur SOGEDIPROMA.',
+            errorCode: 'AUTH_FAILED',
           });
           return;
         }
@@ -383,10 +476,30 @@ async function startServer(): Promise<void> {
             error:
               (typeof stateRes.payload.error === 'string' && stateRes.payload.error) ||
               `Erreur lors de la lecture de /api/state (HTTP ${stateRes.status}).`,
+            errorCode: stateRes.status === 401 ? 'AUTH_REQUIRED' : 'UPSTREAM_HTTP_ERROR',
           });
           return;
         }
         statePayload = stateRes.payload;
+      }
+
+      const currentRevision = Number(statePayload.revision) || 0;
+      if (
+        knownRevision !== undefined &&
+        currentRevision > 0 &&
+        currentRevision === knownRevision &&
+        !body.includeAudit
+      ) {
+        res.json({
+          unchanged: true,
+          revision: currentRevision,
+          status: {
+            mailConfigured: Boolean(statusRes.payload.mailConfigured),
+            settings: statusRes.payload.settings || {},
+          },
+          fetchedAt: new Date().toISOString(),
+        });
+        return;
       }
 
       const rawData =
@@ -409,16 +522,14 @@ async function startServer(): Promise<void> {
           mailConfigured: Boolean(statusRes.payload.mailConfigured),
           settings: statusRes.payload.settings || {},
         },
-        revision: Number(statePayload.revision) || 0,
+        revision: currentRevision,
         user: statePayload.user || null,
         data: cleanData,
         auditEntries,
         fetchedAt: new Date().toISOString(),
       });
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur lors de la synchronisation SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur lors de la synchronisation SOGEDIPROMA.');
     } finally {
       if (normalizedBaseUrl && jar.size > 0) {
         await fetchUpstreamJson(`${normalizedBaseUrl}/api/logout`, {
@@ -465,6 +576,7 @@ async function startServer(): Promise<void> {
             status: 401,
             body: {
               error: 'Identifiant et mot de passe SOGEDIPROMA requis pour cette action.',
+              errorCode: 'AUTH_REQUIRED',
             },
           };
         }
@@ -480,6 +592,7 @@ async function startServer(): Promise<void> {
               error:
                 (typeof loginRes.payload.error === 'string' && loginRes.payload.error) ||
                 'Authentification refusée par le serveur SOGEDIPROMA.',
+              errorCode: 'AUTH_FAILED',
             },
           };
         }
@@ -527,9 +640,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur téléchargement backup SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur téléchargement backup SOGEDIPROMA.');
     }
   });
 
@@ -559,9 +670,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : "Erreur lecture journal d'audit SOGEDIPROMA.",
-      });
+      sendUpstreamError(res, err, "Erreur lecture journal d'audit SOGEDIPROMA.");
     }
   });
 
@@ -597,9 +706,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur test notification SMTP SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur test notification SMTP SOGEDIPROMA.');
     }
   });
 
@@ -644,9 +751,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur enregistrement mouvement SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur enregistrement mouvement SOGEDIPROMA.');
     }
   });
 
@@ -681,9 +786,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur création achat SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur création achat SOGEDIPROMA.');
     }
   });
 
@@ -718,9 +821,7 @@ async function startServer(): Promise<void> {
       });
       res.status(result.status).json(result.body);
     } catch (err) {
-      res.status(400).json({
-        error: err instanceof Error ? err.message : 'Erreur mise à jour achat SOGEDIPROMA.',
-      });
+      sendUpstreamError(res, err, 'Erreur mise à jour achat SOGEDIPROMA.');
     }
   });
 

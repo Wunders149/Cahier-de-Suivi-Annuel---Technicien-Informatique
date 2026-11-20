@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { CahierSuiviData } from '../types/it-tracker';
 import { useFirebase } from '../context/FirebaseContext';
+import { SogLiveSyncStatus } from '../utils/sogedipromaLiveClient';
 
 interface HeaderProps {
   data: CahierSuiviData;
@@ -30,6 +31,8 @@ interface HeaderProps {
   onPrintPreview: () => void;
   isGeneratingDocx: boolean;
   onOpenSogedipromaSync?: () => void;
+  sogSyncStatus?: SogLiveSyncStatus;
+  onTriggerSogSync?: () => void;
 }
 
 const TAB_TITLES: Record<string, string> = {
@@ -59,6 +62,8 @@ export const Header: React.FC<HeaderProps> = ({
   onPrintPreview,
   isGeneratingDocx,
   onOpenSogedipromaSync,
+  sogSyncStatus,
+  onTriggerSogSync,
 }) => {
   const { generalInfo } = data;
   const {
@@ -150,18 +155,73 @@ export const Header: React.FC<HeaderProps> = ({
           <Search className="w-4 h-4" />
         </button>
 
-        {/* Raccourci 1-clic vers le connecteur appairé SOGEDIPROMA */}
-        {onOpenSogedipromaSync && (
-          <button
-            type="button"
-            onClick={onOpenSogedipromaSync}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-semibold transition"
-            title="Synchroniser avec SOGEDIPROMA (https://win-rmt226g06rg.taild86fee.ts.net)"
-          >
-            <PlugZap className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span className="hidden md:inline">SOGEDIPROMA</span>
-          </button>
-        )}
+        {/* Raccourci & Statut live du connecteur appairé SOGEDIPROMA */}
+        {onOpenSogedipromaSync && (() => {
+          const phase = sogSyncStatus?.phase || 'idle';
+          const isSyncingNow = phase === 'syncing';
+          const isWarning = phase === 'unreachable' || phase === 'auth_required' || phase === 'error';
+          const isSyncedOk = phase === 'synced';
+          const revSuffix =
+            typeof sogSyncStatus?.revision === 'number' && sogSyncStatus.revision > 0
+              ? ` #${sogSyncStatus.revision}`
+              : '';
+          const statusTitle =
+            sogSyncStatus?.message ||
+            'Synchroniser avec SOGEDIPROMA (https://win-rmt226g06rg.taild86fee.ts.net)';
+
+          return (
+            <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white overflow-hidden">
+              <button
+                type="button"
+                onClick={onOpenSogedipromaSync}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold transition ${
+                  isWarning
+                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-900'
+                    : isSyncedOk
+                    ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+                }`}
+                title={statusTitle}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    isSyncingNow
+                      ? 'bg-blue-500 animate-pulse'
+                      : isWarning
+                      ? 'bg-amber-500'
+                      : isSyncedOk
+                      ? 'bg-emerald-500'
+                      : 'bg-slate-400'
+                  }`}
+                />
+                <PlugZap
+                  className={`w-3.5 h-3.5 shrink-0 ${
+                    isWarning
+                      ? 'text-amber-600'
+                      : isSyncedOk
+                      ? 'text-emerald-600'
+                      : 'text-slate-500'
+                  }`}
+                />
+                <span className="hidden md:inline">
+                  SOGEDIPROMA{revSuffix}
+                </span>
+              </button>
+              {onTriggerSogSync && (
+                <button
+                  type="button"
+                  onClick={onTriggerSogSync}
+                  disabled={isSyncingNow}
+                  className="px-2 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 border-l border-slate-200 transition disabled:opacity-50"
+                  title="Synchroniser maintenant avec SOGEDIPROMA"
+                  aria-label="Synchroniser maintenant avec SOGEDIPROMA"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? 'animate-spin text-blue-600' : ''}`} />
+                </button>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Indicateur Cloud Firestore discret (icône compacte) */}
         {user ? (

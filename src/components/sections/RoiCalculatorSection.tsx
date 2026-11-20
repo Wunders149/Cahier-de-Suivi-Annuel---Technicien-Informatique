@@ -15,6 +15,7 @@ import {
   PlugZap,
   Clock,
   SlidersHorizontal,
+  FileDown,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -581,6 +582,25 @@ export const RoiCalculatorSection: React.FC<RoiCalculatorSectionProps> = ({
               <span>Sync SOGEDIPROMA</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                const { generateRoiAnalysisPdf } = await import('../../utils/roiReportGenerator');
+                generateRoiAnalysisPdf(data, fxRates);
+                onShowToast?.('Rapport financier ROI & Budgets (PDF) téléchargé avec succès.');
+              } catch (err) {
+                console.error('Erreur export PDF ROI:', err);
+                onShowToast?.('Erreur lors de la génération du rapport PDF ROI.');
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold transition whitespace-nowrap shadow-xs"
+            title="Exporter l'analyse budgétaire et le portefeuille ROI au format PDF A4"
+          >
+            <FileDown className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Exporter PDF</span>
+          </button>
         </div>
       </div>
 
