@@ -326,7 +326,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
 
     generateMonthlyPdf(nextDataSnapshot, targetMonth);
     notify(
-      `Rapport mensuel de ${snap.nomMois} ${snap.annee} généré (${snap.interventionsTerminees}/${snap.interventions.length} interventions terminées) et téléchargé en PDF.`
+      `Rapport mensuel de ${snap.nomMois} ${snap.annee} prêt en PDF (${snap.interventionsTerminees}/${snap.interventions.length} interventions terminées).`
     );
   };
 
@@ -360,7 +360,7 @@ export const MonthlyReportsSection: React.FC<MonthlyReportsSectionProps> = ({
     const rep = rapports.find((r) => r.moisIndex === moisIndex);
     generateMonthlyPdf(data, moisIndex);
     notify(
-      `Cahier de suivi mensuel (${rep?.nomMois || `Mois ${moisIndex}`}) téléchargé en PDF.`
+      `Cahier de suivi mensuel (${rep?.nomMois || `Mois ${moisIndex}`}) prêt en PDF.`
     );
   };
 

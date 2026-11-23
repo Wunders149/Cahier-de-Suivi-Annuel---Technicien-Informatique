@@ -30,6 +30,7 @@ import {
 } from './utils/backupService';
 import { Modal } from './components/ui/Modal';
 import { Toast } from './components/ui/Toast';
+import { PdfDownloadManager } from './components/ui/PdfDownloadManager';
 import { dangerButtonClass, secondaryButtonClass } from './components/ui/formStyles';
 import {
   SogedipromaStateData,
@@ -1142,10 +1143,10 @@ export default function App() {
 
   const handleDownloadPdf = async () => {
     try {
-      showToast('Génération et téléchargement du document PDF (.pdf) en cours...');
+      showToast('Génération du document PDF (.pdf) en cours...');
       const { generateDirectPdf } = await import('./utils/pdfGenerator');
       generateDirectPdf(data);
-      showToast('Fichier PDF téléchargé avec succès !');
+      showToast('Document PDF prêt (téléchargement / options disponibles).');
     } catch (error) {
       console.error('Erreur export PDF', error);
       showToast('Erreur lors de la génération du PDF.');
@@ -1224,6 +1225,9 @@ export default function App() {
         onPause={pauseToastTimer}
         onResume={resumeToastTimer}
       />
+
+      {/* Gestionnaire universel de téléchargement / partage / aperçu PDF (Desktop & Mobile) */}
+      <PdfDownloadManager onNotify={showToast} />
 
       <CahierContent
         data={data}

@@ -329,7 +329,7 @@ export const InterventionsSection: React.FC<InterventionsSectionProps> = ({
         '../../utils/interventionReportGenerator'
       );
       generateInterventionReportPdf(it, generalInfo);
-      notify(`Rapport PDF (${it.numeroReference}) téléchargé.`);
+      notify(`Rapport PDF (${it.numeroReference}) prêt.`);
     } catch (err) {
       console.error('Erreur export PDF intervention:', err);
       notify('Erreur lors de la génération du rapport PDF.');

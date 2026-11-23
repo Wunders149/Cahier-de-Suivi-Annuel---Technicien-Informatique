@@ -589,7 +589,7 @@ export const RoiCalculatorSection: React.FC<RoiCalculatorSectionProps> = ({
               try {
                 const { generateRoiAnalysisPdf } = await import('../../utils/roiReportGenerator');
                 generateRoiAnalysisPdf(data, fxRates);
-                onShowToast?.('Rapport financier ROI & Budgets (PDF) téléchargé avec succès.');
+                onShowToast?.('Rapport financier ROI & Budgets (PDF) prêt.');
               } catch (err) {
                 console.error('Erreur export PDF ROI:', err);
                 onShowToast?.('Erreur lors de la génération du rapport PDF ROI.');

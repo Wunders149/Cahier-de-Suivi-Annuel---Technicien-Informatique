@@ -16,6 +16,7 @@ import {
   SemanticTone,
   wrapLongTokensForPdf,
 } from './documentThemes';
+import { dispatchPdfDownload, normalizePdfFilename } from './fileDownload';
 
 export interface PdfKpiItem {
   label: string;
@@ -1499,7 +1500,8 @@ export class PdfDocumentBuilder {
   }
 
   /**
-   * Finalise le document (sommaire, en-têtes/pieds de page, contrôle qualité) et déclenche le téléchargement.
+   * Finalise le document (sommaire, en-têtes/pieds de page, contrôle qualité) et déclenche
+   * le téléchargement universel compatible Ordinateur & Mobile (iOS / Android / PWA / Iframe).
    */
   public finalizeAndSave(filename: string, meta: PdfFooterHeaderMeta): PdfExportResult {
     try {
@@ -1508,9 +1510,16 @@ export class PdfDocumentBuilder {
       if (!qualityReport.passed) {
         console.warn('[PDF QA]', filename, qualityReport);
       }
-      this.doc.save(filename);
+      const buffer = this.doc.output('arraybuffer');
+      const { filename: safeFilename } = dispatchPdfDownload({
+        buffer,
+        filename: normalizePdfFilename(filename),
+        title: meta.documentTitle,
+        pageCount: qualityReport.totalPages,
+        fileSizeBytes: qualityReport.fileSizeBytes,
+      });
       return {
-        filename,
+        filename: safeFilename,
         pageCount: qualityReport.totalPages,
         fileSizeBytes: qualityReport.fileSizeBytes,
         qualityReport,
